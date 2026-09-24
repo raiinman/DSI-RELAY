@@ -104,7 +104,7 @@ When the user requests a durable behavior change, record it here or in the relev
 - Public users should be able to install RELAY, connect their own supported tools, create or attach a project, and obtain useful results without understanding the original author's projects or environment.
 - Cost efficiency is a primary product objective across the entire RELAY project. Architecture and feature decisions must minimize AI token use, paid-model dependence, remote tool calls, cloud infrastructure cost, redundant computation, and unnecessary latency without sacrificing correctness, safety, or recoverability.
 - Prefer deterministic local computation over model reasoning whenever a task can be measured, parsed, validated, indexed, filtered, diffed, deduplicated, summarized structurally, or executed by code.
-- Prefer CLI plus compact skills for local AI clients. Keep MCP and remote gateways thin and use them only where transport or client compatibility requires them.
+- Prefer CLI plus compact skills as the initial local-AI strategy, but benchmark it against thin/dynamically discovered MCP for each client class. Keep MCP and remote gateways as adapters rather than core business logic.
 - Default AI-facing output must be compact, structured, budget-aware, and progressively retrievable. Raw logs, large result sets, screenshots, and historical evidence stay in RELAY storage until specifically needed.
 - Reuse cached results, incremental indexes, deltas, result IDs, and affected-only tests instead of repeating full scans or re-sending unchanged context.
 - Do not spend an AI call on work that RELAY can complete deterministically. Expensive-model escalation must be optional and justified by task difficulty rather than treated as the default path.

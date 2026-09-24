@@ -17,6 +17,8 @@
 
 ## Research and governance
 
+- PHASE0_ADVERSARIAL_REVIEW.md — current red-team review of RELAY's assumptions and the conditions required to re-close Phase 0.
+- EVIDENCE_REGISTER.md — evidence register with academic, government, historical human-factors, and first-party platform sources.
 - RESEARCH_PLAN.md — academic/technical research, benchmarks, and unresolved hypotheses.
 - DECISION_LOG.md — concise record of approved architectural decisions.
 - AGENTS.md — local DOX contract for this documentation subtree.

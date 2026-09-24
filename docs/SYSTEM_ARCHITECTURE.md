@@ -301,3 +301,60 @@ Persistent evidence is governed by retention classes and project quotas. Raw evi
 ## Portability
 
 No adapter may assume one fixed machine path. Paths, ports, detected versions, and integration endpoints belong to installation/project configuration and discovery.
+
+
+## Adapter execution architecture
+
+Third-party adapters are not loaded directly into RELAY Core.
+
+Conceptual topology:
+
+~~~
+RELAY Core
+   |
+   v
+Adapter Broker
+   |
+   +-- first-party adapter worker
+   +-- third-party adapter worker
+   +-- third-party adapter worker
+~~~
+
+The broker is responsible for:
+
+- protocol/version negotiation
+- capability enforcement
+- project/resource scoping
+- credential mediation
+- subprocess/network policy where implemented
+- time/resource limits
+- health state
+- result provenance
+- adapter quarantine/disable behavior
+
+Adapters communicate through a versioned protocol and receive only the capabilities granted to that adapter instance.
+
+### Adapter manifest
+
+The manifest is part of the adapter contract.
+
+It should describe:
+
+- adapter identity and version
+- publisher/provenance metadata
+- RELAY API/protocol compatibility
+- external-tool compatibility
+- declared capabilities/permissions
+- commands/capabilities exposed to RELAY
+- dependency/component metadata
+- update channel/source
+- integrity identifier/digest
+- optional review/curation metadata
+
+The manifest cannot expand RELAY policy; it requests capabilities that policy may approve or deny.
+
+### AI capability exposure
+
+Installed adapters do not automatically become AI context.
+
+RELAY should expose only relevant adapter capabilities for the active project/task/client. Adapter-provided prose is not passed through as policy or instructions; RELAY renders AI-facing command descriptions from trusted command semantics plus bounded adapter metadata.

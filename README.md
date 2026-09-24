@@ -6,7 +6,7 @@ The product exists to make AI-assisted development cheaper, more reliable, and e
 
 ## Status
 
-Planning and architecture baseline. Implementation has not started yet.
+Phase 0 planning is reopened for adversarial evidence review. Implementation has not started yet.
 
 ## Core product rules
 
@@ -17,7 +17,7 @@ Planning and architecture baseline. Implementation has not started yet.
 - Local deterministic computation is preferred over AI reasoning.
 - AI-facing output is compact, structured, budget-aware, and progressively retrievable.
 - MCP is a compatibility/transport adapter, not the foundation.
-- Compact skills plus CLI are preferred for local AI clients.
+- Compact skills plus CLI are the initial local-AI strategy; thin/dynamic MCP remains a benchmarked alternative where it performs better.
 - Projects are isolated from one another.
 - UEFN/Fortnite is the first integration target, not the permanent product boundary.
 - The architecture must be suitable for eventual public release.
@@ -68,7 +68,9 @@ Start with docs/PROJECT_PLAN.md.
 - docs/SECURITY_AND_PERMISSIONS.md — approvals, safety, auditability
 - docs/ROADMAP.md — staged delivery plan
 - docs/RESEARCH_PLAN.md — academic and technical research program
-- docs/DECISION_LOG.md — approved durable decisions
+- docs/PHASE0_ADVERSARIAL_REVIEW.md — red-team review of current assumptions
+- docs/EVIDENCE_REGISTER.md — academic, government, historical, and platform evidence tied to decisions
+- docs/DECISION_LOG.md — approved/revalidated durable decisions
 
 ## Public-release posture
 

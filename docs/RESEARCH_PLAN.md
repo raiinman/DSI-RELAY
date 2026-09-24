@@ -124,6 +124,8 @@ CLI + small task skills will often use less context and fewer calls than a large
 
 Counter-evidence/current evidence:
 
+- https://proceedings.neurips.cc/paper_files/paper/2024/hash/5a7c947568c1b1328ccc5230172e1e7c-Abstract-Conference.html — SWE-agent; agent-computer interface design materially affects software-agent performance.
+- https://arxiv.org/abs/2605.24660 — adaptive tool shortlist depth can outperform fixed exposure strategies on the authors' benchmarks.
 - https://arxiv.org/abs/2602.14878 — MCP Tool Descriptions Are Smelly; description quality and compactness materially affect success/cost.
 - https://arxiv.org/abs/2602.18914 — description accuracy/functionality affect tool selection.
 - https://arxiv.org/abs/2603.20313 — selective semantic tool discovery reports large schema-token savings on its benchmark.

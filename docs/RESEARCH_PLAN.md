@@ -772,3 +772,22 @@ Research:
 - behavior when policy knowledge is incomplete
 
 RELAY should prefer an explicit "unknown" state over stale reassurance.
+
+
+## Research track AC — Collaborative state freshness
+
+Test shared-project scenarios where humans and AI clients change the same project over time.
+
+Cases:
+
+- plan created at project revision R1 and executed after R2
+- two agents change the same file or entity
+- two agents make independent changes that share a dependency
+- external editor state changes after RELAY inspection
+- long-running jobs cross version/integration changes
+
+Compare revision/hash preconditions, optimistic conflict detection, resource claims, serialized writes, and merge/reconcile workflows.
+
+Measure silent conflicts, successful recovery, added latency, replanning work, model/tool calls, and user interruptions.
+
+SyncMind (ICML 2025) is a primary academic baseline.

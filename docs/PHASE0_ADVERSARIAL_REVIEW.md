@@ -2308,3 +2308,300 @@ Phase 0 now also requires:
 66. personal-user UI hides irrelevant enterprise/team complexity
 67. the minimal golden path produces useful local value without remote AI
 68. complexity-budget metrics are reviewed at every milestone
+
+
+## Attack 99 — Official UEFN automation support does not erase broader Epic terms
+
+### Evidence
+
+Epic's current September 2026 Terms of Service list UEFN as a Licensed Product and prohibit bot software/services used to automate Licensed Products. At the same time, Epic's August 2026 UEFN documentation expressly ships Unreal MCP so agentic coding tools can connect to and drive the editor.
+
+### Verdict
+
+NARROW AUTOMATION TO DOCUMENTED DEVELOPER SURFACES.
+
+### Required changes
+
+- treat Unreal/UEFN MCP and other documented developer automation surfaces as the intended supported path
+- do not interpret editor automation support as permission to automate Fortnite gameplay/player-client use generally
+- RELAY must not automate gameplay, evade integrity systems, or control the Fortnite client outside documented development/testing workflows
+- if RELAY later depends on broader automation, obtain legal/official clarification before public release
+- record the Epic terms/documentation versions used for the compatibility decision
+
+## Attack 100 — A runtime bridge cannot "phone home" from published UEFN content
+
+### Evidence
+
+Current UEFN Supplemental Terms state that Developer-Made Content/code may not attempt to establish connections to servers outside Epic hosting after upload/download by end users.
+
+### Verdict
+
+KEEP RUNTIME OBSERVABILITY, REJECT EXTERNAL IN-ISLAND RELAY NETWORKING.
+
+### Required changes
+
+- runtime instrumentation uses supported Verse/UEFN logs, debug/session tools, or Epic-hosted mechanisms
+- local development bridges are excluded from published content
+- publishing validation checks RELAY instrumentation for prohibited external networking
+- RELAY documentation must not suggest that creators embed a persistent external telemetry client inside published islands
+
+## Attack 101 — Public RELAY branding cannot casually rely on Epic's Fan Content Policy
+
+### Evidence
+
+Epic's current Fan Content Policy defines covered Epic-related apps/sites as personal, non-commercial, and freely accessible and restricts Epic marks from identifying/promoting another product or business.
+
+### Verdict
+
+SEPARATE RELAY BRANDING FROM EPIC IP.
+
+### Required changes
+
+- RELAY's product name/logo/identity stay independent of Epic/Fortnite/Unreal marks
+- use UEFN/Fortnite/Unreal names descriptively for compatibility, not as product branding
+- do not use Epic logos or imply endorsement/certification without permission
+- commercial RELAY must not assume the Fan Content Policy authorizes its branding
+- public marketing gets a terms/trademark review before release
+
+## Attack 102 — Bundling third-party applications creates unnecessary license/trademark risk
+
+### Evidence
+
+Blender and Krita permit broad use/redistribution under GPL terms, while Epic's tools/assets operate under proprietary licenses and product-specific terms. Bundling also creates update, security, notice, and trademark obligations.
+
+### Verdict
+
+DETECT, DO NOT BUNDLE BY DEFAULT.
+
+### Required changes
+
+- public RELAY installer detects user-installed UEFN/Blender/Krita
+- do not bundle UEFN/Fortnite/Epic proprietary binaries/assets
+- do not bundle modified Blender/Krita builds unless RELAY explicitly accepts the redistribution/source/trademark obligations
+- third-party installers are obtained from official sources where practical
+- RELAY-owned packages include only dependencies with known redistribution rights
+
+## Attack 103 — Blender/Krita companion plugins can impose copyleft obligations
+
+### Evidence
+
+Blender's official license page says published Python add-ons using Blender's Python API must use a GPL-compatible license. Krita's official license page states distributed plugins using its extension API must be GPL. Unreal Engine's current EULA separately identifies GPL and certain share-alike licenses as non-compatible when they would impose those terms on Epic Licensed Technology.
+
+### Verdict
+
+NEW LICENSE-BOUNDARY REQUIREMENT.
+
+### Required changes
+
+- distributed Blender/Krita companions are licensed according to their host's GPL requirements
+- do not share/copy GPL implementation code into differently licensed Unreal/UEFN companions or RELAY Core without compatibility review
+- maintain process/protocol boundaries where they help separate differently licensed components
+- do not claim that separate processes automatically settle derivative-work questions
+- license/distribution architecture receives legal review before public release
+
+## Attack 104 — UEFN/Unreal companion code has its own distribution restrictions
+
+### Evidence
+
+The current Unreal Engine EULA restricts combining Licensed Technology with non-compatible licenses and imposes specific distribution paths for Engine Tools.
+
+### Verdict
+
+MODIFY UEFN COMPANION DESIGN.
+
+### Required changes
+
+- classify whether any RELAY UEFN/Unreal companion includes, links, or constitutes Engine Tools/Licensed Technology
+- choose companion license/distribution channel only after that classification
+- prefer external documented protocol integration when it avoids unnecessary license coupling
+- do not assume RELAY Core's eventual license automatically applies to every in-editor component
+
+## Attack 105 — "Developer-made content is yours" does not mean every project asset is yours
+
+### Evidence
+
+Epic's UEFN terms say Developer-Made Content remains the developer's apart from Epic/third-party rights, but the developer warrants they have rights sufficient for Epic's license. Fortnite Developer Rules likewise require creators to own or obtain the necessary rights and separately restrict Epic-owned IP not made available for creator use.
+
+### Verdict
+
+NEW CONTENT-PROVENANCE REQUIREMENT.
+
+### Required changes
+
+The asset/content registry should track where practical:
+
+- source/creator
+- license/rights basis
+- Epic-owned asset status
+- third-party marketplace/content status
+- attribution obligations
+- export/redistribution restrictions
+- AI-generated/assisted provenance
+
+Missing or conflicting provenance can block a configured publish workflow, but RELAY cannot itself adjudicate ownership.
+
+## Attack 106 — AI output rights are not the same as copyright ownership
+
+### Evidence
+
+The U.S. Copyright Office's January 2025 Part 2 report concludes that generative-AI outputs are copyrightable only where sufficient human-authored expressive elements exist; prompts alone are generally insufficient, while human-authored material, selection/arrangement, or creative modification may qualify.
+
+### Verdict
+
+REJECT AUTOMATIC OWNERSHIP CLAIMS.
+
+### Required changes
+
+RELAY must not tell users:
+
+- AI-generated output is automatically copyrighted
+- prompts alone guarantee copyright
+- AI-generated output is automatically public domain
+- AI-generated output is guaranteed non-infringing
+
+Track generation/human-edit provenance where useful and separate provider contractual usage rights from copyrightability.
+
+## Attack 107 — Open-source license compliance is a release artifact, not an afterthought
+
+### Evidence
+
+NIST's software-supply-chain guidance emphasizes machine-readable component inventories, provenance, and open-source controls.
+
+### Verdict
+
+NEW LICENSE-INVENTORY GATE.
+
+### Required changes
+
+Every distributed RELAY artifact should have a reproducible inventory of:
+
+- component/version
+- license
+- copyright notice
+- attribution/license-text obligations
+- source/source-offer obligations
+- copyleft/linking concerns
+- redistribution restrictions
+- companion-component licenses
+
+Unknown or incompatible licenses block release until resolved.
+
+## Attack 108 — Security SBOM and legal license inventory are related but not identical
+
+### Problem
+
+An SBOM can identify packages without proving license compatibility, notice compliance, trademark permission, or asset redistribution rights.
+
+### Verdict
+
+SEPARATE LEGAL METADATA FROM SECURITY METADATA.
+
+### Required changes
+
+- reuse shared component/provenance data where possible
+- track license/notice/source obligations separately from vulnerabilities
+- include non-code assets, fonts, music, templates, and companion plugins where relevant
+- do not interpret "no vulnerabilities" as "clear to redistribute"
+
+## Attack 109 — Privacy/legal promises can become enforceable product risk
+
+### Evidence
+
+FTC guidance repeatedly warns software developers to honor privacy/security claims and make user choices clear. FTC guidance on privacy-enhancing technologies also warns that products must not overstate the privacy guarantees of a particular implementation.
+
+### Verdict
+
+ALIGN MARKETING WITH TESTED BEHAVIOR.
+
+### Required changes
+
+- "local-only", "private", "encrypted", "does not upload", and similar claims need test evidence and precise limitations
+- privacy notice, telemetry behavior, diagnostics, provider profiles, and dashboard wording must agree
+- product marketing cannot promise stronger privacy/security than RELAY actually enforces
+- legal/privacy copy is version-controlled alongside behavior-changing releases
+
+## Attack 110 — Platform and license terms can change underneath RELAY
+
+### Evidence
+
+Epic's UEFN terms expressly incorporate other policies and documentation that Epic may update; Epic maintains an active Fortnite Developer Rules change log. RELAY also depends on evolving third-party licenses/terms and AI provider policies.
+
+### Verdict
+
+NEW TERMS-COMPATIBILITY LIFECYCLE.
+
+### Required changes
+
+Track for material integrations:
+
+- source document/URL
+- effective/update date when available
+- last RELAY review date/version
+- assumptions derived from it
+- current compatibility status
+
+A material terms/license change creates a review task and may temporarily mark publishing/distribution compatibility Unknown/Needs Review rather than silently assuming old conclusions remain valid.
+
+## Attack 111 — Automated compliance checks can create false legal confidence
+
+### Problem
+
+RELAY can mechanically detect missing notices, unknown licenses, policy-version drift, or configured rule violations. It cannot determine all copyright ownership, fair use, trademark permission, contract interpretation, or jurisdiction-specific legal obligations.
+
+### Verdict
+
+MODIFY COMPLIANCE LANGUAGE.
+
+### Required changes
+
+Use statuses such as:
+
+- metadata missing
+- known conflict
+- policy changed
+- review required
+- blocked by configured policy
+
+Do not output "legally compliant", "copyright cleared", "Epic approved", or "guaranteed non-infringing" unless an authoritative process truly establishes that fact.
+
+## Attack 112 — RELAY's own open-source license can constrain future integrations/business models
+
+### Problem
+
+A RELAY Core license selected too early could conflict with Unreal companion distribution, paid/hosted services, contribution policy, or the desired separation from GPL host plugins.
+
+### Verdict
+
+DEFER LICENSE SELECTION UNTIL BOUNDARIES ARE PROTOTYPED.
+
+### Required changes
+
+Phase 1 legal/license research should evaluate:
+
+- permissive versus reciprocal options
+- cloud/hosted implications
+- contributor copyright model
+- SDK/adapter license
+- Unreal/UEFN companion compatibility
+- Blender/Krita GPL companion separation
+- dependency license set
+- commercial/public roadmap
+
+Do not pick a license merely to fill the LICENSE file.
+
+## Phase 0 legal/licensing closure requirements
+
+Phase 0 now also requires:
+
+69. UEFN automation scope is explicitly limited to documented developer surfaces unless clarified otherwise
+70. published UEFN instrumentation avoids prohibited external networking
+71. RELAY branding/marketing does not depend on Epic Fan Content permission for commercial use
+72. third-party application bundling is opt-in/legally reviewed rather than default
+73. Blender/Krita GPL companion obligations and Unreal non-compatible-license boundaries are documented
+74. asset/content provenance and license metadata are part of the asset model
+75. AI-generated content UI avoids unsupported copyright/ownership claims
+76. dependency/license/notice inventory is a public-release gate
+77. privacy/security marketing claims are tied to tested behavior
+78. material platform/license terms are tracked as versioned external dependencies
+79. automated compliance checks avoid legal-certification language
+80. RELAY Core/SDK/companion license choice remains open until integration boundaries are prototyped

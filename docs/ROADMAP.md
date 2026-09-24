@@ -52,8 +52,8 @@ Goal: choose the minimum durable stack based on prototypes, not preference.
 Research/prototype:
 
 - implementation language/runtime
-- local daemon/IPC model
-- local persistent storage
+- per-user local host and IPC model
+- local persistent storage, reconciliation, integrity, and recovery
 - filesystem/watch strategy
 - dashboard framework
 - command/schema library

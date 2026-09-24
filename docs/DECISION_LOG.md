@@ -308,3 +308,22 @@ RELAY records what is known about a remote processor's data-use, retention, resi
 Status: Approved
 
 Responses that reproduce or derive from sensitive source material remain governed by relevant project sensitivity, retention, share/export, and onward-egress policy.
+
+
+## D-056 — Remote AI does not receive unrestricted project access
+
+Status: Approved
+
+Remote AI clients access project data through RELAY retrieval, classification, and egress policy. Connecting a remote client does not grant raw filesystem access by default.
+
+## D-057 — Metadata participates in data classification
+
+Status: Approved
+
+Paths, filenames, project/repository names, asset names, document metadata, identifiers, timestamps, and similar metadata may be sensitive and are covered by project egress policy where applicable.
+
+## D-058 — Privacy/secret scanning is defense-in-depth
+
+Status: Approved
+
+A clean scanner result does not declassify project data. Explicit project/path/artifact policy and provenance can impose stricter sensitivity than automated detectors.

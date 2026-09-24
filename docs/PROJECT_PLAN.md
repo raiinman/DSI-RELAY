@@ -198,6 +198,10 @@ From the first implementation:
 - project-scoped authorization and delegated-action attribution
 - stale-plan/revision checks for important collaborative writes
 - offboarding semantics for active and queued work
+- durable job recovery with explicit unknown-outcome handling
+- tested restore/recovery procedures for RELAY-owned state
+- migration/update recovery separated from binary rollback
+- graceful degraded operation during remote-provider outage
 
 ## Open implementation decisions
 

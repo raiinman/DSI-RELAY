@@ -33,6 +33,7 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `RESILIENCE_AND_RECOVERY.md` — crash recovery, retries, unknown outcomes, checkpoints, backups, migrations, outages, and restore verification.
 - `OBSERVABILITY_AND_TRUTH.md` — evidence classes, sampling, freshness, causality, instrumentation overhead, alert quality, and observability health.
 - `SIMPLICITY_AND_OPERABILITY.md` — golden path, secure defaults, configuration/feature budgets, diagnostics, progressive depth, toil, and complexity governance.
+- `LEGAL_LICENSING_AND_DISTRIBUTION.md` — platform terms, redistribution, copyleft boundaries, asset provenance, AI output rights, privacy claims, and public-release legal gates.
 - `ROADMAP.md` — staged delivery plan and milestone exit criteria.
 - `RESEARCH_PLAN.md` — academic/technical research and benchmark program.
 - `PHASE0_ADVERSARIAL_REVIEW.md` — adversarial challenge to current assumptions and required architecture changes.

@@ -339,3 +339,57 @@ Measure:
 - cost when measurable
 
 See RESEARCH_PLAN.md for the research basis and evaluation backlog.
+
+
+## Privacy before compression
+
+Context optimization is constrained by data policy.
+
+The Context Compiler should operate in this order:
+
+1. identify project, task, client, and destination
+2. apply data classification and destination policy
+3. exclude material not permitted for that destination
+4. select minimum sufficient relevant evidence
+5. preserve exact required facts
+6. apply context-budget/compression strategy
+7. record the outbound lineage
+
+Token relevance does not override privacy policy.
+
+## Remote data cost
+
+Cost accounting should include more than model tokens.
+
+For remote processing, measure or classify where practical:
+
+- bytes/tokens transmitted
+- number of external processors involved
+- sensitive-data class
+- remote embedding calls
+- repeated forwarding between models/services
+- latency/network cost
+- known retention/data-use policy state
+
+A cheaper token bill that causes unnecessary private-data disclosure is not an optimization.
+
+## Sensitive derivatives
+
+Embeddings and summaries can retain source information.
+
+Therefore:
+
+- remote embeddings count as remote processing
+- local vector stores inherit project sensitivity
+- cached context packages inherit source sensitivity
+- deleting source content must address derived index entries
+- "only vectors were sent" is not a valid privacy claim without evidence
+
+## Minimum-sufficient context as a dual objective
+
+The compiler should optimize both:
+
+- cost: send fewer tokens/bytes
+- disclosure: expose fewer unrelated protected facts
+
+These often align, but not always. Benchmark both correctness and disclosure footprint.

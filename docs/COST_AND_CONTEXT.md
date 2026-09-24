@@ -417,3 +417,35 @@ Usage reporting should distinguish:
 - duplicated work prevented
 - recovery overhead
 - model/tool calls repeated because prior results were not durable
+
+
+## Evidence quality versus compression
+
+Context compaction must preserve material evidence-quality metadata.
+
+A smaller context package must not erase facts such as:
+
+- sampled/incomplete telemetry
+- stale project revision
+- detector uncertainty
+- conflicting observations
+- degraded collector state
+- inferred versus directly measured status
+
+The Context Compiler should prefer current authoritative/verified evidence over larger volumes of weaker observations.
+
+## Observability cost
+
+Instrumentation cost belongs in the usage model.
+
+Measure where practical:
+
+- CPU/memory overhead
+- added latency
+- storage/network volume
+- sampling rate
+- raw event volume
+- collector processing cost
+- remote observability cost
+
+RELAY should compare the diagnostic value of an observability mode against its overhead rather than defaulting to "capture everything."

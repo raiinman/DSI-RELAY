@@ -361,3 +361,113 @@ The manifest cannot expand RELAY policy; it requests capabilities that policy ma
 Installed adapters do not automatically become AI context.
 
 RELAY should expose only relevant adapter capabilities for the active project/task/client. Adapter-provided prose is not passed through as policy or instructions; RELAY renders AI-facing command descriptions from trusted command semantics plus bounded adapter metadata.
+
+
+## Data plane and egress boundary
+
+Remote model/service calls are not just compute choices; they are data-processing boundaries.
+
+Conceptual path:
+
+~~~
+project / evidence / runtime
+          |
+          v
+ classification + provenance
+          |
+          v
+ Context Compiler
+          |
+          v
+ Egress Gate
+          |
+   +------+-------+
+   |              |
+ blocked        approved destination
+                  |
+                  v
+             model/service
+~~~
+
+The Egress Gate is enforced by RELAY policy outside model reasoning.
+
+Responsibilities include:
+
+- destination/provider policy lookup
+- project data-class checks
+- modality checks
+- task-scoped egress limits
+- minimum-sufficient payload enforcement
+- outbound lineage/audit metadata
+- local-only/private-mode enforcement
+
+A model can request additional context but cannot grant itself permission to disclose it.
+
+## Credential Broker
+
+Credential material is resolved outside AI context.
+
+Clients/models use opaque connection references. The broker supplies actual credentials only to the trusted integration/subprocess boundary that requires them.
+
+The broker must prevent secret values from entering:
+
+- prompts
+- model-visible memory
+- embeddings
+- ordinary logs
+- result summaries
+- diagnostic bundles
+
+Credential use remains attributable to job, client, project, and command where practical.
+
+## Sensitivity propagation
+
+Derived artifacts inherit relevant source sensitivity unless an explicit policy transformation changes it.
+
+This includes:
+
+- summaries
+- embeddings
+- cached model output
+- extracted metadata
+- screenshots/captures
+- generated diagnostic excerpts
+
+A remote embedding operation is therefore an egress event even if no raw source text is stored remotely afterward.
+
+## Remote processor profiles
+
+Remote model/embedding/service destinations need versioned policy metadata such as:
+
+- endpoint/account identity
+- allowed data classes/modalities
+- known retention policy source
+- known training/data-use policy source
+- region/residency where relevant
+- last policy verification time
+- organization/user overrides
+
+Unknown or stale claims remain unknown. RELAY must not manufacture assurances about provider behavior.
+
+## Egress ledger
+
+Important outbound processing should be auditable without duplicating the sensitive payload.
+
+Store metadata such as:
+
+- project/job/result
+- requesting client
+- destination
+- data classes/modalities
+- source references
+- purpose
+- approximate size/tokens where measurable
+- policy decision
+- timestamp
+- known destination-policy metadata
+
+## Local-only mode
+
+A local-only/private project profile must disable remote project-content processing across models, embeddings, gateway payloads, analytics, automatic diagnostics, and adapter networking unless a separately documented exception is approved.
+
+The mode is valid only if its network behavior is testable.

@@ -102,6 +102,13 @@ When the user requests a durable behavior change, record it here or in the relev
 - Design for eventual public release from the start: no personal paths, machine-specific assumptions, private repository names, secrets, account identifiers, or user-specific defaults may be embedded in distributable code or documentation.
 - UEFN/Fortnite is the initial integration target, not the permanent architectural boundary. Engine and tool integrations must sit behind adapters so additional project types and toolchains can be added without rewriting RELAY core.
 - Public users should be able to install RELAY, connect their own supported tools, create or attach a project, and obtain useful results without understanding the original author's projects or environment.
+- Cost efficiency is a primary product objective across the entire RELAY project. Architecture and feature decisions must minimize AI token use, paid-model dependence, remote tool calls, cloud infrastructure cost, redundant computation, and unnecessary latency without sacrificing correctness, safety, or recoverability.
+- Prefer deterministic local computation over model reasoning whenever a task can be measured, parsed, validated, indexed, filtered, diffed, deduplicated, summarized structurally, or executed by code.
+- Prefer CLI plus compact skills for local AI clients. Keep MCP and remote gateways thin and use them only where transport or client compatibility requires them.
+- Default AI-facing output must be compact, structured, budget-aware, and progressively retrievable. Raw logs, large result sets, screenshots, and historical evidence stay in RELAY storage until specifically needed.
+- Reuse cached results, incremental indexes, deltas, result IDs, and affected-only tests instead of repeating full scans or re-sending unchanged context.
+- Do not spend an AI call on work that RELAY can complete deterministically. Expensive-model escalation must be optional and justified by task difficulty rather than treated as the default path.
+- Cost and usage observability are product features: RELAY should expose per-job and aggregate metrics for model tokens when available, remote calls, local work, cache hits, context bytes/tokens returned, elapsed time, and estimated avoidable work.
 
 ## Child DOX Index
 

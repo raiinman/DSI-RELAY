@@ -884,3 +884,111 @@ Evaluate:
 - cancellation and expiration of stale queued work
 
 Do not silently fail over to a different model/provider when doing so changes privacy, cost, or capability policy.
+
+
+## Research track AL — Evidence quality and observability truth
+
+Build a test matrix for evidence classes:
+
+- authoritative state
+- direct observation
+- derived measurement
+- corroborated finding
+- inferred hypothesis
+- unknown/incomplete
+
+Test stale, conflicting, sampled, missing, and degraded evidence.
+
+Metrics:
+
+- decision correctness
+- false certainty rate
+- stale-state usage
+- user comprehension
+- evidence provenance completeness
+- recovery after collector failure
+
+Government baselines include NIST AI 800-4, SP 800-137/137A, and SP 800-92.
+
+## Research track AM — Sampling and rare-event retention
+
+Compare:
+
+- full capture
+- head/probability sampling
+- tail/error-biased sampling
+- adaptive sampling
+- task-specific high-detail windows
+
+Evaluate exact-count validity, rare-event retention, AI diagnostic success, storage/network cost, and operational overhead.
+
+Use OpenTelemetry sampling semantics as a technical baseline rather than assuming sampled data is complete.
+
+## Research track AN — Instrumentation overhead and observer effect
+
+Benchmark RELAY instrumentation against minimally instrumented baselines.
+
+Measure CPU, memory, latency, throughput/frame-time where relevant, storage, network, and tool-specific performance.
+
+Test normal mode, targeted probes, and high-detail diagnostic mode.
+
+The goal is to establish an observability budget and to detect when instrumentation itself changes the symptom being diagnosed.
+
+## Research track AO — Time, ordering, and causal evidence
+
+Inject clock skew, delayed events, reordered delivery, and mixed local/remote timestamps.
+
+Compare:
+
+- wall-clock ordering
+- monotonic local ordering
+- sequence IDs
+- trace parent/child
+- transaction/job relationships
+- explicit dependency links
+
+Measure incorrect causal ordering and root-cause errors.
+
+## Research track AP — Detector calibration and alert burden
+
+Evaluate automated validators/anomaly detectors using both statistical metrics and operational alert burden.
+
+Measure:
+
+- false positives per hour/session
+- false discovery/noise rate
+- duplicate alert rate
+- confidence/calibration
+- user dismiss/override rate
+- time-to-actionable incident
+- missed-event rate
+
+Recent 2026 reliability research on alarm fatigue and absolute false-positive rates is a primary evidence source.
+
+## Research track AQ — Observability pipeline self-monitoring
+
+Test collector/adapter failure modes:
+
+- disconnected source
+- buffer overflow
+- parser rejection
+- queue backlog
+- storage quota
+- sampling misconfiguration
+- stale last-seen
+- clock quality degradation
+
+Verify that downstream evidence/results are automatically marked incomplete/degraded rather than remaining confidently healthy.
+
+## Research track AR — Root-cause verification
+
+Compare correlation-only diagnosis with diagnosis that uses controlled reproduction, authoritative dependency evidence, and targeted tests.
+
+Measure:
+
+- correct root cause
+- false root-cause confidence
+- number of tool/model calls
+- time to verified cause
+
+The product should distinguish likely explanation from verified cause.

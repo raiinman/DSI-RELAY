@@ -327,3 +327,46 @@ Paths, filenames, project/repository names, asset names, document metadata, iden
 Status: Approved
 
 A clean scanner result does not declassify project data. Explicit project/path/artifact policy and provenance can impose stricter sensitivity than automated detectors.
+
+
+## D-059 — Human, client, agent, and service identities remain distinct
+
+Status: Approved
+
+RELAY should preserve useful actor/delegator attribution instead of collapsing important activity to one shared bot or human identity.
+
+## D-060 — Roles are UX templates, not the entire authorization model
+
+Status: Approved direction
+
+Simple roles may simplify administration, but enforcement must be able to consider project/resource, action, client/agent scope, command risk, data policy, and other relevant attributes.
+
+## D-061 — Delegated authority cannot silently widen
+
+Status: Approved
+
+Agent-to-agent or client-to-agent delegation must preserve or narrow the authority, project/resource scope, data-egress scope, and relevant budgets of the delegating principal.
+
+## D-062 — Membership and external connection ownership are separate
+
+Status: Approved
+
+Removing a person from a workspace does not prove that separately shared external credentials or service connections are revoked. Offboarding must evaluate both membership and connection ownership.
+
+## D-063 — Team writes require stale-state protection
+
+Status: Approved
+
+Important write plans and approvals should carry project revision or equivalent preconditions. If relevant state changes before execution, RELAY should stop and re-inspect rather than silently apply a stale plan.
+
+## D-064 — Multi-agent work is coordinated and budgeted, not swarm-by-default
+
+Status: Approved direction
+
+RELAY may support multiple agents, but coordination, authority, context, and cost must be explicit. The default should use the smallest number of agents that measurably improves the task.
+
+## D-065 — Revocation propagates to active work
+
+Status: Approved direction
+
+Identity/client/agent revocation should re-evaluate active sessions, queued jobs, approvals, delegated work, resource claims, and relevant connection use instead of affecting only future sign-ins.

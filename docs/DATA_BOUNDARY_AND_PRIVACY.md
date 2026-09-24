@@ -367,3 +367,12 @@ Logs, traces, metrics labels, screenshots, profiler output, entity identifiers, 
 Sampling reduces volume, not automatically sensitivity.
 
 Remote observability backends are external processing destinations and must be included in provider/data-egress policy where project-derived telemetry is sent.
+
+
+## Privacy representations
+
+Public RELAY privacy/security statements are external commitments.
+
+Claims such as local-only, no project-data egress, encrypted, private, or no-upload must map to tested system behavior and documented exceptions.
+
+Privacy-policy/telemetry copy should be version-controlled with behavior-changing releases. A product update that changes data collection/egress must trigger review of user-facing representations.

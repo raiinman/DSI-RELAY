@@ -67,6 +67,7 @@ Start with docs/PROJECT_PLAN.md.
 - docs/UEFN_V0.1.md — first integration and v0.1 scope
 - docs/SECURITY_AND_PERMISSIONS.md — approvals, safety, auditability
 - docs/DATA_BOUNDARY_AND_PRIVACY.md — project data classification, credentials, remote egress, embeddings, screenshots, and privacy
+- docs/RESILIENCE_AND_RECOVERY.md — crash recovery, unknown effects, durable jobs, backups, migrations, and outage handling
 - docs/ROADMAP.md — staged delivery plan
 - docs/RESEARCH_PLAN.md — academic and technical research program
 - docs/PHASE0_ADVERSARIAL_REVIEW.md — red-team review of current assumptions

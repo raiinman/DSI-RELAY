@@ -992,3 +992,120 @@ Measure:
 - time to verified cause
 
 The product should distinguish likely explanation from verified cause.
+
+
+## Research track AS — Time-to-first-value and cognitive-load baseline
+
+Design a representative personal-user benchmark:
+
+1. install RELAY
+2. add/detect supported project
+3. run local audit
+4. understand result
+5. perform one safe corrective workflow
+
+Measure:
+
+- elapsed time
+- clicks/commands
+- mandatory decisions
+- distinct concepts users must understand
+- errors/retries
+- help/documentation lookups
+- subjective workload using an appropriate validated instrument where feasible
+- successful task completion
+
+Compare novice and experienced creators.
+
+Do not add remote AI or team setup to the baseline unless the task actually needs them.
+
+## Research track AT — Configuration-space budget
+
+Inventory all RELAY configuration dimensions and generate interaction coverage models.
+
+Research:
+
+- which settings can be eliminated by safe defaults
+- which can be automatically detected
+- which need project-level overrides
+- which combinations are unsupported
+- pairwise/t-wise or risk-based sampling strategies
+- configuration migration/versioning
+
+Benchmark cost grows with the actual interaction surface, not only raw setting count.
+
+Academic baselines include highly configurable systems research, JHipster configuration sampling, and early configuration validation work.
+
+## Research track AU — AI verification load and interface design
+
+Reproduce key RELAY tasks through:
+
+- chat-only interaction
+- structured result cards/dashboard
+- CLI + concise output
+- mixed workflow
+
+Keep model/backend constant where possible.
+
+Measure:
+
+- correctness
+- time
+- verification steps
+- requests for raw evidence
+- reversals/corrections
+- workload/fatigue
+- trust calibration
+
+CHI 2026 verification-load research is a primary baseline.
+
+## Research track AV — Feature complexity and retirement
+
+For proposed/implemented features track:
+
+- usage/frequency
+- core versus adapter ownership
+- code/schema/config growth
+- tests added
+- docs/UI concepts added
+- support issues
+- background/runtime overhead
+- migration burden
+- security/privacy surface
+
+Define criteria for promote, keep, merge, demote, deprecate, or remove.
+
+The aim is to prevent irreversible feature accumulation.
+
+## Research track AW — Operability and toil
+
+Measure recurring work required to keep RELAY functioning:
+
+- integration reconnects
+- manual configuration
+- update recovery
+- permission changes
+- diagnostics
+- compatibility work
+- stale-index repair
+- approval repetition
+
+Track user/maintainer time and frequency.
+
+Test whether automation reduces total work or merely moves toil into a different layer.
+
+Google SRE toil guidance provides an operational baseline, but RELAY thresholds must come from its own public/dogfood workloads.
+
+## Research track AX — Personal versus team surface
+
+Test whether team-ready data models can remain invisible to personal users.
+
+Compare onboarding/navigation with:
+
+- personal-only concepts
+- latent team capability hidden
+- team features exposed globally
+
+Measure comprehension, navigation time, perceived complexity, and accidental configuration.
+
+The goal is future capability without present cognitive tax.

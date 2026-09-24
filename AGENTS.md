@@ -93,6 +93,10 @@ Default section order:
 
 When the user requests a durable behavior change, record it here or in the relevant child AGENTS.md.
 
+- RELAY must include a dashboard as a first-class interface for project status, observability, approvals, history, diagnostics, tests, assets, and integrations.
+- The dashboard must never be the only way to perform an operation. Headless CLI execution remains canonical, and dashboard, MCP, REST, WebSocket, and AI clients must use the same underlying command system.
+- Dashboard language should be plain and readable for someone unfamiliar with MCP or game-development infrastructure, with advanced detail available progressively rather than forced into the primary view.
+
 ## Child DOX Index
 
 - No child DOX files exist yet. The root AGENTS.md currently owns the entire repository.

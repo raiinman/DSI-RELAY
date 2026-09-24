@@ -31,6 +31,8 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `SECURITY_AND_PERMISSIONS.md` — side-effect categories, transactions, rollback, secrets, and remote safety.
 - `ROADMAP.md` — staged delivery plan and milestone exit criteria.
 - `RESEARCH_PLAN.md` — academic/technical research and benchmark program.
+- `PHASE0_ADVERSARIAL_REVIEW.md` — adversarial challenge to current assumptions and required architecture changes.
+- `EVIDENCE_REGISTER.md` — source register tying academic, government, historical, and platform evidence to RELAY decisions.
 - `DECISION_LOG.md` — approved durable architecture/product decisions.
 
 # Work Guidance

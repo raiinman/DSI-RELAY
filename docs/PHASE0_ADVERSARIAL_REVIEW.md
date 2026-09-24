@@ -617,3 +617,70 @@ MODIFY STORAGE CONTRACT.
 - storage must support integrity checks, migrations, backups/snapshots, and recovery
 - Phase 1 storage tests must include abrupt termination and recovery
 - stale or uncertain state must be reconciled before being presented as high-confidence current state
+
+
+## Attack 23 — A single traditional Windows service conflicts with our first integrations
+
+### Evidence
+
+Microsoft documents that Windows services run outside the signed-in user's interactive desktop session on modern Windows. RELAY's first integrations—UEFN, Fortnite, Blender, and Krita—run in the user's interactive session.
+
+Microsoft also provides service-account and service-isolation mechanisms specifically to reduce standing privilege.
+
+### Verdict
+
+REJECT A SINGLE HIGH-PRIVILEGE SYSTEM SERVICE AS THE DEFAULT PROCESS MODEL.
+
+### Required changes
+
+Phase 1 must compare split local-runtime designs:
+
+- a per-user RELAY host running in the signed-in user's security context for project access and interactive tool adapters
+- an optional minimal helper only for operations that genuinely require elevated operating-system rights
+- isolated worker processes for riskier parsing/build tasks where practical
+- no requirement for the main RELAY host to run as administrator or LocalSystem
+- treat "relayd" as a logical background component name, not a commitment to Session-0 Windows-service architecture
+
+Candidate implementations include a normal per-user background process and Windows per-user service mechanisms.
+
+## Attack 24 — Local IPC needs explicit identity and access rules
+
+### Evidence
+
+Microsoft's named-pipe documentation shows that pipe access is controlled through Windows security descriptors and access checks; relying on defaults can grant broader access than intended.
+
+### Verdict
+
+NEW LOCAL-IPC REQUIREMENT.
+
+### Required changes
+
+- define explicit access control for local IPC
+- do not treat loopback network location as user identity
+- distinguish dashboard/client identity from worker/host identity
+- require protocol/version negotiation
+- fail closed on incompatible or unauthorized peers
+- test cross-user and lower-privilege access behavior
+- settle local IPC security before building the remote-gateway layer
+
+## Attack 25 — Public auto-update is part of the trusted computing base
+
+### Evidence
+
+NIST's Secure Software Development Framework treats secure software delivery and lifecycle practices as part of normal development. CISA/FBI Secure-by-Design guidance similarly emphasizes reducing security risk at the software-manufacturer level. Supply-chain frameworks such as SLSA emphasize build provenance and artifact integrity.
+
+### Verdict
+
+MODIFY UPDATE DESIGN.
+
+### Required changes
+
+Before automatic updates are enabled for public RELAY installations:
+
+- verify release artifact authenticity/integrity
+- protect release-channel metadata
+- retain build provenance where practical
+- design update rollback/recovery
+- keep elevated installer/update functionality narrowly scoped
+- ensure adapters/plugins cannot bypass update-integrity policy
+- ensure a failed update cannot destroy project data

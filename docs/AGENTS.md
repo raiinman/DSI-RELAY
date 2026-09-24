@@ -31,6 +31,7 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `SECURITY_AND_PERMISSIONS.md` — side-effect categories, transactions, rollback, secrets, and remote safety.
 - `DATA_BOUNDARY_AND_PRIVACY.md` — data classification, credential handling, remote egress, embeddings, screenshots, and privacy boundaries.
 - `RESILIENCE_AND_RECOVERY.md` — crash recovery, retries, unknown outcomes, checkpoints, backups, migrations, outages, and restore verification.
+- `OBSERVABILITY_AND_TRUTH.md` — evidence classes, sampling, freshness, causality, instrumentation overhead, alert quality, and observability health.
 - `ROADMAP.md` — staged delivery plan and milestone exit criteria.
 - `RESEARCH_PLAN.md` — academic/technical research and benchmark program.
 - `PHASE0_ADVERSARIAL_REVIEW.md` — adversarial challenge to current assumptions and required architecture changes.

@@ -449,3 +449,31 @@ Measure where practical:
 - remote observability cost
 
 RELAY should compare the diagnostic value of an observability mode against its overhead rather than defaulting to "capture everything."
+
+
+## Human attention is a cost
+
+RELAY's efficiency model includes human work, not only tokens and compute.
+
+Measure where practical:
+
+- setup/configuration time
+- review/verification time
+- approval count
+- support/diagnostic time
+- repeated manual maintenance
+- context switching between tools
+- recovery steps
+
+A workflow that saves API cost while increasing repeated human toil may be a net regression.
+
+## Complexity and context surface
+
+More features can increase AI cost even when unused if their schemas, instructions, or status are always loaded.
+
+Therefore:
+
+- optional/inactive adapters stay out of normal context
+- advanced policy/configuration is retrieved only when relevant
+- command discovery remains task scoped
+- generated help/context should prefer the supported golden path

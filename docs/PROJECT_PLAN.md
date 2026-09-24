@@ -69,6 +69,10 @@ Compact agent instructions and shell wrappers are the initial local-AI strategy 
 
 Optional path for cloud-only clients that cannot execute commands on the user's machine. It should remain thin and forward structured commands to the local service.
 
+### Data boundary
+
+Remote models, embedding services, gateways, networked adapters, and support uploads are explicit external processing destinations. RELAY policy decides what project data may leave the local environment before the Context Compiler optimizes the payload. Credentials are resolved through opaque handles outside model context.
+
 ### MCP/API adapters
 
 Compatibility surfaces only. They must not duplicate business logic or become the primary architecture.
@@ -186,6 +190,10 @@ From the first implementation:
 - third-party adapters isolated from RELAY Core by default
 - adapter capability manifests, exact-version compatibility, provenance, and update/recovery controls
 - no requirement for an open extension marketplace before these controls are proven
+- explicit project data classification and destination-specific egress policy
+- raw credentials excluded from model-visible context
+- sensitive derived artifacts inherit source policy
+- local-only/private mode defined by testable network behavior rather than UI wording
 
 ## Open implementation decisions
 

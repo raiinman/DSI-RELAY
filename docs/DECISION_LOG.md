@@ -571,3 +571,76 @@ Milestones track time/steps to useful value, mandatory decisions/concepts, confi
 Status: Approved
 
 Adapters/features not relevant to the active project/task should contribute negligible routine AI context and should avoid unnecessary background CPU, memory, network, health polling, and dashboard noise.
+
+
+## D-099 — UEFN automation stays on documented developer surfaces
+
+Status: Approved
+
+RELAY's UEFN/Fortnite integration uses Epic-documented developer automation such as UEFN MCP and supported development/test interfaces. This does not authorize general Fortnite gameplay/client automation, integrity-system circumvention, or undocumented botting.
+
+## D-100 — Published UEFN content does not phone home to RELAY
+
+Status: Approved
+
+Runtime instrumentation for published UEFN projects must use supported Epic/UEFN mechanisms and may not introduce external RELAY server connections prohibited by current UEFN terms.
+
+## D-101 — RELAY branding is independent of Epic IP
+
+Status: Approved
+
+Public RELAY naming, logos, and product identity do not depend on Epic/Fortnite/Unreal marks or imply endorsement. Platform names are used descriptively for compatibility where appropriate.
+
+## D-102 — Third-party creative tools are detected rather than bundled by default
+
+Status: Approved direction
+
+Public installers should detect user-installed UEFN, Blender, Krita, and similar tools rather than redistributing them unless a specific release accepts and satisfies the applicable license/trademark/update obligations.
+
+## D-103 — Companion components may have different licenses from RELAY Core
+
+Status: Approved
+
+Blender/Krita companion plugins and Unreal/UEFN components are licensed/distributed according to their host-platform obligations. RELAY Core's eventual license does not automatically apply to every companion.
+
+## D-104 — Project assets carry rights/provenance metadata
+
+Status: Approved direction
+
+The asset/content model supports creator/source, license/rights basis, Epic/third-party status, attribution, redistribution/export constraints, and AI-generated/assisted provenance where useful.
+
+## D-105 — RELAY does not promise copyright ownership of AI output
+
+Status: Approved
+
+RELAY separates provider contractual usage rights, provenance, human authorship/modification, and copyrightability. UI/docs do not claim prompts or AI generation automatically confer copyright or non-infringement.
+
+## D-106 — Public artifacts require license/component inventory
+
+Status: Approved direction
+
+Distributed RELAY artifacts need reproducible dependency/component/license inventories and required notices/source obligations before public release.
+
+## D-107 — Platform terms and licenses are versioned external dependencies
+
+Status: Approved
+
+Material Epic rules, licenses, AI-provider terms, and other integration policies are tracked with source/update/review metadata. Material changes trigger compatibility review rather than silent assumption.
+
+## D-108 — Automated compliance findings are advisory controls
+
+Status: Approved
+
+RELAY may identify missing metadata, known conflicts, or policy drift, but does not represent automated checks as legal certification, copyright clearance, or platform approval.
+
+## D-109 — RELAY Core license selection remains open
+
+Status: Approved
+
+The Core/SDK/companion license strategy is selected only after integration boundaries, GPL companion obligations, Unreal/UEFN restrictions, contributor policy, and commercial/hosted goals are prototyped/reviewed.
+
+## D-110 — Public privacy/security claims must match tested behavior
+
+Status: Approved
+
+Marketing, onboarding, telemetry/privacy notices, and UI claims such as local-only/private/encrypted/no-upload must remain consistent with actual tested behavior and documented limitations.

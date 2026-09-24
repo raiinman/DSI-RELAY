@@ -426,3 +426,27 @@ Useful display:
 - result/job reference
 
 The display should avoid duplicating sensitive payload contents.
+
+
+## Team and collaboration UX
+
+For shared projects, the dashboard should make it easy to answer:
+
+- who is currently working on this project
+- which client/agent requested a change
+- what project revision the plan is based on
+- whether another change made the plan stale
+- what role/scope the current user and agent have
+- whether a connection is personal, project-owned, or workspace-owned
+- whether a queued job will be canceled or revalidated after access changes
+
+Conflict states should be plain:
+
+~~~
+This plan was approved against an older project state.
+RELAY will re-check it before making changes.
+~~~
+
+Avoid silently replaying stale approvals.
+
+Multi-agent views should show bounded task ownership and conflicts rather than a noisy transcript of every agent message.

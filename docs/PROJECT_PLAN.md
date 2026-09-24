@@ -207,6 +207,9 @@ From the first implementation:
 - secure/sensible defaults that avoid mandatory policy hardening
 - configuration and feature growth governed by explicit complexity budgets
 - common diagnostics available through one low-friction health path
+- public distribution does not rely on unreviewed platform-term assumptions
+- dependency/companion/asset licensing and required notices are tracked before release
+- user-facing AI/copyright/privacy claims stay narrower than the evidence supports
 
 ## Open implementation decisions
 
@@ -218,7 +221,7 @@ These are intentionally not fixed yet:
 - remote-gateway hosting design
 - authentication implementation
 - packaging/update technology
-- public license
+- public license and contributor copyright model
 - exact adapter API/ABI
 - exact compatibility matrix for UEFN versions
 

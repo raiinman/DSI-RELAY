@@ -684,3 +684,179 @@ Before automatic updates are enabled for public RELAY installations:
 - keep elevated installer/update functionality narrowly scoped
 - ensure adapters/plugins cannot bypass update-integrity policy
 - ensure a failed update cannot destroy project data
+
+
+## Attack 26 — A third-party adapter is executable supply-chain code
+
+### Evidence
+
+Developer-extension ecosystems show that third-party integrations can become a direct compromise path. A study of 52,880 VS Code extensions found about 5.6% exhibited suspicious behavior, and MCP-ecosystem studies have demonstrated that community servers and registries can expose users to tool poisoning, server takeover, and unsafe local actions.
+
+### Verdict
+
+REJECT IN-PROCESS UNTRUSTED ADAPTERS AS THE DEFAULT PUBLIC EXTENSION MODEL.
+
+### Required changes
+
+- third-party adapters should run out of process by default
+- adapters must not receive direct access to RELAY Core internals or its database
+- adapter communication must pass through a brokered, versioned protocol
+- adapter crashes or hangs must not bring down RELAY Core
+- per-adapter resource and timeout limits are required
+- first-party adapters should use the same manifest/capability model where practical so the public extension path is continuously exercised
+
+## Attack 27 — Marketplace review cannot be our trust boundary
+
+### Evidence
+
+A 2025 MCP study uploaded unsafe servers to multiple aggregation platforms and found existing review mechanisms insufficient. A 2025–2026 study of 67,057 MCP servers found weak registry vetting and server-hijack risks. Similar problems have been documented in browser-extension and developer-extension marketplaces.
+
+### Verdict
+
+DEMOTE AN OPEN RELAY MARKETPLACE.
+
+### Required changes
+
+- do not make an open public marketplace a v0.x requirement
+- initial public extension support should prefer explicit local installation or curated sources
+- publisher identity, version, digest, permissions, provenance, and update source must be visible before installation
+- registry presence or a "verified" badge must never be treated as proof of safety
+- unverified adapters must be clearly separated from first-party or reviewed adapters
+
+## Attack 28 — Signatures prove origin/integrity, not good behavior
+
+### Evidence
+
+Software-supply-chain guidance from NIST emphasizes provenance, component inventories, artifact integrity, and secure development practices. Real package compromises also show that a previously trusted publisher or update channel can still distribute harmful code.
+
+### Verdict
+
+MODIFY TRUST SEMANTICS.
+
+### Required changes
+
+RELAY must distinguish:
+
+- identity: who published it
+- integrity: whether the artifact changed
+- provenance: how/where it was built
+- review status: what RELAY/project maintainers examined
+- permissions: what it is allowed to do
+- observed behavior: what it actually did at runtime
+
+A valid signature must never imply "safe."
+
+## Attack 29 — Adapter permissions need a capability contract
+
+### Problem
+
+An adapter that can read every project, execute arbitrary programs, use network access, access credentials, and emit unrestricted tool metadata effectively recreates a general-purpose remote-code execution surface.
+
+### Verdict
+
+NEW HARD REQUIREMENT.
+
+### Required changes
+
+Every adapter needs a declared capability manifest that can express, where relevant:
+
+- project roots/resources it may read
+- resources it may modify
+- external applications/binaries it may invoke
+- network access requirements
+- secret/credential scopes
+- subprocess needs
+- editor/runtime endpoints
+- whether writes are reversible
+- AI/tool capabilities it exposes
+
+RELAY policy grants only the approved subset. The adapter cannot expand its own authority.
+
+## Attack 30 — Adapter dependencies and updates are part of the attack surface
+
+### Evidence
+
+The 2025 Nx/npm compromise is a concrete example of a trusted development package/update path being abused. NIST SSDF/SBOM guidance emphasizes component inventory, provenance, and update integrity.
+
+### Verdict
+
+MODIFY DISTRIBUTION AND UPDATE DESIGN.
+
+### Required changes
+
+- adapter versions are immutable and content-addressable where practical
+- installs/updates are pinned to an exact artifact, not an unqualified "latest"
+- transitive dependencies must be inventoried
+- adapters should publish machine-readable component/dependency metadata
+- update policy needs staging, health checks, and rollback
+- dependency/update changes must be visible in the transaction/history system
+- automatic adapter updates require the same integrity guarantees as RELAY updates
+
+## Attack 31 — Adapter metadata can become an AI instruction channel
+
+### Evidence
+
+MCP research identifies tool-metadata poisoning as a practical attack vector. RELAY already treats project/tool content as untrusted; extension-provided names, descriptions, errors, documentation, and results belong in the same category.
+
+### Verdict
+
+EXTEND THE INSTRUCTION/DATA BOUNDARY.
+
+### Required changes
+
+- adapter-provided prose is untrusted data by default
+- adapters cannot inject system/policy instructions into AI contexts
+- command/tool semantics come from RELAY's registry and reviewed adapter manifests
+- dynamic adapter output retains provenance/trust labels
+- tool descriptions exposed to AI must be normalized/rendered by RELAY rather than blindly forwarded
+- suspicious or changed tool metadata should be auditable by version/digest
+
+## Attack 32 — Extensions can silently destroy the cost model
+
+### Problem
+
+A public ecosystem may add hundreds of commands, schemas, descriptions, health checks, background processes, and telemetry streams. Even safe extensions could recreate the context bloat RELAY is designed to remove.
+
+### Verdict
+
+MODIFY EXTENSION UX.
+
+### Required changes
+
+- adapter installation does not mean all adapter commands are exposed to every AI
+- capability discovery remains task/project specific
+- inactive adapters should consume near-zero AI context
+- health polling and background work must be rate-limited and measurable
+- per-adapter CPU/memory/storage/network and AI-context contribution should be observable
+- extension benchmarks include context and runtime overhead, not only functionality
+
+## Attack 33 — Extension compatibility needs quarantine, not optimism
+
+### Problem
+
+RELAY Core, external applications, and third-party adapters will evolve at different speeds. Loading an incompatible adapter into a privileged developer workflow can corrupt state or create misleading results.
+
+### Verdict
+
+NEW COMPATIBILITY REQUIREMENT.
+
+### Required changes
+
+- adapters declare RELAY API/protocol compatibility
+- integrations declare supported external-tool versions/capabilities
+- incompatible adapters fail closed and are quarantined/disabled
+- migrations are explicit and versioned
+- older adapter results retain the version/provenance needed for interpretation
+- public release requires compatibility tests for first-party adapters and an SDK conformance suite for third parties
+
+## Phase 0 adapter-ecosystem closure requirements
+
+Phase 0 now also requires:
+
+15. public extension architecture is out-of-process by default
+16. adapter capability/permission manifests are defined conceptually
+17. trust labels separate identity, integrity, provenance, review, permission, and runtime behavior
+18. extension distribution/update policy includes pinned artifacts, dependency inventory, integrity checks, and rollback
+19. extension-provided text is covered by the untrusted-content boundary
+20. adapter cost/resource/context overhead is measurable
+21. adapter API compatibility and quarantine behavior are defined before a public extension SDK is promised

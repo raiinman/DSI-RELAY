@@ -17,6 +17,22 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - When a decision changes, update the owning document instead of appending contradictory history.
 - Use DECISION_LOG.md for concise durable decisions; use ROADMAP.md for delivery order; use RESEARCH_PLAN.md for unresolved research.
 
+
+# Documentation Map
+
+- `INDEX.md` — navigation for the documentation set.
+- `PROJECT_PLAN.md` — consolidated product and implementation plan.
+- `PRODUCT_VISION.md` — user problem, product promises, scope, and public posture.
+- `SYSTEM_ARCHITECTURE.md` — component boundaries, command system, jobs, results, storage, and adapters.
+- `COST_AND_CONTEXT.md` — usage-efficiency rules, Result Store, Context Compiler, memory tiers, and benchmarks.
+- `CLI_AND_SKILLS.md` — headless CLI, structured machine execution, compact skills, and thin MCP posture.
+- `AUTOMATION_AND_UX.md` — onboarding automation, dashboard, recovery, approvals, and support experience.
+- `UEFN_V0.1.md` — first integration, runtime bridge, probes, tests, captures, and asset workflow.
+- `SECURITY_AND_PERMISSIONS.md` — side-effect categories, transactions, rollback, secrets, and remote safety.
+- `ROADMAP.md` — staged delivery plan and milestone exit criteria.
+- `RESEARCH_PLAN.md` — academic/technical research and benchmark program.
+- `DECISION_LOG.md` — approved durable architecture/product decisions.
+
 # Work Guidance
 
 - Prefer diagrams, contracts, invariants, and explicit boundaries over aspirational prose.

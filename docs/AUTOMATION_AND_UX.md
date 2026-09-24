@@ -26,7 +26,7 @@ Manual configuration exists as an escape hatch, not the default.
 Target behavior:
 
 - install CLI
-- install daemon/service
+- install the selected per-user RELAY background host
 - install dashboard
 - initialize local storage
 - register safe startup behavior

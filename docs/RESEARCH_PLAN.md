@@ -511,3 +511,39 @@ Release/update evaluation must cover:
 - build provenance/attestation options
 - interrupted update testing
 - separation between normal runtime and update privileges
+
+
+## Evidence inputs for tracks O–S
+
+Local/cloud economics:
+
+- Guégain & Coignion, "The Battery Price of edge AI" (2026): https://arxiv.org/abs/2609.11940
+- Arya & Simmhan, "Understanding the Performance and Power of LLM Inferencing on Edge Accelerators" (2025): https://arxiv.org/abs/2506.09554
+- Yu, Goudarzi & Toosi, "Efficient Routing of Inference Requests across LLM Instances in Cloud-Edge Computing" (2025/2026): https://arxiv.org/abs/2507.15553
+- Lawrence Berkeley National Laboratory, United States Data Center Energy Usage Report: 2025 Update: https://datacenters.lbl.gov/publications/united-states-data-center-energy-2025
+
+Windows file/index continuity:
+
+- Microsoft ReadDirectoryChangesW: https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-readdirectorychangesw
+- Microsoft Change Journal Records: https://learn.microsoft.com/en-us/windows/win32/fileio/change-journal-records
+- Microsoft USN_JOURNAL_DATA_V2: https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ns-winioctl-usn_journal_data_v2
+
+Storage durability candidates:
+
+- SQLite WAL: https://www.sqlite.org/wal.html
+- SQLite Backup API: https://sqlite.org/backup.html
+- SQLite corruption/recovery notes: https://www.sqlite.org/howtocorrupt.html
+- SQLite PRAGMA integrity checks: https://sqlite.org/pragma.html
+
+Windows local runtime:
+
+- Microsoft Interactive Services: https://learn.microsoft.com/en-us/windows/win32/services/interactive-services
+- Microsoft Per-user services: https://learn.microsoft.com/en-us/windows/application-management/per-user-services-in-windows
+- Microsoft AppContainer isolation: https://learn.microsoft.com/en-us/windows/win32/secauthz/appcontainer-isolation
+- Microsoft named-pipe security: https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights
+
+Secure delivery:
+
+- NIST SP 800-218 Rev. 1 initial public draft: https://csrc.nist.gov/pubs/sp/800/218/r1/ipd
+- CISA/FBI Product Security Bad Practices update (2025): https://www.cisa.gov/news-events/alerts/2025/01/17/cisa-and-fbi-release-updated-guidance-product-security-bad-practices
+- SLSA build provenance: https://slsa.dev/spec/v1.2/build-provenance

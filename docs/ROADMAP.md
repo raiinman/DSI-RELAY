@@ -34,6 +34,7 @@ Deliver:
 - project-data classification, remote-egress, credential-broker, embedding-privacy, and local-only-mode review
 - team/workspace identity, delegated-authority, revocation, and concurrency review
 - crash recovery, durable-job, restore-test, migration, and outage review
+- observability truth, sampling, causality, detector quality, and instrumentation-overhead review
 
 Exit criteria:
 
@@ -82,6 +83,9 @@ Research/prototype:
 - workspace/project role-plus-attribute policy prototype
 - project revision/conflict-detection prototype
 - revocation propagation tests
+- evidence-quality/observability pipeline prototype
+- sampling/completeness metadata prototype
+- instrumentation-overhead benchmark
 - durable job/unknown-outcome prototype
 - crash/fault-injection harness
 - backup/restore and migration-recovery prototype

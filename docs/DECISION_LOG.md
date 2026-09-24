@@ -202,3 +202,10 @@ RELAY's project indexes and normalized state do not replace the underlying proje
 Status: Approved direction
 
 The primary Windows host must be compatible with the signed-in user's UEFN, Blender, Krita, and related tool sessions. Phase 1 will compare per-user background-host options before fixing the process model.
+
+
+## D-039 — Update delivery must preserve recoverability
+
+Status: Approved direction
+
+Public update design must verify release integrity and preserve user project data when an update is interrupted or rolled back.

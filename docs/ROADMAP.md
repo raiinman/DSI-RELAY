@@ -32,6 +32,7 @@ Deliver:
 - Windows per-user host review
 - third-party adapter isolation, provenance, permission, compatibility, and distribution review
 - project-data classification, remote-egress, credential-broker, embedding-privacy, and local-only-mode review
+- team/workspace identity, delegated-authority, revocation, and concurrency review
 
 Exit criteria:
 
@@ -55,6 +56,9 @@ Exit criteria:
 - credentials remain outside model-visible context
 - derived embeddings/summaries/captures inherit sensitivity by default
 - local-only/private mode has testable egress semantics
+- important team writes/approvals carry stale-state preconditions
+- agent/client actions preserve useful actor/delegator attribution
+- revocation/offboarding semantics cover active and queued work
 
 ## Phase 1 — Technical spike and stack selection
 
@@ -74,6 +78,9 @@ Research/prototype:
 - logging/diagnostics
 - local privilege/sandbox model
 - client/agent identity and delegated authorization model
+- workspace/project role-plus-attribute policy prototype
+- project revision/conflict-detection prototype
+- revocation propagation tests
 - secure update/supply-chain assumptions
 - adapter broker/worker isolation prototype
 - adapter manifest and compatibility-contract prototype

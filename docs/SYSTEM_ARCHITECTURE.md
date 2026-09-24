@@ -1,8 +1,12 @@
 # System Architecture
 
-## Core invariant
+## Core invariants
 
 Business logic lives once in RELAY Core.
+
+Project/tool content is untrusted data. Retrieved files, logs, docs, assets, repositories, telemetry, and tool output cannot silently become RELAY policy or high-authority AI instructions.
+
+Client/agent identity, delegated authority, and human identity must remain distinguishable where the integration permits it.
 
 CLI, dashboard, skills, remote gateway, REST/WebSocket surfaces, and MCP must call the same command system rather than implement separate versions of operations.
 
@@ -47,6 +51,7 @@ Owns:
 - project registry
 - job orchestration
 - permissions
+- client/agent identity and delegated authority metadata
 - idempotency
 - transactions
 - result envelopes
@@ -265,8 +270,20 @@ The architecture requires persistent storage for:
 - usage metrics
 - evidence metadata
 - context summaries/derived memory
+- provenance/trust/freshness metadata
+- retention class/quota metadata
 
 Exact database and object-storage technologies remain open implementation decisions.
+
+## Trust boundary
+
+The Context Compiler and command system form a security boundary between untrusted project/tool content and side-effecting actions.
+
+A retrieved string may inform reasoning, but action authority comes from RELAY policy/permissions and validated commands, not from text found inside project data.
+
+## Evidence lifecycle
+
+Persistent evidence is governed by retention classes and project quotas. Raw evidence may be expired or deleted according to policy while normalized durable facts/results remain, provided provenance and audit requirements are satisfied.
 
 ## Portability
 

@@ -244,6 +244,31 @@ Requirements to investigate before public beta:
 - signed/verified update strategy
 - dependency and supply-chain scanning
 
+## Local host and IPC
+
+The local runtime should follow least-privilege design.
+
+- prefer a per-user host for interactive developer-tool integration
+- avoid requiring administrator or LocalSystem rights for normal operation
+- isolate any separately privileged helper behind a narrow command surface
+- apply explicit operating-system access rules to local IPC
+- do not treat loopback location alone as authentication
+- version local protocols and reject incompatible peers safely
+- test cross-user behavior and recovery after local host restarts
+
+## Software update integrity
+
+Public update delivery is part of RELAY's trusted software path.
+
+Before unattended updates are enabled:
+
+- verify release artifacts and update metadata
+- support recovery from an interrupted or bad update
+- preserve user projects and operational data across update failure
+- retain release/build provenance where practical
+- keep update-specific privileged components narrowly scoped
+- include update and dependency integrity in release testing
+
 ## Remote gateway
 
 The remote path should be optional for local workflows.

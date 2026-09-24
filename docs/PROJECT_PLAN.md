@@ -49,9 +49,9 @@ The full evidence remains available in RELAY without being dumped into chat.
 
 Owns command execution, validation, project state, results, transactions, tests, telemetry, usage accounting, and integration contracts.
 
-### relayd
+### relayd / local host
 
-Persistent local service. It maintains project indexes, watches integrations, receives queued work, stores results, and performs background health/recovery work.
+Logical persistent background host for RELAY Core. Phase 1 must compare a normal per-user background process, Windows per-user service options, and any narrowly scoped helper needs rather than assuming a traditional system service. It maintains project indexes, watches integrations, receives queued work, stores results, and performs background health/recovery work.
 
 ### relay CLI
 

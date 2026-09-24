@@ -354,3 +354,75 @@ The user should approve the bounded capability request rather than a vague "full
 Updates that request new capabilities, change publisher/provenance, or materially change trust status require renewed review/approval.
 
 Incompatible or quarantined adapters should explain the reason plainly and remain disabled rather than failing unpredictably.
+
+
+## Data and privacy UX
+
+Users need to understand when RELAY is keeping work local versus sending project-derived data elsewhere.
+
+The dashboard should make it possible to see:
+
+- current project privacy/data mode
+- whether remote AI is enabled for the project
+- which remote processors are connected
+- which data classes each destination may receive
+- recent outbound processing events
+- whether provider policy metadata is current, stale, or unknown
+- whether an operation is blocked by data policy
+- whether a model response/result is sensitive
+
+For a remote AI action, plain-language details should answer:
+
+- what is being sent
+- why it is needed
+- where it is going
+- whether images/files/source are included
+- whether the user needs to approve a broader disclosure scope
+
+Do not show a vague "AI enabled" toggle that silently authorizes the whole project.
+
+### Credential UX
+
+Credentials should appear as named connections, not visible secret strings.
+
+Example:
+
+~~~
+GitHub
+Connection: Work Account
+Status: Connected
+Scope: Project repository
+
+[ Revoke ]
+~~~
+
+AI transcripts and ordinary dashboard views should never need to reveal the credential value.
+
+### Local-only/private mode
+
+If RELAY offers a local-only/private mode, the dashboard must explain the guarantee precisely.
+
+Distinguish:
+
+- no project-data egress
+- no remote AI
+- fully offline/no network
+
+Do not collapse these into one misleading badge.
+
+### Egress history
+
+Users should be able to inspect recent remote processing without reading raw network logs.
+
+Useful display:
+
+- time
+- requesting client
+- project
+- destination
+- purpose
+- data class/modality
+- approximate payload size
+- result/job reference
+
+The display should avoid duplicating sensitive payload contents.

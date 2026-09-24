@@ -1662,3 +1662,311 @@ Phase 0 now also requires:
 44. crash/fault injection is part of the implementation test plan
 45. storage-pressure behavior and evidence quotas are defined
 46. provider outages degrade capability without violating data/provider policy
+
+
+## Attack 69 — Observability is not ground truth
+
+### Evidence
+
+Microsoft's Gray Failure work describes "differential observability": applications can be suffering while the system's failure detectors do not see a problem. NIST's 2026 post-deployment monitoring report likewise says robust monitoring practices remain immature and that real-world monitoring is needed precisely because controlled evaluations miss unexpected behavior.
+
+### Verdict
+
+NEW EVIDENCE-QUALITY CONTRACT.
+
+### Required changes
+
+RELAY must distinguish authoritative state, direct observation, derived measurement, corroborated finding, and inference.
+
+A quiet monitor is not proof of health.
+
+Findings should preserve the evidence class and source that justify them.
+
+## Attack 70 — Absence of telemetry does not prove absence of an event
+
+### Evidence
+
+Distributed-tracing specifications and telemetry systems explicitly allow sampling, dropping, fragmentation, and conditional recording. Missing spans/events may therefore reflect collection behavior rather than system behavior.
+
+### Verdict
+
+MODIFY NEGATIVE-EVIDENCE SEMANTICS.
+
+### Required changes
+
+"Not observed" may be interpreted as "did not happen" only when the signal path is known complete for that event.
+
+Evidence should expose when it is sampled, incomplete, dropped, expired, stale, or otherwise coverage-limited.
+
+## Attack 71 — Sampling can erase the rare event RELAY most needs
+
+### Evidence
+
+OpenTelemetry treats sampling as a cost-control mechanism and warns that inconsistent decisions can produce unusable/fragmented traces. Tail sampling exists specifically because errors and high-latency traces can require selective retention.
+
+### Verdict
+
+MODIFY TELEMETRY COST CONTROL.
+
+### Required changes
+
+- sampling strategy/rate must be visible in evidence metadata
+- exact counts cannot be inferred from sampled data unless a valid estimator applies
+- important failures/rare events may need stronger retention policies
+- audit/test mode may temporarily increase capture depth
+- compact AI output must not hide that evidence was sampled
+
+## Attack 72 — Telemetry can become its own performance bug
+
+### Evidence
+
+A 2025 Journal of Systems and Software study ran more than 5,000 experiments on instrumented containerized microservices and reported measurable performance degradation, with severe cases showing substantial throughput and latency effects. Other recent tracing studies report similarly non-trivial overhead.
+
+### Verdict
+
+NEW OBSERVABILITY-BUDGET REQUIREMENT.
+
+### Required changes
+
+- instrumentation modes need measured overhead budgets
+- probes should activate only when needed
+- performance diagnosis should compare with a minimally instrumented baseline where feasible
+- RELAY must not report an instrumentation-induced slowdown as a project regression
+- observability CPU/memory/network/storage cost belongs in usage metrics
+
+## Attack 73 — Timestamps can fabricate causal stories
+
+### Evidence
+
+Recent 2026 distributed-AI tracing work shows that small clock skew can produce causally incorrect traces even when the system itself remains functionally correct. This is a recent preprint, so treat the precise thresholds as workload-specific, but the general distributed-systems problem is established.
+
+### Verdict
+
+MODIFY EVENT-ORDERING MODEL.
+
+### Required changes
+
+Prefer explicit causal links over wall-clock order:
+
+- trace parent/child
+- sequence numbers
+- job/transaction IDs
+- monotonic local ordering
+- engine/session event order
+- logical/causal links
+
+Clock quality/skew becomes metadata where event ordering matters.
+
+Do not claim "A caused B" merely because A's timestamp is earlier.
+
+## Attack 74 — Multiple matching signals may still be one mistake
+
+### Evidence
+
+Recent anomaly-detection work shows correlated detector errors can create misleading apparent agreement. Multiple detectors firing on the same shared disturbance are not independent confirmation.
+
+### Verdict
+
+MODIFY EVIDENCE FUSION.
+
+### Required changes
+
+RELAY should track evidence lineage/dependency so that duplicated or correlated observations do not artificially inflate confidence.
+
+Corroboration should reward independent evidence, authoritative confirmation, or controlled reproduction more than repeated views of the same underlying source.
+
+## Attack 75 — False-positive rate alone does not measure operational usefulness
+
+### Evidence
+
+2026 reliability research argues that standard detector metrics can hide operationally intolerable false-alarm volume, and separate 2026 work shows repeated false alarms drive a cry-wolf effect and alarm fatigue.
+
+### Verdict
+
+MODIFY DETECTOR/ALERT EVALUATION.
+
+### Required changes
+
+For noisy automated checks measure where useful:
+
+- absolute alerts per hour/session
+- false discovery/noise rate
+- repeated duplicate alerts
+- user dismiss/override patterns
+- confidence/calibration
+- time-to-actionable finding
+
+A detector with an impressive benchmark score but unusable alert volume is not a successful RELAY feature.
+
+## Attack 76 — Metrics without uncertainty invite overconfidence
+
+### Evidence
+
+NIST AI 800-3 warns that common evaluation methods can rely on hidden assumptions or produce invalid uncertainty estimates and distinguishes fixed-benchmark performance from generalized performance.
+
+### Verdict
+
+NEW UNCERTAINTY REQUIREMENT.
+
+### Required changes
+
+RELAY should avoid presenting probabilistic/learned detector scores as objective truth.
+
+Where material, expose:
+
+- confidence/uncertainty
+- sample size/coverage
+- benchmark versus field evidence
+- detector version
+- calibration status
+- known limitations
+
+## Attack 77 — Monitoring systems themselves need monitoring
+
+### Evidence
+
+NIST SP 800-137 treats continuous monitoring as an ongoing assurance program whose effectiveness must itself be evaluated. Gray-failure work also shows the control plane can disagree with the actual application.
+
+### Verdict
+
+NEW META-OBSERVABILITY REQUIREMENT.
+
+### Required changes
+
+RELAY must track health of its collection path:
+
+- dropped events/logs
+- parser errors
+- queue/backlog
+- adapter/collector disconnect
+- stale last-seen
+- sampling state
+- buffer overflow
+- storage/quota pressure
+- clock/time quality when relevant
+
+A degraded telemetry path lowers the confidence of downstream findings.
+
+## Attack 78 — Native diagnostics are authoritative but not eternal truth
+
+### Problem
+
+Engine-native validators/profilers are generally the best source for their own domain, but rule coverage, semantics, and behavior can change by version and may still contain bugs or gaps.
+
+### Verdict
+
+KEEP NATIVE-TOOL-FIRST WITH VERSIONED SEMANTICS.
+
+### Required changes
+
+Native findings retain:
+
+- source/tool version
+- check/rule identity/version where available
+- scope/coverage
+- session/revision
+- timestamp
+
+RELAY must not reinterpret an old native result as if it were produced by a newer engine/tool version.
+
+## Attack 79 — Screenshots are partial observations, not state snapshots
+
+### Problem
+
+A screenshot can be valid but stale, cropped, from the wrong session, or visually omit hidden/editor state.
+
+### Verdict
+
+MODIFY VISUAL-EVIDENCE CONTRACT.
+
+### Required changes
+
+Capture metadata should include:
+
+- target/window/viewpoint
+- project/session/revision
+- capture time
+- resolution/crop
+- capture method/version
+- comparison baseline
+
+Visual evidence cannot substitute for authoritative structured state when the question depends on hidden/nonvisual properties.
+
+## Attack 80 — Correlation is not root cause
+
+### Problem
+
+RELAY will correlate changes, logs, metrics, entities, and failures. Correlation can rank hypotheses but does not prove causality.
+
+### Verdict
+
+MODIFY ROOT-CAUSE LANGUAGE.
+
+### Required changes
+
+Root-cause output should distinguish:
+
+- observed symptom
+- correlated change
+- inferred hypothesis
+- tested causal hypothesis
+- verified cause
+
+Where practical, high-confidence cause claims should be confirmed through reproduction, controlled change, dependency proof, or authoritative state.
+
+## Attack 81 — Metrics can be gamed by RELAY itself
+
+### Evidence
+
+Goodhart-style failures are well documented: optimizing a measure can decouple the metric from the goal it originally represented.
+
+### Verdict
+
+MODIFY PRODUCT-METRIC GOVERNANCE.
+
+### Required changes
+
+Do not optimize one RELAY metric in isolation.
+
+Examples:
+
+- fewer AI calls can increase wrong decisions
+- fewer tokens can remove essential evidence
+- fewer alerts can hide failures
+- higher cache hit rate can serve stale data
+
+Product quality needs metric portfolios plus correctness/safety guardrails.
+
+## Attack 82 — Telemetry identifiers and metadata are untrusted inputs
+
+### Evidence
+
+The W3C Trace Context security considerations warn that tracing metadata can be manipulated to cause monitoring denial, trace-ID collisions, and increased tracing cost if systems trust incoming context blindly.
+
+### Verdict
+
+EXTEND UNTRUSTED-INPUT BOUNDARY TO OBSERVABILITY.
+
+### Required changes
+
+- external trace IDs/correlation metadata are not trusted as authority
+- normalize/validate telemetry identifiers
+- apply resource limits to tracing/diagnostic requests
+- preserve source/trust metadata
+- do not allow external telemetry metadata to force unlimited capture
+- suspicious observability data remains inspectable without changing RELAY policy
+
+## Phase 0 observability/truth closure requirements
+
+Phase 0 now also requires:
+
+47. evidence/results carry source, freshness, revision, and quality/completeness metadata where relevant
+48. missing/sampled telemetry is not treated as negative proof
+49. observability overhead and capture budgets are benchmarked
+50. event ordering/causality does not rely on wall-clock timestamps alone
+51. detector evaluation includes operational alert burden and calibration
+52. observability-pipeline health affects downstream confidence
+53. root-cause language distinguishes correlation/inference from verified cause
+54. visual evidence is revision/session aware
+55. product metrics use multi-metric guardrails rather than one optimization target
+56. telemetry/correlation metadata is treated as untrusted input

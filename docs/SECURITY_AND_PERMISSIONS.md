@@ -407,3 +407,84 @@ Before public third-party distribution is considered mature:
 - compatibility mismatches disable/quarantine rather than execute optimistically
 
 Open marketplace distribution is not required for early public RELAY releases.
+
+
+## Data classification and egress control
+
+Authorization to read data is separate from authorization to transmit it.
+
+RELAY security policy should support:
+
+- project data classification
+- destination-specific egress rules
+- task-scoped disclosure limits
+- modality restrictions
+- local-only/private project modes
+- outbound lineage/audit records
+
+Untrusted project content cannot broaden its own retrieval or egress scope.
+
+## Credential handling
+
+Credentials are capabilities rather than context.
+
+Requirements:
+
+- models see connection/credential handles, not secret values
+- actual secrets are resolved only at the trusted execution boundary that needs them
+- secrets are excluded from prompts, embeddings, summaries, ordinary logs, and AI memory
+- credential use is scoped to the relevant integration/command
+- subprocesses receive the minimum secret material required
+- secret rotation/revocation does not depend on deleting model-visible text
+
+Secret detection/redaction is defense-in-depth. It cannot replace the credential boundary.
+
+## Remote processors
+
+A remote AI, embedding endpoint, remote gateway, support upload, or networked adapter is an external processing destination.
+
+Before sending project data:
+
+- project policy authorizes the destination
+- data class/modality is allowed
+- minimum necessary payload is selected
+- known provider policy metadata is consulted
+- outbound activity is attributable
+
+Unknown provider retention/training/data-use properties are not silently converted into assurances.
+
+## Derived sensitive data
+
+Sensitivity can survive transformation.
+
+Embeddings, summaries, cached responses, extracted metadata, screenshots, and other derivatives inherit source sensitivity by default.
+
+Deleting or reclassifying source data requires defined behavior for derivatives.
+
+## Multimodal evidence
+
+Visual evidence can expose protected information and can also contain instruction-like content.
+
+- screenshots remain untrusted for instruction authority
+- capture scope should be constrained to intended windows/regions
+- visual data follows project egress policy
+- text-only secret scanning cannot certify an image as safe
+- remote image analysis requires the same destination authorization as text
+
+## Local-only mode
+
+A privacy/local-only profile must be enforced below the model layer.
+
+Project content must not leave through remote models, remote embeddings, gateway payloads, analytics, support uploads, or third-party adapter networking unless an explicit exception is authorized.
+
+This behavior requires network-level/black-box testing before the product may label the mode "local-only."
+
+## Output sensitivity
+
+AI outputs may reproduce protected input.
+
+- outputs inherit relevant sensitivity/provenance
+- forwarding a result to another processor is a new egress decision
+- diagnostics do not automatically include prompts/responses
+- share/export flows re-evaluate project data policy
+- local deletion is not represented as proof of remote erasure

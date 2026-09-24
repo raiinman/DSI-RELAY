@@ -644,3 +644,131 @@ Measure:
 - dashboard clarity
 
 The public extension architecture is acceptable only if inactive/unrelated adapters have negligible effect on AI context and ordinary runtime cost.
+
+
+## Research track W — Data classification and egress policy
+
+Questions:
+
+- What is the smallest usable sensitivity taxonomy for public creators?
+- Can classification remain understandable without enterprise-policy jargon?
+- How should path rules, content rules, user labels, and project defaults interact?
+- How should derived artifacts inherit or lower sensitivity?
+- What should happen when provider retention/training/data-use information is unknown or stale?
+
+Prototype:
+
+- project sensitivity defaults
+- per-path/per-artifact overrides
+- destination/provider policy profiles
+- task-scoped egress decisions
+- outbound data lineage/ledger
+- conservative behavior for unknown provider policy
+
+Tests:
+
+- mixed public/private files
+- proprietary code with no detectable secret pattern
+- prohibited remote destination
+- provider policy becomes stale
+- cross-project data request
+- user override and policy conflict
+
+## Research track X — Credential broker and secret containment
+
+Compare secure local secret stores and broker designs suitable for public Windows use.
+
+Requirements to test:
+
+- opaque credential handles exposed to AI
+- late secret resolution
+- narrow subprocess credential injection
+- no secret values in normal logs/results
+- rotation/revocation
+- adapter-specific credential scopes
+- crash/restart behavior
+- redaction failure cases
+
+Secret scanners remain a secondary detection control, not the architecture.
+
+## Research track Y — Embedding/vector privacy
+
+Evaluate:
+
+- local versus remote embedding generation
+- retrieval quality without remote embeddings
+- vector-store isolation
+- sensitivity propagation
+- deletion/rebuild behavior
+- privacy risks from embedding inversion
+- whether quantization/noise or other defenses are appropriate for RELAY tasks
+
+Academic baselines include:
+
+- Morris et al., EMNLP 2023, Text Embeddings Reveal (Almost) As Much As Text
+- Huang et al., ACL 2024, Transferable Embedding Inversion Attack
+- Chen et al., ACL 2025, ALGEN
+
+Do not market embeddings as anonymization.
+
+## Research track Z — Multimodal privacy and prompt-injection boundary
+
+Test realistic project captures containing:
+
+- source code
+- usernames/paths
+- private chat windows
+- unreleased assets
+- credential-like text
+- benign and adversarial instruction-like visual content
+
+Compare:
+
+- full-desktop capture
+- application-window capture
+- fixed project viewport
+- local crop/redaction
+- metadata-only visual diff
+- remote multimodal analysis
+
+Measure:
+
+- debugging usefulness
+- accidental disclosure
+- prompt-injection susceptibility
+- tokens/bytes transferred
+- user comprehension of what was sent
+
+## Research track AA — Local-only/private mode verification
+
+Define a testable network contract rather than a UI label.
+
+Black-box tests should observe whether project-derived data leaves through:
+
+- model APIs
+- embedding APIs
+- remote gateway
+- analytics
+- crash/support upload
+- adapters
+- diagnostics
+
+Update checks and other product networking must be documented separately.
+
+Success criterion: RELAY can demonstrate the difference between "no project-data egress" and "fully offline" rather than conflating the two.
+
+## Research track AB — Provider-policy drift
+
+Remote service policy is external, versioned state.
+
+Research:
+
+- machine-readable provider policy metadata where available
+- manual/curated fallback
+- policy source and verification timestamps
+- account/tier/workspace differences
+- data residency attributes
+- retention/training/data-use changes over time
+- behavior when policy knowledge is incomplete
+
+RELAY should prefer an explicit "unknown" state over stale reassurance.

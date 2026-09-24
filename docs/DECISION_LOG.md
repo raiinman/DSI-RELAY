@@ -370,3 +370,58 @@ RELAY may support multiple agents, but coordination, authority, context, and cos
 Status: Approved direction
 
 Identity/client/agent revocation should re-evaluate active sessions, queued jobs, approvals, delegated work, resource claims, and relevant connection use instead of affecting only future sign-ins.
+
+
+## D-066 — Durable execution and external-effect safety are separate
+
+Status: Approved
+
+Persisting/replaying a job does not guarantee an external side effect occurred exactly once. Side-effecting commands require explicit retry/idempotency/unknown-outcome semantics.
+
+## D-067 — Unknown outcome is a first-class operation state
+
+Status: Approved
+
+If RELAY cannot tell whether an external effect completed, it records uncertainty and reconciles the external source of truth before repeating a non-idempotent action.
+
+## D-068 — Rollback, compensation, restore, and manual recovery are distinct
+
+Status: Approved
+
+RELAY must describe the actual recovery mechanism and cannot label compensation or a later inverse action as an atomic rollback.
+
+## D-069 — Backups require restore verification
+
+Status: Approved
+
+For RELAY-owned durable state, a created backup is not considered proven recovery until integrity/restore procedures have been tested.
+
+## D-070 — Durability targets vary by state class
+
+Status: Approved direction
+
+Rebuildable indexes/caches, active workflow checkpoints, transaction/approval state, configuration, and raw evidence have different loss/recovery tolerances and should not share one blanket durability policy.
+
+## D-071 — Binary rollback and data rollback are separate
+
+Status: Approved
+
+Application downgrade/update rollback does not guarantee newer-format RELAY data is backward compatible. Schema/data migration requires independent recovery planning.
+
+## D-072 — Recovery state is separate from process health
+
+Status: Approved
+
+RELAY may run while still Reconciling, Degraded, Blocked, or awaiting Manual Recovery. Healthy status requires appropriate integrity/current-state verification.
+
+## D-073 — Fault injection is required for recovery validation
+
+Status: Approved direction
+
+Crash, duplicate-delivery, network-loss, disk-write failure, migration interruption, and similar fault scenarios belong in implementation testing rather than being treated only as theoretical risks.
+
+## D-074 — Remote outages degrade capability without silently changing data policy
+
+Status: Approved
+
+Failure of a remote AI/provider/gateway should preserve local deterministic functionality where possible and must not silently switch to another processor with different privacy or data-use policy.

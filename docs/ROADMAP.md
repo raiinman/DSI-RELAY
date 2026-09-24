@@ -27,6 +27,9 @@ Deliver:
 - human-factors review for approval fatigue, alarm fatigue, automation surprise, and out-of-the-loop risk
 - evidence-retention lifecycle requirements
 - benchmark methodology requirements
+- local execution economics review
+- index continuity and storage recovery review
+- Windows per-user host review
 
 Exit criteria:
 

@@ -101,7 +101,7 @@ RELAY should monitor:
 
 ## Safe self-repair
 
-RELAY may automatically repair its own infrastructure when the action is local, deterministic, and non-destructive.
+RELAY may automatically repair its own infrastructure when the action is local, deterministic, reversible/rebuildable, and non-destructive. Self-repair is not allowed to become invisible endless retry behavior.
 
 Examples:
 
@@ -110,6 +110,15 @@ Examples:
 - rebuild a derived index
 - choose a new internal port when safe
 - refresh cached capability state
+
+Self-repair must:
+
+- record what failed and what RELAY changed
+- use retry/rate limits
+- stop and escalate after repeated failure
+- avoid modifying project content
+- avoid widening permissions to make a repair succeed
+- surface persistent degradation in plain language
 
 Never disguise a project-content modification as self-repair.
 
@@ -209,9 +218,40 @@ over:
 
 Technical detail remains available under Advanced.
 
+## Situation awareness and automation surprise
+
+Automation research shows that reliable automation can still fail at the human-automation interface. RELAY should make its operating state legible.
+
+The dashboard should always make it possible to determine:
+
+- current automation mode/policy
+- which client/agent requested active work
+- what authority that client currently has
+- which project is affected
+- what is running/waiting/blocked
+- what RELAY changed recently
+- whether a result was verified
+- how to pause/revoke/recover
+
+Background automation must not require the user to reconstruct its behavior from raw logs after something goes wrong.
+
+## Warning and alarm quality
+
+Too many low-quality warnings can train users to ignore the dashboard.
+
+Requirements:
+
+- deduplicate repeated warnings
+- show severity and confidence/source where meaningful
+- keep healthy state visually quiet
+- distinguish actionable failure from informational noise
+- track noisy/false-positive checks during testing
+- permit users to inspect why a finding exists
+- do not keep stale resolved warnings prominent
+
 ## Approvals
 
-The dashboard is a key approval surface.
+The dashboard is a key approval surface. Human-in-the-loop prompting must be designed to avoid consent fatigue.
 
 An approval should explain:
 
@@ -223,6 +263,12 @@ An approval should explain:
 - dry-run or planned changes
 - validation to be performed
 - rollback capability
+- maximum approved scope/change plan where applicable
+- whether further approval will be required if scope changes
+
+Prefer approving a bounded group of related actions over prompting for every trivial sub-step. New approval is required when the requested work materially exceeds the approved plan/risk.
+
+UX testing should measure approval frequency, repeated low-value prompts, rejection/cancel behavior, and whether users can correctly explain what they approved.
 
 ## Automation levels
 
@@ -236,6 +282,8 @@ Possible user-facing profiles:
 Exact semantics must be specified before implementation.
 
 Default public behavior should favor understandable automation over silent mutation.
+
+Automation profiles must define concrete permission/risk semantics; names such as Safe or Hands-Off are not sufficient by themselves.
 
 ## Background/queued work
 

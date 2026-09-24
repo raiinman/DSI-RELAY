@@ -2,13 +2,15 @@
 
 ## Decision
 
-CLI/headless execution is the preferred local integration path.
+Structured headless execution is the stable local machine contract, and the CLI is its canonical human/script surface.
 
-Compact skills teach AI clients how to use that interface.
+Compact skills + CLI are the leading initial strategy for local AI clients, but recent tool-interface research means this must be benchmarked rather than treated as universally superior.
 
-MCP remains a thin compatibility or transport option when the client cannot use the CLI directly.
+MCP remains an adapter/transport option. A thin dynamically discovered MCP surface may be competitive with or better than CLI+skill for some clients.
 
 ## Why CLI-first
+
+These are reasons to keep CLI/headless as a stable interface, not proof that every AI client should use CLI as its best tool-selection surface.
 
 CLI gives RELAY:
 
@@ -210,13 +212,26 @@ The remote path should preserve the same command semantics as local CLI.
 
 ## MCP posture
 
-If MCP is used, prefer a very small surface such as:
+If MCP is used, prefer a small or dynamically discovered surface. Avoid preloading large catalogs when the client can retrieve the relevant command/tool contract on demand.
+
+Candidate pattern:
 
 - capability/help discovery
 - execute structured RELAY command
 - retrieve result/detail
 
 Exact count and schema must be benchmarked. Do not expose one MCP tool for every underlying editor operation unless evidence shows a clear benefit.
+
+Required comparison before setting a client default:
+
+- task success
+- tool-selection accuracy
+- total schema/context tokens
+- calls/steps
+- latency
+- recovery after errors
+- maintenance/versioning complexity
+- compatibility with small/free model classes
 
 ## Versioning
 

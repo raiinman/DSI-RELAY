@@ -2,9 +2,9 @@
 
 The roadmap is ordered to prove cost and architecture fundamentals before building a large integration surface.
 
-## Phase 0 — Documentation baseline
+## Phase 0 — Documentation baseline and adversarial evidence review
 
-Status: Complete (initial planning baseline)
+Status: Reopened — adversarial evidence review in progress
 
 Deliver:
 
@@ -20,14 +20,32 @@ Deliver:
 - security model
 - research plan
 - decision log
+- adversarial architecture review
+- evidence register covering current, historical, government, academic, and first-party platform sources
+- revalidation/reclassification of affected decisions
+- prompt-injection and agent-identity security requirements
+- human-factors review for approval fatigue, alarm fatigue, automation surprise, and out-of-the-loop risk
+- evidence-retention lifecycle requirements
+- benchmark methodology requirements
 
 Exit criteria:
 
 - no major approved concept exists only in chat
 - open decisions are explicitly marked
 - implementation phases have acceptance criteria
+- PHASE0_ADVERSARIAL_REVIEW.md findings are reflected in owning documents
+- affected DECISION_LOG.md entries are reclassified where evidence weakens an assumption
+- security model treats project/tool content as untrusted and defines agent/client identity boundaries
+- Context Compiler requirements cover provenance, intent, freshness, conflicts, exact fields, and memory quality
+- automation/UX requirements address consent fatigue, warning quality, and operator situation awareness
+- evidence retention has explicit lifecycle/quota/privacy requirements
+- UEFN design is native-tool-first and version/capability-gated
+- RELAY benchmarks define measurement targets, baselines, protocol details, uncertainty, and reproducibility requirements
+- Phase 1 does not lock a stack before these requirements are testable
 
 ## Phase 1 — Technical spike and stack selection
+
+Gate: Phase 0 must be closed again before stack choices become durable architecture decisions.
 
 Goal: choose the minimum durable stack based on prototypes, not preference.
 

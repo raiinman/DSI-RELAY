@@ -542,3 +542,15 @@ Recovery automation must not widen authority.
 - queued work is revalidated after policy or identity changes
 
 Recovery history remains attributable to the original logical job and actor chain.
+
+
+## Observability input trust
+
+Logs, traces, correlation identifiers, profiler data, screenshots, and telemetry metadata are untrusted inputs unless the source/transport contract provides stronger assurance.
+
+- external trace/correlation IDs do not grant identity or authority
+- telemetry metadata cannot expand capture/resource limits
+- suspicious signal data remains inspectable without changing policy
+- result confidence reflects missing/degraded collection where relevant
+
+Observability endpoints and collectors should apply resource limits so diagnostic requests cannot create unbounded CPU, memory, disk, network, or vendor cost.

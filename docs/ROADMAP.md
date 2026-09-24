@@ -45,6 +45,9 @@ Exit criteria:
 - UEFN design is native-tool-first and version/capability-gated
 - RELAY benchmarks define measurement targets, baselines, protocol details, uncertainty, and reproducibility requirements
 - Phase 1 does not lock a stack before these requirements are testable
+- file-change tracking has a documented reconciliation path
+- local model execution is benchmarked rather than assumed cheaper
+- the Windows background host model is compatible with interactive tool integrations
 
 ## Phase 1 — Technical spike and stack selection
 

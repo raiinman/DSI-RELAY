@@ -52,15 +52,15 @@ If software can measure, parse, validate, index, diff, filter, deduplicate, summ
 
 ## D-009 — Compact skills are preferred for local AI
 
-Status: Approved
+Status: Approved direction; client default requires benchmark evidence
 
-Local AI clients should use small skills and shell/CLI wrappers rather than a large always-loaded MCP tool catalog.
+Small skills and shell/CLI wrappers remain the leading local-AI design because they can avoid large always-loaded tool catalogs. However, recent tool-interface research shows that compact dynamically discovered MCP/tool surfaces can also be efficient. RELAY must benchmark CLI+skill against thin/dynamic MCP for each supported client class before declaring the default.
 
 ## D-010 — MCP is a thin compatibility layer
 
 Status: Approved
 
-MCP remains supported where useful, especially for clients that require it, but it is not the foundation of RELAY.
+MCP remains an adapter rather than RELAY's business-logic foundation. Thin capability discovery/execution/result patterns are preferred over a huge static catalog, but the exact MCP surface must be benchmarked and may vary by client.
 
 ## D-011 — Cloud-only clients use a thin remote path
 
@@ -70,15 +70,15 @@ Normal cloud ChatGPT cannot be assumed to execute local shell commands. A remote
 
 ## D-012 — Full output stays in RELAY
 
-Status: Approved
+Status: Approved with lifecycle requirement
 
-Raw logs, large result sets, screenshots, telemetry, and historical evidence stay in persistent RELAY storage by default. AI receives compact result envelopes and fetches detail progressively.
+Raw logs, large result sets, screenshots, telemetry, and historical evidence stay in RELAY storage rather than being dumped into AI context by default. Evidence is subject to explicit retention classes, quotas, privacy/secret handling, deduplication, pinning, export, and deletion policy; "recoverable" does not mean "retain forever."
 
 ## D-013 — Context Compiler
 
-Status: Approved direction
+Status: Approved direction with adversarial constraints
 
-RELAY will compile task-specific context from structured state, history, evidence, summaries, current goal, client capability, and a context/token budget. Context eviction is not data deletion.
+RELAY will compile task-specific context from structured state, history, evidence, summaries, current goal, client capability, and a context/token budget. Retrieval must consider provenance, contextual intent, freshness/version, trust level, conflicts, and memory quality—not semantic similarity alone. Context eviction is not data deletion.
 
 ## D-014 — Structured exact data is protected from lossy summarization
 
@@ -100,9 +100,9 @@ RELAY-controlled writes should record before/after state, verify actual post-wri
 
 ## D-017 — Automation with explicit boundaries
 
-Status: Approved
+Status: Approved with human-factors constraints
 
-Observation, analysis, validation, indexing, safe internal repair, and reconnection may be automatic. Destructive operations, publishing, credential changes, and spending require explicit approval. Project-content write policy must be configurable.
+Observation, analysis, validation, indexing, narrowly scoped internal repair, and reconnection may be automatic. Destructive operations, publishing, credential changes, and spending require explicit approval. Project-content write policy must be configurable. Approval design must avoid consent fatigue through risk-adaptive batching/flight plans, and repeated self-repair failures must escalate rather than continue silently.
 
 ## D-018 — UEFN/Fortnite is the first integration
 
@@ -114,7 +114,7 @@ UEFN/Fortnite is the first production target. Blender and Krita are companion as
 
 Status: Approved direction
 
-The first integration should include structured runtime telemetry, probes, gameplay assertions, visual/debug overlays where supported, repeatable captures, and state verification rather than relying only on editor automation.
+The first integration should include structured runtime telemetry, probes, gameplay assertions, visual/debug overlays where supported, repeatable captures, and state verification rather than relying only on editor automation. RELAY should prefer supported engine/runtime instrumentation and normalize its output rather than creating unnecessary parallel mechanisms.
 
 ## D-020 — Usage observability is a product feature
 
@@ -127,3 +127,52 @@ Jobs and aggregate views should measure model usage when available, remote calls
 Status: Approved
 
 AGENTS.md hierarchy is binding. Durable boundaries require appropriate DOX ownership and index maintenance.
+
+
+## D-022 — Project and tool content is untrusted data
+
+Status: Approved
+
+Files, documentation, logs, repository text, web-derived material, assets, telemetry, and tool output may contain hostile or accidental instructions. RELAY must preserve an instruction/data boundary, attach provenance/trust metadata, and constrain actions through structured commands and permissions. Retrieved project content must never automatically become higher-authority instructions.
+
+## D-023 — Agents and clients require attributable scoped identity
+
+Status: Approved direction
+
+Where integrations permit it, RELAY should identify the requesting client/agent separately from the human user, use scoped/delegated and revocable authority, avoid shared long-lived credentials, and preserve requester/delegator identity in audit records. Local workers should run with the minimum practical authority and sandboxing.
+
+## D-024 — Evidence has a lifecycle
+
+Status: Approved
+
+Persistent evidence must have retention classes, project/storage quotas, deduplication/content identity, sensitive-data rules, pin/keep behavior, export/delete semantics, and migration behavior. Context removal remains separate from evidence deletion, but unlimited retention is not a product requirement.
+
+## D-025 — Native-tool-first integration
+
+Status: Approved
+
+When a supported engine/tool already has an authoritative validator, profiler, session inspector, transaction system, or measurement source, RELAY should integrate and normalize it before building a competing implementation. RELAY-specific checks should focus on cross-tool correlation, project history, context, automation, and gaps in native capabilities.
+
+## D-026 — Human situation awareness is a product requirement
+
+Status: Approved direction
+
+RELAY must show current automation mode, authority, active work, significant changes, and recovery options clearly enough to reduce automation surprise and out-of-the-loop operation. Warning/approval systems must be designed to limit false-alarm and consent fatigue.
+
+## D-027 — Product defaults require reproducible benchmark evidence
+
+Status: Approved
+
+Benchmarks used to choose client interfaces, context strategies, models, or cost-saving defaults must define the measurement objective, baseline, versions, workload, protocol/settings, repetitions where relevant, cost controls, variation/uncertainty, and limitations. A single successful demo is not sufficient evidence.
+
+## D-028 — UEFN MCP is a volatile adapter surface
+
+Status: Approved
+
+Unreal MCP/UEFN MCP must be capability- and version-gated behind the UEFN adapter. RELAY Core may not depend on its current schemas or assume the feature is complete/stable.
+
+## D-029 — Phase 0 remains open during decision revalidation
+
+Status: Approved
+
+Implementation research may continue, but Phase 1 stack choices must not become durable architecture decisions until the Phase 0 adversarial-review exit criteria are satisfied.

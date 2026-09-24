@@ -488,3 +488,18 @@ AI outputs may reproduce protected input.
 - diagnostics do not automatically include prompts/responses
 - share/export flows re-evaluate project data policy
 - local deletion is not represented as proof of remote erasure
+
+
+## Remote client project access
+
+Remote AI clients should not receive unrestricted project filesystem access through RELAY.
+
+Preferred path:
+
+- client requests project facts/results/operations
+- RELAY retrieves locally
+- classification and task scope are applied
+- Egress Gate approves the minimum necessary payload
+- client receives the approved result/context only
+
+Raw-file retrieval, if supported at all, remains project-policy controlled and is not an implicit capability of connecting an AI client.

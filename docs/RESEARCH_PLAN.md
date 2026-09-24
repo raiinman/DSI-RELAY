@@ -802,3 +802,85 @@ Test multiple humans, outside collaborators, one user in multiple workspaces, pe
 Measure policy correctness, administrative complexity, user comprehension, over-granting, and audit reconstruction.
 
 Research baselines include NIST RBAC/ABAC work, NIST zero-trust guidance, RFC 8693 delegation semantics, RFC 8707 resource indicators, and RFC 9700 OAuth security BCP.
+
+
+## Research track AH — Durable jobs and side-effect semantics
+
+Compare implementation strategies for long-running RELAY jobs:
+
+- explicit database state machine
+- replay-oriented durable workflow engine
+- queue plus checkpoint table
+- hybrid orchestration
+
+Test command classes:
+
+- pure deterministic stage
+- read-only external call
+- idempotent write
+- idempotent-key write
+- non-idempotent write with reconciliation
+- operation with no reliable external status query
+
+Measure crash recovery, duplicate effects, recovery latency, operational complexity, and cost.
+
+Key evidence includes AWS durable-execution/idempotency guidance, Amazon retry patterns, Fractal (NSDI 2026), and durable-workflow systems research.
+
+## Research track AI — Crash consistency and fault injection
+
+Build a repeatable failure harness.
+
+Inject process termination, machine/reboot simulation where safe, write failures, disk-full conditions, delayed acknowledgements, duplicate queue delivery, adapter crashes, and database corruption fixtures at controlled boundaries.
+
+Validate:
+
+- job/checkpoint recovery
+- database integrity
+- unknown-outcome detection
+- index rebuild/reconciliation
+- idempotency behavior
+- human-readable recovery state
+
+CrashMonkey/bounded black-box crash testing is a methodological inspiration: recovery claims must survive deliberate failure, not only normal execution.
+
+## Research track AJ — Backup, restore, and migration recovery
+
+Compare storage candidates and migration frameworks on:
+
+- backup while active
+- backup integrity verification
+- full restore
+- partial/derived-state rebuild
+- schema migration check/preflight
+- crash during migration
+- forward recovery
+- application downgrade with newer data
+- adapter/plugin compatibility after rollback
+
+Define state-class-specific RPO/RTO targets rather than one global target.
+
+Government baselines include NIST SP 800-34 Rev. 1, SP 800-184, CSF 2.0 Recover, and CISA backup/restore guidance.
+
+## Research track AK — Outage and degraded-mode behavior
+
+Simulate:
+
+- remote AI outage
+- gateway outage
+- DNS/network loss
+- provider throttling
+- local adapter unavailable
+- UEFN/Blender/Krita unavailable
+- long queue backlog
+
+Evaluate:
+
+- bounded retries/backoff
+- local deterministic functionality
+- queue growth
+- recovery time
+- user interruption/noise
+- provider/data-policy preservation
+- cancellation and expiration of stale queued work
+
+Do not silently fail over to a different model/provider when doing so changes privacy, cost, or capability policy.

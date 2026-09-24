@@ -356,3 +356,14 @@ Requirements:
 - encrypted backup may be required for sensitive RELAY-owned state
 - support/diagnostic recovery artifacts remain previewable and are not uploaded automatically
 - restoring older state must not silently revive revoked credentials, stale provider policy, or outdated access grants without revalidation
+
+
+## Telemetry data sensitivity
+
+Observability data can reveal sensitive project information.
+
+Logs, traces, metrics labels, screenshots, profiler output, entity identifiers, project paths, and correlation metadata follow normal project classification/egress policy.
+
+Sampling reduces volume, not automatically sensitivity.
+
+Remote observability backends are external processing destinations and must be included in provider/data-egress policy where project-derived telemetry is sent.

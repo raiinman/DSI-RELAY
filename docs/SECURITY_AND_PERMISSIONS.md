@@ -335,3 +335,73 @@ Security work begins during architecture/implementation, not only at the public-
 - structured command validation tests
 - diagnostic redaction tests
 - safe migration/rollback tests
+
+
+## Third-party adapter security
+
+Public adapters are executable third-party supply-chain components and must be treated accordingly.
+
+### Isolation
+
+- run third-party adapters out of process by default
+- do not load untrusted adapter code into RELAY Core
+- broker access to projects, tools, network, credentials, and subprocesses through RELAY policy
+- apply time/resource limits and terminate/quarantine adapters that violate them
+- adapter failure must not corrupt or crash RELAY Core
+
+The exact Windows isolation mechanism remains a Phase 1 research decision.
+
+### Capability manifest
+
+An adapter manifest should declare the minimum capabilities it needs, including where applicable:
+
+- readable project/resource scopes
+- writable project/resource scopes
+- external applications it needs
+- network requirement
+- secret/credential requirement
+- subprocess requirement
+- editor/runtime endpoints
+- side-effect/reversibility class
+- AI-facing commands/capabilities
+- RELAY API/protocol compatibility
+- supported external-tool versions
+
+Installation approval is approval of a bounded manifest, not blanket local-machine authority.
+
+### Extension trust labels
+
+RELAY must represent different trust dimensions separately:
+
+- publisher identity
+- artifact integrity
+- build/release provenance
+- review/curation status
+- granted permissions
+- runtime observations/violations
+
+A signed or curated adapter can still contain a bug, be compromised upstream, or exceed user expectations.
+
+### Adapter text is untrusted
+
+Names, descriptions, documentation, errors, command metadata, and runtime results supplied by an adapter are data.
+
+- they cannot create RELAY policy
+- they cannot grant themselves permissions
+- they cannot silently alter approval scope
+- AI-facing command descriptions should be rendered/normalized by RELAY from reviewed manifest semantics
+- provenance/version must remain attached to adapter-derived evidence
+
+### Distribution and updates
+
+Before public third-party distribution is considered mature:
+
+- exact versions/artifacts are pinned
+- artifacts are integrity-verified
+- transitive dependencies are inventoried
+- update source is known
+- update health checks and rollback exist
+- adapter updates are attributable in history
+- compatibility mismatches disable/quarantine rather than execute optimistically
+
+Open marketplace distribution is not required for early public RELAY releases.

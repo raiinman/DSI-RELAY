@@ -476,3 +476,35 @@ For an uncertain action, plain language should explain:
 Backup UI should distinguish "backup created" from "restore tested."
 
 Migration/update UX should show when rollback of the application would not automatically roll back data.
+
+
+## Evidence quality UX
+
+The dashboard should not make every finding look equally certain.
+
+Plain-language status should distinguish concepts such as:
+
+- Verified — checked against authoritative/current state
+- Supported — evidence supports the finding
+- Inferred — likely explanation, not directly proven
+- Sampled — based on partial capture
+- Stale — based on older project/session state
+- Incomplete — collection gaps exist
+- Conflicting — relevant evidence disagrees
+- Unknown — RELAY cannot support a conclusion
+
+Exact terms require UX testing.
+
+A quiet observability panel should not automatically show "healthy" if the collector, probe, or integration has stopped reporting.
+
+### Noisy finding controls
+
+For repeated automated findings show:
+
+- count/rate over time
+- deduplicated incident grouping
+- source/check version
+- confidence where applicable
+- user disposition history where useful
+
+RELAYS should surface a noisy detector as a detector-quality issue rather than forcing the user to dismiss the same warning forever.

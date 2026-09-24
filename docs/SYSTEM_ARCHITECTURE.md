@@ -63,9 +63,9 @@ Owns:
 - usage accounting
 - adapter contracts
 
-### relayd
+### relayd / local host
 
-Persistent local service.
+Persistent local background host. The name describes a logical component, not a fixed Windows service model. Phase 1 must compare per-user hosting options because the first editor integrations run in the signed-in user's session.
 
 Responsibilities:
 

@@ -1105,3 +1105,66 @@ Phase 0 now also requires:
 27. local-only/private mode has testable network-egress semantics
 28. provider data-use/retention metadata is treated as versioned external policy, not assumption
 29. outbound processing and sensitive result lineage are auditable
+
+
+## Attack 45 — Automatic remote context collection can defeat RELAY's privacy model
+
+### Evidence
+
+Work on code assistants notes that cloud-based assistants may receive proprietary code as context, and recent research on AI coding assistants shows automatically gathered context can itself become an attack or leakage surface.
+
+### Verdict
+
+CONSTRAIN REMOTE CLIENT DATA ACCESS.
+
+### Required changes
+
+- connecting a remote AI client does not grant it raw project filesystem access
+- RELAY remains the retrieval/egress mediator for project data
+- context selection is local and policy-aware
+- raw files are sent only when the task actually requires them and policy permits it
+- provider/client convenience features that bypass RELAY's data boundary must be clearly out of scope or explicitly disabled where controllable
+
+## Attack 46 — Metadata can be sensitive too
+
+### Evidence
+
+ACL 2025 research on knowledge-file leakage identified multiple leakage vectors involving not only file contents but metadata such as titles, types, and sizes, along with retrieval and execution pathways.
+
+### Verdict
+
+EXTEND DATA CLASSIFICATION BEYOND FILE CONTENT.
+
+### Required changes
+
+Potentially sensitive metadata includes:
+
+- filenames and paths
+- project/repository names
+- asset names
+- document titles/types/sizes
+- account/user identifiers
+- branch names
+- integration names
+- timestamps
+- hashes where they reveal known content relationships
+
+Egress policy applies to metadata when the project's sensitivity requires it.
+
+## Attack 47 — Secret/privacy scanners cannot certify a payload as safe
+
+### Problem
+
+Pattern scanners can find known credential formats and privacy detectors can identify many structured entities, but proprietary code, unreleased designs, project strategy, and unknown secret formats may not match a detector.
+
+### Verdict
+
+KEEP SCANNERS AS DEFENSE-IN-DEPTH ONLY.
+
+### Required changes
+
+- allow explicit project/path/artifact sensitivity labels
+- project defaults can be stricter than scanner output
+- a "no findings" scan result must not be displayed as "safe to upload"
+- deterministic redaction is useful but does not declassify a payload by itself
+- user/org policy and provenance remain authoritative inputs to data classification

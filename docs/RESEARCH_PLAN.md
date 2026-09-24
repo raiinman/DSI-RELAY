@@ -1109,3 +1109,112 @@ Compare onboarding/navigation with:
 Measure comprehension, navigation time, perceived complexity, and accidental configuration.
 
 The goal is future capability without present cognitive tax.
+
+
+## Research track AY — Platform terms and automation compatibility
+
+Maintain a versioned review matrix for each first-party integration.
+
+For UEFN/Fortnite evaluate:
+
+- Epic Games Terms of Service
+- UEFN Supplemental Terms
+- Fortnite Developer Rules
+- current UEFN/Unreal MCP documentation
+- branding/Fan Content Policy where public marketing references Epic products
+
+Record:
+
+- document/effective version
+- RELAY feature that depends on it
+- supported/documented automation surface
+- prohibited/ambiguous behavior
+- last review date
+- follow-up/legal clarification required
+
+The goal is not to automate legal interpretation; it is to keep architecture assumptions from silently becoming stale.
+
+## Research track AZ — Companion license boundaries
+
+Prototype the actual integration shapes before choosing public licenses.
+
+Compare:
+
+- pure external CLI/process integration
+- RELAY worker plus GPL Blender add-on
+- RELAY worker plus GPL Krita plugin
+- UEFN MCP client with no in-engine RELAY code
+- optional UEFN/Unreal toolset/plugin companion
+
+For each, inventory:
+
+- code shared across boundary
+- host API linkage
+- distribution artifact
+- required license
+- source/notice obligations
+- trademark/distribution restrictions
+- security/update model
+
+Qualified legal review is required for ambiguous derivative-work/license-compatibility conclusions.
+
+## Research track BA — Asset provenance and publishing rights metadata
+
+Test the asset registry against mixed projects containing:
+
+- original user assets
+- Epic/UEFN assets
+- third-party marketplace/Fab assets
+- purchased commercial assets
+- Creative Commons content
+- fonts
+- music/audio
+- AI-generated/AI-assisted assets
+
+Evaluate whether RELAY can reliably surface missing provenance, attribution, redistribution limits, and known policy conflicts without claiming ownership/legal clearance.
+
+## Research track BB — AI output rights and authorship claims
+
+Track current U.S. Copyright Office guidance and relevant provider contractual terms.
+
+Test UI language for:
+
+- fully AI-generated output
+- human-authored source transformed with AI
+- AI-generated material heavily edited by a human
+- human selection/arrangement of generated pieces
+- provider grants commercial use but copyrightability is uncertain
+
+Success means RELAY communicates provenance/contract facts without making unsupported copyright conclusions.
+
+## Research track BC — Public artifact license and notice inventory
+
+Prototype a reproducible release report containing:
+
+- RELAY-owned components
+- third-party libraries
+- first-party companion components
+- exact versions
+- licenses
+- copyright/attribution notices
+- source/source-offer obligations
+- generated SBOM identifiers
+- unresolved/unknown license blockers
+
+Compare automated scanners against manual review on representative releases.
+
+Security vulnerability inventory and legal license inventory may share component data but remain separate review outputs.
+
+## Research track BD — Privacy/marketing claims verification
+
+Create a claims-to-tests matrix.
+
+Examples:
+
+- "local-only" -> network-egress black-box test
+- "credentials never sent to AI" -> prompt/log/egress tests
+- "diagnostics are opt-in" -> upload behavior tests
+- "telemetry contains no project content" -> fixture inspection
+- "delete local history" -> storage lifecycle test
+
+User-facing claims ship only when the corresponding behavior has a maintained test/verification procedure.

@@ -246,3 +246,16 @@ Third-party command descriptions, documentation, errors, results, and metadata c
 Status: Approved direction
 
 Adapter artifacts should be exact-version pinned and integrity-identified, with dependency/component inventory, compatibility declarations, update history, and rollback/recovery support. Incompatible adapters fail closed or are quarantined rather than loaded optimistically.
+
+
+## D-046 — Out-of-process and sandboxed are different states
+
+Status: Approved
+
+Third-party adapters run out of process by default for fault isolation. RELAY must not describe that as a security sandbox unless OS-enforced or equivalent resource restrictions are actually active.
+
+## D-047 — Adapter trust includes companion components
+
+Status: Approved direction
+
+If an integration installs code inside a target application or ships helper/runtime components, those artifacts are part of the adapter's supply chain and require their own version, integrity, provenance, and compatibility records where practical.

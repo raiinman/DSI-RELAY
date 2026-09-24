@@ -604,3 +604,37 @@ Configuration must be inspectable from CLI/dashboard without requiring users to 
 RELAY Core should expose a normalized diagnostic/health command set that the CLI and dashboard can render consistently.
 
 A future relay doctor operation should aggregate subsystem health without implementing separate diagnostic logic in the UI.
+
+
+## License and terms compatibility metadata
+
+Material integration contracts should be treated as versioned external state.
+
+An integration/companion record may include:
+
+- platform/license/policy source
+- effective/update date when known
+- RELAY version last reviewed
+- companion license
+- distribution channel constraints
+- required notices/source obligations
+- review status
+- terms/license compatibility status
+
+A material policy change can move an adapter or publishing capability to Needs Review without disabling unrelated local RELAY functionality.
+
+## Asset rights metadata
+
+The asset registry should support rights/provenance fields independently of technical validation.
+
+Potential fields:
+
+- source/creator
+- license/rights basis
+- platform-owned/third-party status
+- attribution requirements
+- redistribution/export limits
+- AI-generated/assisted provenance
+- review status
+
+Technical validity and rights status are separate axes.

@@ -516,3 +516,55 @@ Not all state requires equal durability.
 - context caches: disposable/rebuildable
 
 The chosen storage layer must support these distinctions.
+
+
+## Evidence and truth model
+
+RELAY results should preserve the distinction between:
+
+- authoritative source state
+- direct observations
+- derived measurements
+- corroborated findings
+- inferred hypotheses
+- unknown/insufficient evidence
+
+Important evidence records should carry source/version, project/session/revision, freshness, sampling/completeness, units, provenance, and derivation information where relevant.
+
+A downstream result cannot silently gain stronger certainty than its weakest material evidence source supports.
+
+## Observability pipeline health
+
+The observability path is itself a monitored subsystem.
+
+Track where available:
+
+- last successful collection
+- dropped/rejected events
+- parser failures
+- queue/backlog
+- sampling mode
+- adapter/collector connectivity
+- storage/quota pressure
+- source/version changes
+- clock/time quality when distributed ordering matters
+
+Degraded collection state propagates to result/evidence quality.
+
+## Event order and causality
+
+Timestamp order is not sufficient proof of causality across processes/tools.
+
+Prefer explicit causal relationships such as trace/link IDs, parent/child edges, sequence numbers, job/transaction relationships, engine/session order, and validated dependency links.
+
+Root-cause findings should retain a status such as correlated, hypothesized, tested, or verified.
+
+## Observability modes
+
+Integrations may expose multiple capture modes:
+
+- baseline/low-overhead
+- targeted diagnostic
+- temporary high-detail
+
+The command/capability model should expose the expected observability cost/coverage trade-off where practical.

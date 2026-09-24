@@ -180,6 +180,50 @@ Confidence labels:
 - Finding: emphasizes governance, data, performance, and monitoring across the AI lifecycle and notes that system inputs/operations may not be visible.
 - RELAY impact: continuous monitoring, traceability, and auditable operating state support the dashboard/transaction design.
 
+### NSA/CISA/FBI and international partners — Deploying AI Systems Securely
+
+- Date: 2024-04-15
+- Type: U.S. government/joint cybersecurity guidance
+- Confidence: High
+- URL: https://www.nsa.gov/Press-Room/Press-Releases-Statements/Press-Release-View/Article/3741371/nsa-publishes-guidance-for-strengthening-ai-system-security/
+- Finding: secure AI deployment requires lifecycle security and resilience rather than only model behavior controls.
+- RELAY impact: secure deployment, update, incident response, and recovery are architecture work, not Phase-11 decoration.
+
+### NSA/CISA/FBI and partners — AI Data Security
+
+- Date: 2025-05-22
+- Type: U.S. government/joint cybersecurity guidance
+- Confidence: High
+- URL: https://www.nsa.gov/Press-Room/Press-Releases-Statements/Press-Release-View/Article/4192332/nsas-aisc-releases-joint-guidance-on-the-risks-and-best-practices-in-ai-data-se/
+- Finding: emphasizes data provenance, authenticating trusted revisions, supply-chain risk, maliciously modified data, and data drift.
+- RELAY impact: strengthens provenance/trust/freshness requirements for project memory and context.
+
+### CISA/NSA/NCSC and partners — Guidelines for Secure AI System Development
+
+- Date: 2023-11
+- Type: joint government cybersecurity guidance
+- Confidence: High
+- URL: https://www.cisa.gov/news-events/alerts/2023/11/26/cisa-and-uk-ncsc-unveil-joint-guidelines-secure-ai-system-development
+- Finding: applies Secure by Design across design, development, deployment, and operation.
+- RELAY impact: security requirements move earlier in the roadmap; they cannot wait for public-beta hardening.
+
+### U.S. DoD CDAO — Responsible AI Toolkit
+
+- Date: 2023-11-14
+- Type: U.S. Department of Defense implementation toolkit
+- Confidence: High for process/governance framing
+- URL: https://www.defense.gov/News/Releases/Release/Article/3588743/cdao-releases-responsible-ai-rai-toolkit-for-ensuring-alignment-with-rai-best-p/
+- Finding: operationalizes responsible-AI principles with technical/process tools and draws on NIST/IEEE work.
+- RELAY impact: reinforces lifecycle evaluation, traceability, and documented operating controls.
+
+### DARPA — Air Combat Evolution / human trust in autonomy
+
+- Type: U.S. government R&D program
+- Confidence: High for research objective, not a RELAY-specific result
+- URL: https://www.darpa.mil/research/programs/air-combat-evolution
+- Finding: explicitly treats measurement/calibration of human trust as a research problem in human-machine teaming.
+- RELAY impact: dashboard trust/automation behavior should be measured rather than assumed.
+
 ## Government and historical human factors
 
 ### NASA — Human factors of the high technology cockpit

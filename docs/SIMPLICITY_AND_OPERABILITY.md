@@ -364,3 +364,19 @@ Complexity is debt unless actively managed.
 - extension-support tiers
 - generated-documentation architecture
 - product telemetry needed to measure operability without collecting project data
+
+
+## Legal/licensing UX
+
+Legal metadata should protect users without turning normal project work into license-law homework.
+
+Default behavior:
+
+- automatically inventory known component licenses
+- surface only actionable conflicts/missing provenance in normal views
+- keep full notices/license details in Detailed/Advanced views
+- explain rights metadata in plain language
+- avoid "legally compliant" badges
+- use Review Required when the issue cannot be determined mechanically
+
+The golden path should not require users to answer legal questions about RELAY's own bundled dependencies; those are the distributor's responsibility.

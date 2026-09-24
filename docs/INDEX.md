@@ -13,6 +13,7 @@
 - CLI_AND_SKILLS.md — canonical headless interface, structured execution, compact skills, and thin MCP compatibility.
 - AUTOMATION_AND_UX.md — installation, discovery, onboarding, dashboard, health, recovery, tests, and support flows.
 - SECURITY_AND_PERMISSIONS.md — approval boundaries, audit trail, rollback, secrets, and remote-access rules.
+- DATA_BOUNDARY_AND_PRIVACY.md — project data classification, credentials, provider egress, embeddings, screenshots, and privacy.
 - UEFN_V0.1.md — initial UEFN/Fortnite integration and runtime instrumentation plan.
 
 ## Research and governance

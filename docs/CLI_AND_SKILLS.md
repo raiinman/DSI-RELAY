@@ -31,7 +31,7 @@ The CLI is an interface to RELAY Core. It does not own business logic.
 Planned conceptual split:
 
 - relay — command-line client
-- relayd — persistent local daemon hosting RELAY Core
+- relayd — persistent local host for RELAY Core
 
 A one-shot CLI command may connect to relayd or invoke a supported local path, depending on the final implementation. The caller should see one stable contract.
 

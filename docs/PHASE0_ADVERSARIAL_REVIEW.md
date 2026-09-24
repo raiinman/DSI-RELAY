@@ -1168,3 +1168,248 @@ KEEP SCANNERS AS DEFENSE-IN-DEPTH ONLY.
 - a "no findings" scan result must not be displayed as "safe to upload"
 - deterministic redaction is useful but does not declassify a payload by itself
 - user/org policy and provenance remain authoritative inputs to data classification
+
+
+## Attack 48 — "The user approved it" is not a sufficient identity model
+
+### Evidence
+
+NIST's 2026 software-agent identity work explicitly calls out identification, authorization, auditing, and non-repudiation for agents. OAuth token-exchange standards likewise distinguish delegation from impersonation and can preserve both the subject and the acting party.
+
+### Verdict
+
+MODIFY THE PRINCIPAL MODEL.
+
+### Required changes
+
+RELAY must distinguish, where relevant:
+
+- human principal
+- workspace/organization
+- team
+- client application
+- AI agent/session
+- sub-agent
+- adapter/tool identity
+- external service identity
+
+Important actions should preserve both the actor and the principal on whose behalf the actor operates. A shared generic "RELAY bot" identity is insufficient when better attribution is technically available.
+
+## Attack 49 — Simple project roles are too coarse for team use
+
+### Evidence
+
+Role-based access control has decades of established use for simplifying organizational permission management, while NIST's ABAC model evaluates subject, object, operation, and environmental attributes. NIST zero-trust guidance also emphasizes dynamic, resource-specific policy rather than broad implicit trust.
+
+### Verdict
+
+USE ROLES FOR UX, ATTRIBUTES/RESOURCES FOR ENFORCEMENT.
+
+### Required changes
+
+RELAY may expose simple role templates, but authorization must be able to consider:
+
+- workspace/team membership
+- project/resource
+- command/action
+- data sensitivity
+- client/agent identity
+- delegated task scope
+- command risk/effect metadata
+- current project state/revision
+- time/expiry or other relevant conditions
+
+A role must not become a universal "can do anything in this workspace" shortcut.
+
+## Attack 50 — Delegation and impersonation are different security events
+
+### Evidence
+
+RFC 8693 explicitly distinguishes delegation from impersonation. Delegation can preserve both the subject and the actor, which is important for accountability.
+
+### Verdict
+
+NEW DELEGATION CONTRACT.
+
+### Required changes
+
+Agent delegation should:
+
+- preserve the delegation chain
+- never silently widen scope
+- retain project/resource boundaries
+- carry expiry/budget limits where applicable
+- remain revocable
+- require explicit permission before further delegation
+- remain attributable in audit history
+
+If an external service forces impersonation semantics, RELAY should record that loss of attribution as a limitation rather than pretending delegation was preserved.
+
+## Attack 51 — Shared credentials can silently bypass team offboarding
+
+### Evidence
+
+GitHub warns that a deploy key can continue to provide repository access to anyone holding the private key even after the user who created it is removed from the organization. More generally, membership removal and credential revocation are separate events.
+
+### Verdict
+
+MODIFY CONNECTION OWNERSHIP.
+
+### Required changes
+
+Every connection should have an explicit ownership scope, such as:
+
+- personal
+- workspace/team
+- project/service
+
+Offboarding must evaluate shared connections, active sessions, queued work, delegated agents, and temporary grants instead of assuming that removing a member ends all access.
+
+## Attack 52 — Multi-project tokens need resource boundaries
+
+### Evidence
+
+RFC 8707 recommends audience-restricted access tokens and specifically discusses multi-tenant systems, noting that resource identifiers should distinguish tenants. RFC 9700 likewise recommends minimum privilege and audience restriction to reduce misuse of leaked tokens.
+
+### Verdict
+
+KEEP PROJECT ISOLATION, STRENGTHEN CREDENTIAL SCOPING.
+
+### Required changes
+
+Where external identity systems permit it, RELAY should prefer credentials/tokens that are:
+
+- scoped to the intended resource/project
+- minimally privileged
+- short-lived where practical
+- audience-restricted
+- sender-bound where practical
+- independently revocable
+
+A credential valid for many unrelated projects is a wider-risk connection and should be visibly classified as such.
+
+## Attack 53 — Approval can become stale between review and execution
+
+### Evidence
+
+MITRE's TOCTOU definition describes the general failure mode where resource state changes between a check and later use. Classic optimistic-concurrency work likewise treats validation of assumptions before commit as a core concurrency-control technique.
+
+### Verdict
+
+NEW REVISION/PRECONDITION REQUIREMENT.
+
+### Required changes
+
+Important writes and approved change plans should bind to relevant state, such as:
+
+- project/base revision
+- file/content hash
+- expected entity/field value
+- transaction revision
+- expected integration state
+
+If those assumptions no longer hold, RELAY returns a stale/conflict state and re-inspects instead of applying an old approval blindly.
+
+## Attack 54 — Collaborative agents are often out of sync
+
+### Evidence
+
+SyncMind (ICML 2025) built 24,332 out-of-sync scenarios from 21 real repositories and found substantial recovery limitations across tested agents. Collaboration, when it happened, correlated positively with recovery, but the agents also showed very low collaboration willingness.
+
+### Verdict
+
+MAKE SYNCHRONIZATION EXPLICIT.
+
+### Required changes
+
+Multi-human/agent workflows need cheap synchronization primitives:
+
+- project revision awareness
+- task/resource ownership
+- change-plan status
+- conflict detection
+- bounded claims/leases where useful
+- merge/reconcile stage
+- revalidation before write
+
+The system should not assume that every agent has current project state merely because all agents started from the same repository.
+
+## Attack 55 — More agents do not automatically mean better work
+
+### Evidence
+
+Recent multi-agent research reports both collaboration failure modes and cases where a single rogue/confused agent can degrade an entire system. Other 2026 work reports "collaboration degeneration" where one agent dominates and others become ineffective.
+
+### Verdict
+
+REJECT SWARM-BY-DEFAULT.
+
+### Required changes
+
+- multi-agent execution must be explicit and budgeted
+- every worker needs bounded task/resource scope
+- agent-to-agent chatter must be measured as a cost
+- no child agent can inherit more authority than its parent
+- critical/irreversible actions still pass the normal policy boundary
+- default workflows should prefer the smallest number of agents that measurably improves the task
+
+## Attack 56 — Local workspace membership is not enough for zero-trust team use
+
+### Evidence
+
+NIST SP 800-207 states that network location, asset ownership, or affiliation should not create implicit trust and recommends per-session, least-privilege resource access. SP 800-207A extends that model toward identity-centric application/service authorization.
+
+### Verdict
+
+MODIFY TEAM AUTHORIZATION.
+
+### Required changes
+
+Authorization should be evaluated for the requested project/resource and action rather than inferred from "user is logged in" or "agent is connected."
+
+Policy should be refreshable when:
+
+- membership changes
+- external permissions change
+- project policy changes
+- client identity changes
+- delegation expires
+- risk/context changes materially
+
+## Attack 57 — Audit logs become security data in team mode
+
+### Evidence
+
+NIST log-management guidance treats event generation, storage, access, retention, and disposal as security-management concerns.
+
+### Verdict
+
+MODIFY AUDIT DESIGN.
+
+### Required changes
+
+Important audit records should include enough attribution to reconstruct:
+
+- delegating human/principal
+- client
+- agent/session
+- project/resource
+- command
+- relevant revision/preconditions
+- approval/change-plan
+- result/verification
+- time
+
+Audit data itself requires access control, retention, and privacy rules. "Append-only" or "tamper evident" must not be claimed unless the chosen storage mechanism actually provides that property.
+
+## Phase 0 collaboration/identity closure requirements
+
+Phase 0 now also requires:
+
+30. a principal model that separates human, client, agent, adapter, workspace, and project identities
+31. role templates are backed by resource/attribute-aware policy rather than flat workspace-wide authority
+32. delegation preserves actor/delegator scope and cannot silently widen
+33. connection ownership and offboarding semantics are explicit
+34. important writes/approvals have revision or equivalent preconditions
+35. multi-agent workflows define synchronization/conflict primitives and cost budgets
+36. audit records can reconstruct actor, delegator, project/resource, approval, and verification state

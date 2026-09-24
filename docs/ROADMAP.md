@@ -99,7 +99,7 @@ Build:
 - agent/client identity attribution foundation
 - adapter broker and worker lifecycle foundation
 - adapter manifest/capability enforcement foundation
-- local daemon
+- per-user local host
 - CLI
 
 Exit criteria:

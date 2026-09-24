@@ -259,3 +259,52 @@ Third-party adapters run out of process by default for fault isolation. RELAY mu
 Status: Approved direction
 
 If an integration installs code inside a target application or ships helper/runtime components, those artifacts are part of the adapter's supply chain and require their own version, integrity, provenance, and compatibility records where practical.
+
+
+## D-048 — Remote AI is an explicit data-processing boundary
+
+Status: Approved
+
+Remote model, embedding, gateway, and support destinations are not transparent compute. Project data may leave only when destination/project policy allows it, and outbound processing should be attributable.
+
+## D-049 — Credentials never become model context
+
+Status: Approved
+
+Models receive opaque connection/credential references. Secret values are resolved only by trusted execution components that require them and are excluded from prompts, embeddings, summaries, ordinary logs, and AI memory.
+
+## D-050 — Derived artifacts inherit sensitivity
+
+Status: Approved
+
+Embeddings, summaries, screenshots, cached outputs, and other derivatives inherit relevant source sensitivity by default and retain provenance unless an explicit policy transformation changes their classification.
+
+## D-051 — Read authority and egress authority are separate
+
+Status: Approved
+
+Permission to inspect project data does not grant permission to transmit it to remote models, networked adapters, support systems, or other processors. Egress is task-, project-, and destination-scoped.
+
+## D-052 — Context policy precedes context optimization
+
+Status: Approved
+
+The Context Compiler first determines what data is eligible for the destination, then optimizes relevance and token budget inside that allowed set. Relevance cannot override privacy policy.
+
+## D-053 — Local-only/private mode requires verifiable semantics
+
+Status: Approved direction
+
+RELAY may offer project modes that prohibit remote project-data processing, but such labels require black-box/network verification and documented exceptions. Local-only project data and completely offline product operation are distinct concepts.
+
+## D-054 — Provider privacy metadata is versioned external state
+
+Status: Approved direction
+
+RELAY records what is known about a remote processor's data-use, retention, residency, and account/endpoint context together with source and verification time. Unknown or stale properties remain unknown.
+
+## D-055 — AI outputs inherit data policy
+
+Status: Approved
+
+Responses that reproduce or derive from sensitive source material remain governed by relevant project sensitivity, retention, share/export, and onward-egress policy.

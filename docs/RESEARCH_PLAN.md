@@ -403,3 +403,111 @@ A research task is complete only when it produces one of:
 - new unresolved question
 
 Research should not become a pile of links disconnected from product decisions.
+
+
+## Research track O — Local, cloud, and hybrid execution economics
+
+Question: which work is genuinely cheaper and better to keep local?
+
+Separate deterministic computation from model inference.
+
+For model inference, compare:
+
+- local-only model
+- cloud-only model
+- local-first with cloud escalation
+- task-aware hybrid routing
+
+Measure:
+
+- task success/quality
+- end-to-end latency
+- model/API cost
+- local CPU/GPU time
+- power/energy where practical
+- hardware utilization
+- context/network transfer
+- privacy exposure class
+- offline availability
+
+Do not generalize mobile/edge results directly to desktop game-development workloads.
+
+Relevant evidence includes 2025–2026 edge/cloud routing and energy studies plus DOE/LBNL data-center energy reports.
+
+## Research track P — File-change continuity and index recovery
+
+File notifications are not assumed complete.
+
+Prototype and test:
+
+- Windows directory-change notifications under bursty edits
+- overflow/error recovery
+- NTFS change-journal acceleration
+- journal discontinuity recovery
+- startup reconciliation
+- periodic reconciliation
+- rename/move/delete storms
+- large generated asset imports
+- crash between change detection and durable index commit
+
+Success requires a provable route back to correct project state after missed events.
+
+## Research track Q — Storage durability and rebuildability
+
+Compare candidate local stores for:
+
+- crash recovery
+- integrity checking
+- backup/snapshot support
+- migration safety
+- concurrent readers/writers
+- corruption detection
+- large result/evidence metadata
+- rebuild time
+- storage quotas
+- operation on local versus synced/network-backed project paths
+
+Design principle to validate: portable project configuration may live with the project while mutable operational state lives in a local RELAY data area.
+
+## Research track R — Windows local-host process model
+
+Compare:
+
+- normal per-user background process
+- Windows per-user service mechanisms
+- traditional system service plus per-user companion
+- minimal optional privileged helper patterns
+
+Evaluate:
+
+- ability to integrate with UEFN/Krita/Blender in the interactive user session
+- least privilege
+- startup/login/logout behavior
+- multi-user behavior
+- update/install needs
+- IPC complexity
+- recovery after crash/restart
+- public installer complexity
+
+Do not select a Session-0 service model by default.
+
+## Research track S — Local IPC and release/update integrity
+
+Local IPC evaluation must cover:
+
+- peer identity
+- operating-system access rules
+- protocol versioning
+- cross-user access tests
+- restart/reconnect behavior
+- dashboard-to-host authentication assumptions
+
+Release/update evaluation must cover:
+
+- signed/verifiable artifacts
+- update metadata integrity
+- rollback/recovery
+- dependency inventory
+- build provenance/attestation options
+- interrupted update testing
+- separation between normal runtime and update privileges

@@ -905,3 +905,179 @@ Confidence labels:
 - Example: https://pmc.ncbi.nlm.nih.gov/articles/PMC6541803/
 - Finding: when measures become targets, behavior can optimize the metric rather than the intended outcome.
 - RELAY impact: do not optimize token savings, cache hit rate, alert count, or AI-call reduction without correctness/safety guardrails.
+
+
+## Simplicity, cognitive load, configuration, and operability evidence
+
+### NIST — What is Human-Centered Cybersecurity?
+
+- Year: 2026
+- Type: NIST/SOUPS conference poster
+- Confidence: High for direction, preliminary for findings
+- URL: https://www.nist.gov/publications/what-human-centered-cybersecurity
+- Finding: NIST is explicitly developing a shared human-centered cybersecurity approach rather than treating the human as an afterthought.
+- RELAY impact: human cognitive/operational burden belongs in architecture and evaluation, not only UI polish.
+
+### NIST — Advancing Human-Centered Cybersecurity
+
+- Year: 2026
+- Type: IEEE Security & Privacy / NIST authorship
+- Confidence: High
+- URL: https://www.nist.gov/publications/advancing-human-centered-cybersecurity-challenges-and-pathways-forward
+- Finding: summarizes contemporary research/practice challenges in integrating human factors into cybersecurity outcomes.
+- RELAY impact: security and usability constraints must be co-designed.
+
+### NIST SP 1332 — ConnectCon 2024 Human-Centered Cybersecurity Workshop Summary
+
+- Year: 2025
+- Type: U.S. government workshop report
+- Confidence: High for identified practitioner/research themes
+- URL: https://www.nist.gov/publications/workshop-summary-report-connectcon-2024-minding-gaps-human-centered-cybersecurity
+- Finding: identifies human-centered cybersecurity challenges and pathways based on practitioner/researcher consensus.
+- RELAY impact: reinforces representative-user evaluation of security controls and workflows.
+
+### NIST — Security Fatigue
+
+- Year: 2016
+- Type: peer-reviewed NIST study
+- Confidence: High
+- URL: https://csrc.nist.gov/pubs/journal/2016/09/security-fatigue/final
+- Finding: more than half of 40 interviewed users alluded to security fatigue; themes included resignation, loss of control, decision avoidance, and choosing easier options.
+- RELAY impact: repeated security decisions and warnings can undermine safe behavior.
+
+### CISA/NSA/FBI — Secure by Design / Secure by Default guidance
+
+- Years: 2023–2025
+- Type: joint government security guidance
+- Confidence: High for product-design principle
+- URLs:
+  - https://www.cisa.gov/sites/default/files/2023-06/principles_approaches_for_security-by-design-default_508c.pdf
+  - https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-278a
+- Finding: secure configuration should be the default baseline and configuration complexity should not be pushed onto customers.
+- RELAY impact: safe defaults and low-configuration golden paths are security requirements, not just UX preferences.
+
+### CISA — Secure-by-Design alert on default passwords
+
+- Year: 2023/updated guidance
+- Type: U.S. government product-design guidance
+- Confidence: High
+- URL: https://www.cisa.gov/sites/default/files/2023-12/SbD-Alert-How-Software-Manufacturers-Can-Protect-Customers-by-Eliminating-Default-Passwords-508c_0.pdf
+- Finding: manufacturers should make the easiest route the secure one and field-test how customers actually deploy products.
+- RELAY impact: auto-configuration needs inspectability, field testing, and safe defaults.
+
+### Measuring the cognitive load of software developers: an extended systematic mapping study
+
+- Year: 2021
+- Type: Information and Software Technology peer-reviewed review
+- Confidence: High
+- DOI: 10.1016/j.infsof.2021.106563
+- Finding: reviewed 63 primary studies measuring developer cognitive load and found programming tasks are a major focus, while measurement remains methodologically challenging.
+- RELAY impact: cognitive load is measurable enough to evaluate, but no single metric should be treated as definitive.
+
+### When Help Hurts: Verification Load and Fatigue with AI Coding Assistants
+
+- Year: 2026
+- Type: CHI peer-reviewed
+- Confidence: High
+- DOI: 10.1145/3772318.3791176
+- Finding: with one fixed model backend, interaction mode materially changed correctness, time, workload, and verification burden for 60 developers.
+- RELAY impact: interface/workflow design can change AI-assistance cost even when model quality is unchanged.
+
+### Platform engineering and internal developer portals: a multivocal literature review
+
+- Year: 2026
+- Type: peer-reviewed multivocal literature review
+- Confidence: Medium-High; field remains immature
+- URL: https://www.frontiersin.org/journals/computer-science/articles/10.3389/fcomp.2026.1814498/full
+- Finding: platforms aim to reduce cognitive load but can become sources of complexity themselves; the review notes evidence quality drops for many specific platform practices.
+- RELAY impact: RELAY must be managed as a product that can itself create cognitive load.
+
+### Can There Ever Be Too Many Options? A Meta-Analytic Review of Choice Overload
+
+- Year: 2010
+- Type: Journal of Consumer Research meta-analysis
+- Confidence: High
+- DOI: 10.1086/651235
+- Finding: across 50 published/unpublished experiments, mean choice-overload effect was near zero with substantial variability.
+- RELAY impact: "fewer options" is not a universal UX law.
+
+### Choice overload: A conceptual review and meta-analysis
+
+- Year: 2015
+- Type: Journal of Consumer Psychology meta-analysis
+- Confidence: High
+- DOI: 10.1016/j.jcps.2014.08.002
+- Finding: choice set complexity, task difficulty, preference uncertainty, and decision goal moderate overload.
+- RELAY impact: contextual defaults/recommendations matter more than a crude global option limit.
+
+### Early Detection of Configuration Errors to Reduce Failure Damage
+
+- Year: 2016
+- Type: OSDI peer-reviewed, Best Paper
+- Confidence: High
+- URL: https://www.usenix.org/conference/osdi16/technical-sessions/presentation/xu
+- Finding: critical latent configuration errors were common in mature systems; generated initialization checks detected more than 75% of studied real-world latent configuration errors.
+- RELAY impact: validate important configuration assumptions early rather than at rare failure time.
+
+### Testing of highly configurable cyber-physical systems
+
+- Year: 2023
+- Type: Journal of Systems and Software peer-reviewed multiple-case study
+- Confidence: High
+- DOI: 10.1016/j.jss.2023.111624
+- Finding: configuration variability makes industrial testing difficult; option dependencies are often only partially modeled and practitioners want broader automated coverage.
+- RELAY impact: every configurable RELAY feature increases validation/support state.
+
+### Test them all, is it worth it? JHipster configuration sampling
+
+- Year: 2019
+- Type: Empirical Software Engineering peer-reviewed
+- Confidence: High
+- DOI: 10.1007/s10664-018-9635-4
+- Finding: 35.70% of evaluated JHipster configurations failed; systematic testing strategies improved fault detection but could exceed testing budgets.
+- RELAY impact: supported configuration profiles and constraints may be safer than claiming full combinatorial support.
+
+### Hidden Technical Debt in Machine Learning Systems
+
+- Year: 2015
+- Type: NeurIPS peer-reviewed
+- Confidence: High
+- URL: https://papers.nips.cc/paper/2015/hash/86df7dcfd896fcaf2674f757a2463eba-Abstract.html
+- Finding: configuration issues, boundary erosion, entanglement, undeclared consumers, and system interactions create substantial long-term maintenance costs.
+- RELAY impact: feature/integration additions must account for permanent architecture and support debt.
+
+### Software Development Practices, Software Complexity, and Software Maintenance Performance
+
+- Year: 1998
+- Type: Management Science field study
+- Confidence: Historical/High
+- DOI: 10.1287/mnsc.44.4.433
+- Finding: software complexity links development/design decisions to downstream maintenance performance.
+- RELAY impact: implementation complexity and long-term support cost belong in feature admission decisions.
+
+### No Silver Bullet: Essence and Accidents of Software Engineering
+
+- Year: 1987
+- Type: IEEE Computer classic software-engineering paper
+- Confidence: Historical/High for conceptual framing
+- DOI: 10.1109/MC.1987.1663532
+- Finding: essential software complexity cannot be wished away by representation alone.
+- RELAY impact: do not build premature universal abstractions that merely relocate engine/tool complexity.
+
+### Google SRE Workbook — Eliminating Toil
+
+- Year: 2018
+- Type: established production engineering guidance
+- Confidence: High for operational practice
+- URL: https://research.google/pubs/the-site-reliability-engineering-workbook-chapter-eliminating-toil/
+- Finding: repetitive operational work can consume teams unless measured and bounded.
+- RELAY impact: maintenance/reconnection/configuration/support rituals need a toil budget and root-cause elimination.
+
+### An empirical study of developers' challenges in Workflows as Code: Apache Airflow
+
+- Year: 2025
+- Type: Journal of Systems and Software peer-reviewed
+- Confidence: High
+- DOI: 10.1016/j.jss.2024.112248
+- Finding: defining/executing workflows were major challenges, often caused by configuration errors, and developers relied on diverse documentation and expertise.
+- RELAY impact: self-diagnostics and generated/version-consistent reference surfaces reduce configuration/documentation fragmentation.

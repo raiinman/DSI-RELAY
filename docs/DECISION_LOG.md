@@ -425,3 +425,64 @@ Crash, duplicate-delivery, network-loss, disk-write failure, migration interrupt
 Status: Approved
 
 Failure of a remote AI/provider/gateway should preserve local deterministic functionality where possible and must not silently switch to another processor with different privacy or data-use policy.
+
+
+## D-075 — Observability is evidence, not ground truth
+
+Status: Approved
+
+RELAY distinguishes authoritative state, observation, derived measurement, corroborated finding, inference, and unknown evidence rather than presenting every signal as fact.
+
+## D-076 — Missing or sampled telemetry is not negative proof
+
+Status: Approved
+
+Absence of an event is interpreted as absence only when the collection contract is known complete for that event. Sampling, drops, disconnects, parser failure, retention, and staleness remain visible evidence limitations.
+
+## D-077 — Instrumentation has an explicit overhead budget
+
+Status: Approved direction
+
+Probes/tracing/diagnostics must be benchmarked for CPU, latency, storage, network, and project/tool impact. High-detail instrumentation is targeted rather than assumed free.
+
+## D-078 — Event causality does not rely on wall-clock order alone
+
+Status: Approved
+
+RELAY prefers causal/sequence relationships over timestamp ordering when diagnosing event chains across components.
+
+## D-079 — Detector quality includes operational alert burden
+
+Status: Approved
+
+False alarms, duplicate/noisy findings, calibration/confidence, and user-operational burden matter in addition to benchmark accuracy/precision/recall.
+
+## D-080 — The observability pipeline has its own health state
+
+Status: Approved
+
+Collector/adapter connectivity, dropped events, parser failures, sampling, backlog, storage pressure, and staleness can reduce confidence in downstream findings.
+
+## D-081 — Root-cause language reflects evidence strength
+
+Status: Approved
+
+RELAY distinguishes symptoms, correlations, hypotheses, tested hypotheses, and verified causes; correlation alone is not presented as proof.
+
+## D-082 — Visual evidence is revision/session aware
+
+Status: Approved
+
+Screenshots/captures retain project/session/revision/view metadata and are not substituted for hidden structured state.
+
+## D-083 — Product metrics use quality guardrails
+
+Status: Approved
+
+Token reduction, AI-call avoidance, alert count, cache hit rate, and similar metrics cannot be optimized alone when doing so harms correctness, freshness, safety, or usability.
+
+## D-084 — Observability metadata is untrusted input
+
+Status: Approved
+
+External trace/correlation IDs, log metadata, and diagnostic control fields cannot grant authority or force unbounded collection; they are validated and resource-limited.

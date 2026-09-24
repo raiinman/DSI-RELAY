@@ -1970,3 +1970,341 @@ Phase 0 now also requires:
 54. visual evidence is revision/session aware
 55. product metrics use multi-metric guardrails rather than one optimization target
 56. telemetry/correlation metadata is treated as untrusted input
+
+
+## Attack 83 — RELAY can become the complexity it was created to remove
+
+### Evidence
+
+A 2026 multivocal review of platform engineering found that internal developer platforms are intended to reduce cognitive load but can themselves add a learning curve and become a source of complexity when over-engineered. The review also notes that evidence for many platform-specific practices remains immature. A broader systematic mapping study of developer cognitive load found a substantial research base linking programming tasks and cognitive load, while emphasizing measurement challenges.
+
+### Verdict
+
+NEW SIMPLICITY CONSTRAINT.
+
+### Required changes
+
+- cognitive/user complexity becomes a first-class architecture constraint
+- common workflows must be measured by time, steps, decisions, concepts, and failure recovery
+- new platform features must justify the user/maintenance complexity they add
+- every milestone includes an explicit simplification pass
+- public single-user use remains the default mental model unless team features are actually needed
+
+## Attack 84 — Security/privacy configuration should not become the user's full-time job
+
+### Evidence
+
+CISA/NSA/FBI Secure-by-Design guidance states that security complexity should not be pushed onto customers and that the secure path should be the default path. CISA repeatedly recommends secure configurations "out of the box" rather than requiring customers to spend additional effort hardening products.
+
+### Verdict
+
+MODIFY SECURITY/PRIVACY UX.
+
+### Required changes
+
+- safe privacy, credential, adapter, retry, and evidence-retention defaults ship enabled
+- first-run setup does not ask users to design a security architecture
+- Advanced settings explain deviations from recommended defaults
+- dangerous combinations are blocked or require explicit informed override
+- basic security/observability necessary for RELAY operation is not hidden behind paid or expert-only configuration
+
+## Attack 85 — "Fewer choices is always better" is also too simplistic
+
+### Evidence
+
+A 2010 meta-analysis of choice overload found a near-zero mean effect across 50 experiments with substantial variation, while a 2015 meta-analysis found that complexity of the choice set, task difficulty, preference uncertainty, and decision goal moderate overload.
+
+### Verdict
+
+MODIFY CHOICE DESIGN.
+
+### Required changes
+
+RELAY should not enforce an arbitrary global cap on options.
+
+Instead:
+
+- provide strong defaults
+- expose choices contextually
+- group/search/filter larger sets
+- explain recommended choices
+- reveal advanced alternatives when relevant
+- test choice burden on real RELAY tasks
+
+The target is lower decision burden, not minimal option count.
+
+## Attack 86 — Configuration flexibility can create an untestable product
+
+### Evidence
+
+Research on highly configurable systems repeatedly finds that configuration spaces grow combinatorially and are difficult to test comprehensively. An empirical study of JHipster configurations found 35.7% of evaluated configurations failed and showed that even systematic sampling can exceed practical test budgets. A 2023 multiple-case study likewise found testing highly configurable systems challenging and configuration dependencies often only partially modeled.
+
+### Verdict
+
+NEW CONFIGURATION-BUDGET REQUIREMENT.
+
+### Required changes
+
+- every user-visible configuration option is treated as additional product state
+- configuration interactions belong in the test plan
+- supported/recommended profiles are allowed instead of pretending all combinations are equally validated
+- configuration schemas should encode constraints/defaults/dependencies
+- unsupported combinations fail early and clearly
+- internal implementation knobs are not automatically public settings
+
+## Attack 87 — Invalid configuration often fails too late
+
+### Evidence
+
+OSDI 2016 Best Paper research on latent configuration errors found mature systems frequently failed to validate critical configurations during initialization; generated early checks detected more than 75% of studied real-world latent configuration errors.
+
+### Verdict
+
+MODIFY STARTUP/ONBOARDING VALIDATION.
+
+### Required changes
+
+- validate configuration and integration assumptions as early as practical
+- a project should not appear fully Ready when important configuration has not been exercised/validated
+- run startup/preflight checks for values that otherwise fail only during rare recovery or integration paths
+- diagnostics should identify the setting and consequence in plain language
+
+## Attack 88 — AI assistance can create verification fatigue
+
+### Evidence
+
+A CHI 2026 study of 60 developers held the model backend fixed while varying AI interaction style and found that interface design materially changed time, correctness, workload, and verification burden. Verification load also tracked stress/fatigue over repeated use.
+
+### Verdict
+
+MODIFY AI/DASHBOARD INTERACTION DESIGN.
+
+### Required changes
+
+- RELAY evaluates not only model quality but verification work imposed on the human
+- common results should contain enough evidence to verify without opening raw logs
+- interaction style may vary by task complexity rather than using one universal chat pattern
+- repeated approvals/reviews/AI output checking become measurable UX cost
+
+## Attack 89 — Safety controls can trigger security fatigue
+
+### Evidence
+
+NIST's 2016 Security Fatigue study found more than half of interviewed participants expressed security fatigue, with resignation, decision avoidance, and tendency toward easier choices among the outcomes. NIST's 2026 human-centered cybersecurity work continues to emphasize human factors as part of cybersecurity outcomes.
+
+### Verdict
+
+MODIFY CONTROL SURFACE.
+
+### Required changes
+
+- reduce unnecessary decisions/prompts
+- batch coherent approvals
+- provide secure defaults
+- hide controls that are not relevant to the active task
+- measure repeated prompt/override behavior
+- treat high dismissal rates as a product-design problem, not user failure
+
+## Attack 90 — Feature accumulation creates permanent technical debt
+
+### Evidence
+
+The 2015 Hidden Technical Debt in Machine Learning Systems paper identifies configuration issues, boundary erosion, entanglement, undeclared consumers, and system-level anti-patterns as major sources of long-term maintenance cost. Older empirical maintenance research likewise links software complexity and downstream maintenance performance.
+
+### Verdict
+
+NEW FEATURE-ADMISSION AND RETIREMENT POLICY.
+
+### Required changes
+
+A core feature needs evidence that value exceeds:
+
+- implementation cost
+- test/configuration-space expansion
+- security/privacy surface
+- migration/version burden
+- docs/UI/CLI burden
+- background/runtime overhead
+- support cost
+
+RELAY must also be willing to remove, merge, or demote features.
+
+## Attack 91 — Premature universal abstraction can hide rather than remove complexity
+
+### Evidence
+
+Brooks' classic "No Silver Bullet" argues that software's essential conceptual complexity cannot be removed merely by changing representations. RELAY risks creating a generic "all engines" abstraction before enough real integrations exist to reveal what is actually common.
+
+### Verdict
+
+MODIFY GENERALIZATION STRATEGY.
+
+### Required changes
+
+- build clean boundaries without pretending the first adapter defines a universal engine model
+- keep engine-specific semantics behind adapters
+- validate a core abstraction against at least one materially different second integration before declaring it stable
+- escape-hatch proliferation is evidence the abstraction is premature
+- generic APIs must earn their existence through repeated concrete use
+
+## Attack 92 — RELAY can generate operational toil of its own
+
+### Evidence
+
+Google SRE defines toil as repetitive, predictable operational work and explicitly recommends measuring/limiting it because maintenance activity can consume a team if left unchecked.
+
+### Verdict
+
+NEW OPERABILITY/TOIL BUDGET.
+
+### Required changes
+
+Measure repetitive user/maintainer work such as:
+
+- reconnecting integrations
+- repairing updates
+- configuration edits
+- permissions cleanup
+- reindexing
+- compatibility triage
+- repeated approvals
+- support diagnosis
+
+Recurring safe toil should be automated or eliminated at the root rather than normalized as "how RELAY works."
+
+## Attack 93 — Documentation and advanced settings can become another fragmented toolchain
+
+### Evidence
+
+A 2025 empirical study of Apache Airflow workflows found defining/executing workflows were major challenges, often involving configuration errors, and developers relied on diverse documentation and expertise. NIST's 2024 survey on human-centered cybersecurity also found practitioners face challenges translating research into practice.
+
+### Verdict
+
+MODIFY DOCUMENTATION/DIAGNOSTICS.
+
+### Required changes
+
+- shared semantic sources generate/validate CLI help, schemas, dashboard metadata, and AI skill references where practical
+- task-oriented human documentation remains concise and editorial
+- common failures route through one self-diagnostic path such as a future relay doctor
+- error output gives a clear next action instead of requiring users to search several documents
+- current version/capability state is visible in diagnostics
+
+## Attack 94 — Progressive disclosure can hide complexity without actually reducing it
+
+### Problem
+
+A UI can put 200 controls behind an Advanced button and still leave the underlying product conceptually incoherent.
+
+### Verdict
+
+MODIFY PROGRESSIVE-DISCLOSURE RULE.
+
+### Required changes
+
+Simple, detailed, and advanced views must share the same stable concepts/names.
+
+Advanced views reveal evidence and control; they should not expose a second unrelated mental model.
+
+If users routinely require Advanced to accomplish normal work, the default product surface is wrong.
+
+## Attack 95 — Enterprise architecture can poison the personal-user experience
+
+### Problem
+
+RELAY now has concepts for organizations, delegation chains, provider profiles, data classes, recovery policy, adapter provenance, audit policy, and team authorization. Most solo creators should not need to learn those concepts.
+
+### Verdict
+
+SEPARATE CAPABILITY FROM PRESENTATION.
+
+### Required changes
+
+- personal installations can use implicit sensible workspace/policy defaults
+- team/enterprise concepts stay hidden until activated
+- optional subsystems are lazy
+- data structures may remain future-capable without forcing enterprise terminology into onboarding
+- public v0.x success is measured first on personal creator workflows
+
+## Attack 96 — More automation can still mean more mystery
+
+### Evidence
+
+CISA Secure-by-Design guidance recommends field testing how customers actually deploy products and making the secure route the easiest route. Configuration-error research likewise shows unchecked assumptions can remain latent until failure.
+
+### Verdict
+
+MODIFY AUTO-DETECTION.
+
+### Required changes
+
+Automatic detection/setup must be:
+
+- visible
+- explainable
+- correctable
+- validated
+- cheap to reset/re-run
+
+"RELAY detected this" should always have a path to "show me why" and "change it."
+
+## Attack 97 — The default path must deliver value before the user configures the ecosystem
+
+### Problem
+
+If the first useful audit requires an AI provider, cloud account, custom adapter, data policy wizard, team setup, and ten permission screens, RELAY has failed its original mission even if the architecture is secure.
+
+### Verdict
+
+NEW TIME-TO-FIRST-VALUE REQUIREMENT.
+
+### Required changes
+
+Phase 1+ should benchmark a minimal personal golden path:
+
+1. install
+2. detect/add supported project
+3. run useful deterministic local inspection/audit
+4. show result
+
+Remote AI and advanced integrations should improve the experience, not be prerequisites for basic value.
+
+## Attack 98 — Complexity needs an explicit budget, not good intentions
+
+### Verdict
+
+NEW COMPLEXITY-GOVERNANCE REQUIREMENT.
+
+### Required changes
+
+Every milestone tracks a portfolio including:
+
+- steps/time to first useful result
+- mandatory decisions/concepts
+- configuration count
+- supported profiles/combinations
+- background components
+- compatibility matrix size
+- install/update failure rate
+- support/diagnostic time
+- Advanced-setting usage
+- RELAY-management time versus project work
+
+A milestone can fail on complexity regression even when all functional tests pass.
+
+## Phase 0 simplicity/operability closure requirements
+
+Phase 0 now also requires:
+
+57. simplicity/cognitive load is a first-class product constraint
+58. secure/privacy/recovery defaults minimize required user hardening
+59. configuration growth is governed as testable product state
+60. startup/preflight validation catches important configuration failures early
+61. AI UX is evaluated for human verification burden
+62. feature admission includes long-term support/test/configuration cost
+63. engine abstraction remains evidence-driven rather than prematurely universal
+64. repetitive RELAY toil is measured and targeted for elimination
+65. common diagnostics have a single low-friction entry point
+66. personal-user UI hides irrelevant enterprise/team complexity
+67. the minimal golden path produces useful local value without remote AI
+68. complexity-budget metrics are reviewed at every milestone

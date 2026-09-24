@@ -46,6 +46,36 @@ Initial academic references:
 
 These references motivate experiments; they do not automatically dictate RELAY's implementation.
 
+Additional 2025–2026 evidence:
+
+7. Łajewska et al., "Understanding and Improving Information Preservation in Prompt Compression for LLMs"
+   - https://aclanthology.org/2025.findings-emnlp.949/
+   - Compression must be evaluated for grounding and information preservation, not token ratio alone.
+
+8. Liu et al., "Context as a Tool: Context Management for Long-Horizon SWE-Agents"
+   - https://aclanthology.org/2026.findings-acl.1032/
+   - Supports structured active context management instead of append-only/passive histories.
+
+9. Cognitive Scaffold: From Fluid Context to Crystallized Memory for Long-Horizon DeepResearch Agents
+   - https://aclanthology.org/2026.acl-long.1170/
+   - Supports separating working context from persistent structured memory and protecting atomic numerical/entity facts.
+
+10. Kang et al., "ACON: Optimizing Context Compression for Long-horizon LLM Agents"
+   - https://www.microsoft.com/en-us/research/publication/acon-optimizing-context-compression-for-long-horizon-llm-agents/
+   - Supports benchmarking smaller/cheaper compression components.
+
+11. Xiong et al., "How Memory Management Impacts LLM Agents: An Empirical Study of Experience-Following Behavior"
+   - https://aclanthology.org/2026.acl-long.27/
+   - Adds memory-poisoning/error-propagation and misaligned-experience risks.
+
+12. Yang et al., "Grounding Agent Memory in Contextual Intent"
+   - https://aclanthology.org/2026.findings-acl.584/
+   - Supports intent-aware retrieval rather than semantic similarity alone.
+
+13. Zhang et al., "Lightweight LLM Agent Memory with Small Language Models"
+   - https://aclanthology.org/2026.acl-long.588/
+   - Supports testing small-model memory retrieval/writing/consolidation under bounded compute.
+
 ## Context Gauntlet
 
 Create repeatable tasks and compare:
@@ -90,7 +120,18 @@ Metrics:
 
 Design hypothesis:
 
-CLI + small task skills will often use less context and fewer calls than a large MCP catalog.
+CLI + small task skills will often use less context and fewer calls than a large static MCP catalog. This is a hypothesis, not a settled universal rule.
+
+Counter-evidence/current evidence:
+
+- https://arxiv.org/abs/2602.14878 — MCP Tool Descriptions Are Smelly; description quality and compactness materially affect success/cost.
+- https://arxiv.org/abs/2602.18914 — description accuracy/functionality affect tool selection.
+- https://arxiv.org/abs/2603.20313 — selective semantic tool discovery reports large schema-token savings on its benchmark.
+- https://arxiv.org/abs/2608.23992 — production/preprint report of search/execute meta-tools at enterprise scale.
+
+Research question:
+
+Can a thin dynamically discovered MCP surface match or beat CLI+skill on success, context overhead, latency, and recovery for specific client classes?
 
 Test the same workflows using:
 
@@ -201,6 +242,38 @@ Possible metrics:
 
 ## Research track H — Security
 
+Security research starts before remote/public release because project content and local agent execution affect the architecture from the beginning.
+
+Government/current sources:
+
+- NIST/CAISI large-scale agent hijacking red-team (2026):
+  https://www.nist.gov/blogs/caisi-research-blog/insights-ai-agent-security-large-scale-red-teaming-competition
+- NIST NCCoE Software and AI Agent Identity and Authorization concept paper (2026):
+  https://csrc.nist.gov/pubs/other/2026/02/05/accelerating-the-adoption-of-software-and-ai-agent/ipd
+- NIST agent identity guidance (2026):
+  https://www.nist.gov/blogs/cybersecurity-insights/back-future-why-agentic-ai-needs-strong-identity-foundation
+- NIST AI Agent Standards Initiative:
+  https://www.nist.gov/news-events/news/2026/02/announcing-ai-agent-standards-initiative-interoperable-and-secure
+
+Required threat areas:
+
+- indirect prompt injection in project files, docs, logs, repositories, web-derived content, assets, and tool output
+- instruction/data boundary failure
+- memory poisoning and stale/hostile derived memories
+- structured command injection
+- shell/path injection
+- malicious project content
+- secret leakage in logs/context
+- cross-project isolation
+- remote replay
+- approval bypass
+- shared user credentials
+- long-lived/static credentials
+- overbroad local-agent authority
+- update supply chain
+- diagnostic bundle leakage
+- audit/non-repudiation gaps
+
 Before remote/public use:
 
 - threat model
@@ -213,6 +286,102 @@ Before remote/public use:
 - approval bypass
 - update supply chain
 - diagnostic bundle leakage
+
+
+## Research track I — Human factors and automation
+
+RELAY is an automation system; older human-factors findings are relevant even though the domain differs.
+
+Core sources:
+
+- Bainbridge, "Ironies of Automation" (1983):
+  https://doi.org/10.1016/0005-1098(83)90046-8
+- NASA, "Human factors of the high technology cockpit" (1990):
+  https://ntrs.nasa.gov/citations/19910001630
+- NASA, "Potential benefits and hazards of increased reliance on cockpit automation" (1990):
+  https://ntrs.nasa.gov/citations/19920056683
+- Endsley & Kiris, "The Out-of-the-Loop Performance Problem and Level of Control in Automation" (1995):
+  https://doi.org/10.1518/001872095779064555
+- Parasuraman & Riley, "Humans and Automation: Use, Misuse, Disuse, Abuse" (1997):
+  https://doi.org/10.1518/001872097778543886
+- NASA, "Analysis of Autopilot Behavior" (1998):
+  https://ntrs.nasa.gov/citations/20020066672
+
+Questions:
+
+- Does RELAY keep users aware of what automation is doing?
+- Do automatic repairs or queued jobs create automation surprise?
+- Does the user understand the current automation mode and authority?
+- Do warnings create cry-wolf/disuse behavior?
+- Do approvals create consent fatigue?
+- Can users recover when automation fails?
+- Does automation hide skills/state the user later needs during an exception?
+
+Evaluation should include user comprehension and recovery, not only task completion.
+
+## Research track J — Government evaluation/accountability guidance
+
+Use government evaluation work as a methodology source, not as automatic product requirements.
+
+Sources:
+
+- NIST AI 800-2, Practices for Automated Benchmark Evaluations of Language Models:
+  https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.800-2.ipd.pdf
+- U.S. GAO AI Accountability Framework:
+  https://www.gao.gov/products/gao-21-519sp
+
+Benchmark requirements derived for RELAY:
+
+- define the evaluation objective before running
+- define what construct is being measured
+- state intended use of the result
+- choose/document relevant baselines
+- pin model/client/tool/interface versions
+- document cost controls and protocol settings
+- report run-to-run variation/uncertainty where applicable
+- retain enough artifacts for reproducibility without violating privacy/security
+- distinguish benchmark performance from field behavior
+- use field testing/red teaming/post-deployment monitoring where automated benchmarks are insufficient
+
+## Research track K — Native platform versus RELAY duplication
+
+For each engine/tool integration, inventory authoritative native capabilities before implementing a RELAY version.
+
+UEFN/Unreal sources begin with:
+
+- Unreal MCP:
+  https://dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor
+- Fortnite 42.00 release notes:
+  https://dev.epicgames.com/documentation/fortnite/42-00-fortnite-ecosystem-updates-and-release-notes
+
+Questions:
+
+- Is the native feature authoritative?
+- Can RELAY normalize/aggregate it instead of reproducing it?
+- What value does RELAY add: cross-tool correlation, history, context compilation, automation, testing, or UX?
+- How volatile/version-specific is the native API?
+- Is there a safe fallback?
+
+## Benchmark protocol contract
+
+Before a benchmark is used to set a product default, record:
+
+- decision being informed
+- hypothesis
+- measurement construct
+- workload/task set
+- baseline(s)
+- exact model/client/tool versions
+- hardware/runtime where relevant
+- protocol/settings
+- number of runs
+- pass/fail and secondary metrics
+- cost/token measurement method
+- uncertainty/variation
+- known limitations and external-validity limits
+
+A single successful demo is not a benchmark.
+
 
 ## Research output rule
 

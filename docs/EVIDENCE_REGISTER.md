@@ -393,3 +393,90 @@ Confidence labels:
 - URL: https://csrc.nist.gov/pubs/ir/8536/final
 - Finding: verifiable provenance chains, interoperable traceability, cryptographic linkage, and selective disclosure can improve supply-chain assurance.
 - RELAY impact: use these as design principles for adapter provenance/history; the report is manufacturing-focused and is not itself a software-plugin standard.
+
+
+## Data boundary, privacy, and remote-processing evidence
+
+### NSA/CISA/FBI et al. — AI Data Security: Best Practices for Securing Data Used to Train & Operate AI Systems
+
+- Year: 2025
+- Type: joint government cybersecurity guidance
+- Confidence: High for lifecycle/data-security requirements
+- URL: https://www.nsa.gov/Press-Room/Press-Releases-Statements/Press-Release-View/Article/4192332/nsas-aisc-releases-joint-guidance-on-the-risks-and-best-practices-in-ai-data-se/
+- Finding: AI-system data is part of the supply chain and should be protected across the lifecycle with provenance and trusted infrastructure.
+- RELAY impact: remote AI/embedding/support processing becomes an explicit data-egress boundary with provenance and destination policy.
+
+### NIST Privacy Framework 1.0
+
+- Year: 2020
+- Type: U.S. government privacy framework
+- Confidence: High for privacy-engineering principles
+- URL: https://doi.org/10.6028/NIST.CSWP.01162020
+- Finding: privacy management includes lifecycle data processing, selective disclosure, processing permissions, deletion, audit minimization, and limiting observability/linkability.
+- RELAY impact: data minimization is a privacy rule as well as a token-cost rule; egress policy must precede context optimization.
+
+### NIST/CAISI — Strengthening AI Agent Hijacking Evaluations
+
+- Year: 2025
+- Type: U.S. government technical research blog
+- Confidence: High for demonstrated evaluation risks
+- URL: https://www.nist.gov/news-events/news/2025/01/technical-blog-strengthening-ai-agent-hijacking-evaluations
+- Finding: extended agent-hijacking evaluations included mass data-disclosure tasks and frequently induced agents to follow malicious instructions.
+- RELAY impact: read access and external-send authority must be separate capabilities.
+
+### Simple Prompt Injection Attacks Can Leak Personal Data Observed by LLM Agents During Task Execution
+
+- Year: 2025
+- Type: research preprint
+- Confidence: Medium
+- Source: arXiv 2506.01055
+- Finding: prompt injection caused tool-calling agents to leak personal data observed during execution; in the extended evaluation no built-in defense fully prevented leakage.
+- RELAY impact: data-egress enforcement cannot depend on model refusal behavior.
+
+### Text Embeddings Reveal (Almost) As Much As Text
+
+- Year: 2023
+- Type: EMNLP peer-reviewed
+- Confidence: High
+- URL: https://aclanthology.org/2023.emnlp-main.765/
+- Finding: under the paper's tested conditions, substantial portions of short source texts could be reconstructed from dense embeddings, including personal information.
+- RELAY impact: embeddings are sensitive derived data, not anonymous by default.
+
+### Transferable Embedding Inversion Attack
+
+- Year: 2024
+- Type: ACL peer-reviewed
+- Confidence: High
+- URL: https://aclanthology.org/2024.acl-long.230/
+- Finding: the authors demonstrated transfer-style reconstruction attacks without direct access to the original embedding model.
+- RELAY impact: a vector store or remote embedding service inherits source confidentiality requirements.
+
+### ALGEN: Few-shot Inversion Attacks on Textual Embeddings
+
+- Year: 2025
+- Type: ACL peer-reviewed
+- Confidence: High
+- URL: https://aclanthology.org/2025.acl-long.1185/
+- Finding: the study reduced data requirements for black-box embedding inversion and recovered key information across domains/languages.
+- RELAY impact: derived vector data must remain inside sensitivity/retention policy.
+
+### Manipulating Multimodal Agents via Cross-Modal Prompt Injection
+
+- Year: 2025
+- Type: research preprint
+- Confidence: Medium
+- Source: arXiv 2504.14348
+- Finding: adversarial visual/textual content altered multimodal-agent behavior across tested tasks.
+- RELAY impact: screenshots are not passive trustworthy evidence; they are both sensitive content and an untrusted instruction surface.
+
+### OWASP GenAI guidance — Prompt Injection, Sensitive Information Disclosure, System Prompt Leakage
+
+- Year: 2025
+- Type: industry security guidance
+- Confidence: Medium-High for application-security practices
+- URLs:
+  - https://genai.owasp.org/llmrisk/llm01-prompt-injection/
+  - https://genai.owasp.org/llmrisk/llm022025-sensitive-information-disclosure/
+  - https://genai.owasp.org/llmrisk/llm072025-system-prompt-leakage/
+- Finding: prompt injection can lead to sensitive-data disclosure and connected-system actions; credentials should not be embedded in prompts/system instructions.
+- RELAY impact: credentials become opaque capabilities resolved outside model context, and multimodal input remains untrusted.

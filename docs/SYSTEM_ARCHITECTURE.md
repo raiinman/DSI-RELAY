@@ -154,10 +154,19 @@ The command registry should be the single metadata source for:
 - dependency requirements
 - output/result schema
 - help/examples
+- access/effect class
+- target trust class
+- reversibility
+- monitoring/verification requirement
+- autonomy/approval class
+- credential scope
+- affected project/resource boundary
 
 Generated or derived surfaces can include CLI help, dashboard forms, skill references, API schemas, and MCP contracts.
 
-This avoids documentation/schema drift.
+The registry is the semantic source of truth, but presentation text may be surface-specific. Tool and command wording can affect model behavior, so CLI, skills, and MCP renderings must be tested rather than assumed equivalent.
+
+This avoids semantic drift without forcing identical prose on every interface.
 
 ## Jobs
 

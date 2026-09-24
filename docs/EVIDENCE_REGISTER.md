@@ -499,3 +499,138 @@ Confidence labels:
 - URL: https://aclanthology.org/2025.acl-long.936/
 - Finding: analysis found multiple leakage pathways involving prompts, retrieval, execution environments, and metadata such as file titles/types/sizes.
 - RELAY impact: privacy classification must cover metadata and execution-derived artifacts, not only raw file content.
+
+
+## Collaboration, identity, delegation, and concurrency evidence
+
+### NIST — Accelerating the Adoption of Software and AI Agent Identity and Authorization
+
+- Year: 2026
+- Type: U.S. government concept paper
+- Confidence: High for problem framing and requirements direction
+- URLs:
+  - https://www.nist.gov/news-events/news/2026/02/new-concept-paper-identity-and-authority-software-agents
+  - https://csrc.nist.gov/pubs/other/2026/02/05/accelerating-the-adoption-of-software-and-ai-agent/ipd
+- Finding: NIST explicitly identifies agent identification, authorization, auditing, non-repudiation, and prompt-injection controls as core concerns when agents receive access to data, tools, and applications.
+- RELAY impact: distinguish human, client, agent, and service identities and preserve delegated authority in audit records.
+
+### NIST SP 800-162 — Attribute Based Access Control
+
+- Year: 2014/updated 2019
+- Type: U.S. government standard guidance
+- Confidence: High
+- URL: https://www.nist.gov/publications/guide-attribute-based-access-control-abac-definition-and-considerations-0
+- Finding: authorization can be determined from subject, object, operation, and environmental attributes against policy.
+- RELAY impact: simple role templates can coexist with project/resource/action attributes and contextual policy.
+
+### NIST Role-Based Access Control research and model
+
+- Years: 1992–2000
+- Type: U.S. government/academic access-control research
+- Confidence: High
+- URLs:
+  - https://www.nist.gov/publications/role-based-access-controls
+  - https://www.nist.gov/publications/nist-model-role-based-access-control-towards-unified-standard
+- Finding: roles reduce authorization-management complexity and can include hierarchies and constraints.
+- RELAY impact: roles are appropriate for UX/admin templates but should not replace resource-specific constraints.
+
+### NIST SP 800-207 and SP 800-207A — Zero Trust Architecture
+
+- Years: 2020 and 2023
+- Type: U.S. government security guidance
+- Confidence: High
+- URLs:
+  - https://csrc.nist.gov/pubs/sp/800/207/final
+  - https://csrc.nist.gov/pubs/sp/800/207/a/final
+- Finding: network location, affiliation, or ownership should not imply trust; access should be resource-specific, least-privilege, and identity/policy driven.
+- RELAY impact: team membership or local connection does not automatically authorize every project/action.
+
+### RFC 8693 — OAuth 2.0 Token Exchange
+
+- Year: 2020
+- Type: IETF Internet Standard
+- Confidence: High
+- URL: https://datatracker.ietf.org/doc/html/rfc8693
+- Finding: token exchange explicitly models delegation and impersonation as different semantics and can preserve both subject and actor.
+- RELAY impact: preserve delegator/actor chains instead of flattening agent actions into one human identity.
+
+### RFC 8707 — Resource Indicators for OAuth 2.0
+
+- Year: 2020
+- Type: IETF Internet Standard
+- Confidence: High
+- URL: https://datatracker.ietf.org/doc/html/rfc8707
+- Finding: audience restriction limits tokens to intended resources; the security section specifically discusses tenant-distinguishing resource identifiers in multi-tenant systems.
+- RELAY impact: project/workspace resources should be explicit credential audiences where underlying providers support this.
+
+### RFC 9700 — OAuth 2.0 Security Best Current Practice
+
+- Year: 2025
+- Type: IETF Best Current Practice
+- Confidence: High
+- URL: https://datatracker.ietf.org/doc/rfc9700/
+- Finding: recommends minimum privilege, audience restriction, and sender-constrained tokens to reduce misuse after token leakage.
+- RELAY impact: shared broad credentials are visibly higher-risk than project/resource-scoped credentials.
+
+### GitHub organization repository roles and deploy-key warning
+
+- Type: first-party platform documentation
+- Confidence: High for GitHub behavior
+- URL: https://docs.github.com/en/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/repository-roles-for-an-organization
+- Finding: GitHub supports graduated repository roles and warns that possession of a deploy-key private key can retain repository access even after the creating user is removed from an organization.
+- RELAY impact: connection ownership/revocation is separate from user membership/offboarding.
+
+### SyncMind: Measuring Agent Out-of-Sync Recovery in Collaborative Software Engineering
+
+- Year: 2025
+- Type: ICML peer-reviewed
+- Confidence: High
+- URL: https://proceedings.mlr.press/v267/guo25l.html
+- Finding: SyncBench contains 24,332 out-of-sync scenarios from 21 repositories; tested agents showed substantial recovery limitations and low collaboration willingness.
+- RELAY impact: revision awareness, revalidation, conflict detection, and explicit coordination are required for shared projects.
+
+### Kung & Robinson — On optimistic methods for concurrency control
+
+- Year: 1981
+- Type: ACM Transactions on Database Systems
+- Confidence: Historical/High
+- DOI: 10.1145/319566.319567
+- Finding: optimistic concurrency validates transaction assumptions before commit and backs out conflicting work instead of assuming no intervening change.
+- RELAY impact: approved change plans need revision/precondition validation before write.
+
+### MITRE CWE-367 — Time-of-check Time-of-use Race Condition
+
+- Type: MITRE weakness taxonomy
+- Confidence: High for the general failure pattern
+- URL: https://cwe.mitre.org/data/definitions/367
+- Finding: state may change between validation and later use, invalidating the original check.
+- RELAY impact: approvals and permission/state checks cannot be treated as timeless.
+
+### Hardy — The Confused Deputy
+
+- Year: 1988
+- Type: classic capability-security paper
+- Confidence: Historical/High
+- URL: https://www.cs.umd.edu/~jkatz/security/downloads/capabilities.html
+- Finding: a program with its own authority can be tricked into exercising that authority on another party's behalf when authority and designation are confused.
+- RELAY impact: keep resource authority and delegated task scope explicit rather than allowing broad ambient authority.
+
+### Preventing Rogue Agents Improves Multi-Agent Collaboration
+
+- Year: 2025
+- Type: ACL REALM workshop paper
+- Confidence: Medium-High
+- URL: https://aclanthology.org/2025.realm-1.34/
+- Finding: a single mistaken agent can propagate failure through a collaborative system; monitoring/intervention improved performance in the tested environments.
+- RELAY impact: multi-agent work needs bounded roles, monitoring, and normal policy checks rather than automatic trust between agents.
+
+### NIST SP 800-92 / Rev. 1 draft — Log Management
+
+- Years: 2006 / 2023 draft revision
+- Type: U.S. government security guidance
+- Confidence: High
+- URLs:
+  - https://csrc.nist.gov/pubs/sp/800/92/final
+  - https://csrc.nist.gov/pubs/sp/800/92/r1/ipd
+- Finding: log generation, transport, storage, access, retention, analysis, and disposal require deliberate management.
+- RELAY impact: team audit history is itself controlled security/privacy data, not an unlimited plaintext diary.

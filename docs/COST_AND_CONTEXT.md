@@ -393,3 +393,27 @@ The compiler should optimize both:
 - disclosure: expose fewer unrelated protected facts
 
 These often align, but not always. Benchmark both correctness and disclosure footprint.
+
+
+## Recovery cost and replay
+
+A crash should not automatically repeat expensive model work.
+
+Where safe, durable jobs should checkpoint:
+
+- completed model calls and result references
+- completed deterministic analysis
+- approved plans
+- relevant context package identity/version
+
+On recovery, RELAY should reuse verified completed results rather than spending tokens again.
+
+External side effects are handled separately because a missing acknowledgement can mean the effect happened even when no completion record exists.
+
+Usage reporting should distinguish:
+
+- normal work
+- replayed/recovered work
+- duplicated work prevented
+- recovery overhead
+- model/tool calls repeated because prior results were not durable

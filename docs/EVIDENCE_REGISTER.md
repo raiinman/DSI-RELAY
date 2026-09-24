@@ -1081,3 +1081,120 @@ Confidence labels:
 - DOI: 10.1016/j.jss.2024.112248
 - Finding: defining/executing workflows were major challenges, often caused by configuration errors, and developers relied on diverse documentation and expertise.
 - RELAY impact: self-diagnostics and generated/version-consistent reference surfaces reduce configuration/documentation fragmentation.
+
+
+## Legal, licensing, ownership, and public-distribution evidence
+
+### Epic Games Terms of Service
+
+- Current effective date: September 10, 2026
+- Type: first-party platform contract
+- Confidence: High for current Epic contractual text
+- URL: https://legal.epicgames.com/epicgames/tos
+- Finding: UEFN is a Licensed Product; Epic's general terms prohibit bot software/services used to automate Licensed Products and prohibit unauthorized reverse engineering/modification. The same terms also govern account/security and ecosystem use.
+- RELAY impact: public UEFN automation must stay within clearly documented developer tooling and should not generalize to gameplay/client automation.
+
+### Epic — Unreal MCP / UEFN MCP documentation
+
+- Year: 2026
+- Type: first-party developer documentation
+- Confidence: High for current supported feature intent
+- URLs:
+  - https://dev.epicgames.com/documentation/fortnite/uefn-mcp
+  - https://dev.epicgames.com/documentation/fortnite/42-00-fortnite-ecosystem-updates-and-release-notes
+  - https://dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor
+- Finding: Epic explicitly ships Unreal MCP in UEFN so MCP-compatible AI agents can drive the editor, write/compile Verse, manipulate scene/device state, and run play sessions; Unreal MCP remains Experimental in UE 5.8.
+- RELAY impact: documented MCP is the preferred UEFN automation surface; the tension with broad general bot-language in the ToS should be treated narrowly and reviewed rather than ignored.
+
+### UEFN Supplemental Terms
+
+- Type: first-party platform contract
+- Confidence: High for current Epic terms
+- URL: https://legal.epicgames.com/epicgames/uefn
+- Findings:
+  - Developer-Made Content remains the developer's subject to Epic/third-party rights and the license granted to Epic.
+  - developers warrant they have the rights required for submitted content.
+  - Developer-Made Content/code may not establish connections to non-Epic servers after upload/download by end users.
+  - terms incorporate Epic's other policies/rules and those can evolve.
+- RELAY impact: no published in-island RELAY phone-home client; asset provenance matters; terms need version tracking.
+
+### Fortnite Developer Rules and change log
+
+- Current rules last updated: April 29, 2026
+- Type: first-party platform policy
+- Confidence: High
+- URLs:
+  - https://legal.epicgames.com/fortnite/developer-rules
+  - https://legal.epicgames.com/fortnite/developer-rules-change-log
+- Findings: creators are responsible for content compliance and IP rights; Epic-owned IP not made available to creators cannot simply be recreated/used; rules are actively revised.
+- RELAY impact: project publishing checks need source/version attribution and cannot assume old creator rules remain current.
+
+### Epic Fan Content Policy
+
+- Type: first-party IP/trademark policy
+- Confidence: High for current policy text
+- URL: https://legal.epicgames.com/epicgames/fan-art-policy
+- Finding: covered Epic-related websites/apps are described as personal, non-commercial, and freely accessible; Epic marks may not be used to identify/promote another product or imply official endorsement.
+- RELAY impact: commercial/public RELAY branding must not rely on this policy as its trademark/license basis.
+
+### Unreal Engine EULA — license compatibility and Engine Tools
+
+- Type: first-party proprietary software license
+- Confidence: High for current Unreal Engine license text
+- URL: https://www.unrealengine.com/eula/unreal
+- Finding: Unreal Licensed Technology cannot be combined/distributed with GPL/LGPL/CC-BY-SA in ways that would impose incompatible terms; Engine Tools have specific distribution restrictions.
+- RELAY impact: an Unreal/UEFN in-process companion needs a separate license/distribution analysis; GPL host-plugin obligations from Blender/Krita cannot simply be copied into Unreal components.
+
+### Blender license
+
+- Type: first-party open-source project licensing statement
+- Confidence: High
+- URL: https://www.blender.org/about/license/
+- Findings:
+  - Blender source is generally GPL-2.0-or-later and binary distributions are compatible under GPL-3.0-or-later.
+  - published Python add-ons using Blender's Python API must use a GPL-compatible license.
+  - artwork/data created with Blender remains the creator's property.
+- RELAY impact: distributed Blender companions must satisfy GPL-compatible obligations while RELAY Core licensing remains a separate architectural decision.
+
+### Krita license
+
+- Type: first-party open-source project licensing statement
+- Confidence: High
+- URL: https://krita.org/en/about/license/
+- Findings:
+  - Krita as a whole is GPLv3.
+  - distributed plugins using Krita's extension API must be GPL.
+  - artwork created in Krita remains the creator's property.
+- RELAY impact: a public Krita bridge/plugin is a GPL component; source/notices/distribution obligations need explicit handling.
+
+### U.S. Copyright Office — Copyright and Artificial Intelligence, Part 2
+
+- Year: 2025
+- Type: U.S. government copyright report
+- Confidence: High for U.S. Copyright Office position
+- URLs:
+  - https://www.copyright.gov/newsnet/2025/1060.html
+  - https://www.copyright.gov/ai/
+- Finding: generative-AI outputs are copyrightable only where sufficient human-authored expressive elements exist; prompts alone generally do not provide sufficient authorship, while human-authored input, selection/arrangement, or creative modification can.
+- RELAY impact: do not promise copyright ownership/copyrightability for generated assets; track provenance and separate provider contractual rights from copyright law.
+
+### FTC — privacy promises for software/apps
+
+- Type: U.S. government consumer-protection guidance/enforcement history
+- Confidence: High for U.S. FTC expectations
+- URLs:
+  - https://www.ftc.gov/business-guidance/resources/marketing-your-mobile-app-get-it-right-start
+  - https://www.ftc.gov/business-guidance/privacy-security/consumer-privacy
+  - https://www.ftc.gov/policy/advocacy-research/tech-at-ftc/2024/02/keeping-your-privacy-enhancing-technology-pet-promises
+- Finding: developers must honor privacy/security representations and should make user choices clear; privacy-enhancing claims must accurately describe what the implementation actually provides.
+- RELAY impact: "local-only", privacy, security, telemetry, deletion, and diagnostic claims must match tested product behavior.
+
+### NIST — SBOM and open-source software controls
+
+- Type: U.S. government software-supply-chain guidance
+- Confidence: High
+- URLs:
+  - https://www.nist.gov/itl/executive-order-14028-improving-nations-cybersecurity/software-supply-chain-security-guidance-20
+  - https://www.nist.gov/itl/executive-order-14028-improving-nations-cybersecurity/software-supply-chain-security-guidance-22
+- Finding: software producers/acquirers benefit from machine-readable component inventories, provenance, open-source controls, and continuously maintained supply-chain information.
+- RELAY impact: public artifacts need reproducible dependency/component/license inventories, while legal license obligations remain a distinct layer from vulnerability data.

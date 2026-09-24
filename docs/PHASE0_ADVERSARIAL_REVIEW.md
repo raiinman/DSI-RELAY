@@ -408,3 +408,135 @@ Phase 0 may close again only when:
 7. UEFN design is native-tool-first and treats MCP as versioned/experimental
 8. benchmark methodology follows an explicit measurement protocol
 9. Phase 1 is prohibited from locking a stack before these requirements are testable
+
+
+## Attack 14 — Tool descriptions affect agent behavior
+
+### Evidence
+
+Peer-reviewed 2025 work on agentic tool preferences found that small edits to tool descriptions could materially change which tools models selected. Separate 2026 research on tool shortlists also reports that the number of visible tools affects downstream selection quality.
+
+### Verdict
+
+MODIFY COMMAND-DESCRIPTION DESIGN.
+
+### Required changes
+
+- keep canonical command semantics, arguments, permissions, and effects centralized
+- allow surface-specific rendering for CLI help, skills, dashboard, MCP, and remote clients
+- test description wording for selection reliability and ambiguity
+- expose only the smallest relevant command/tool shortlist when practical
+- treat description changes as behavior-affecting changes that deserve tests and versioning
+
+## Attack 15 — Compression itself can become an expensive loop
+
+### Evidence
+
+ACON reports meaningful reductions in peak tokens, but also introduces a compressor and explores distilling that compressor into smaller models to reduce overhead. A 2026 Focus preprint reports savings on only five SWE-bench Lite tasks, which is too small a sample to justify a universal default. Other 2026 work reports that implicit context compression can fail on multi-step coding workflows even when it performs well on simpler tasks.
+
+### Verdict
+
+MODIFY.
+
+### Required changes
+
+The Context Compiler should use a cost ladder:
+
+1. deterministic filtering and deduplication
+2. exact structured projection
+3. cached summaries
+4. cheap/local compression where measured useful
+5. larger-model summarization only when the value exceeds the added cost
+
+Every compression strategy needs a break-even benchmark that includes the cost of compression itself.
+
+## Attack 16 — Permission categories are too one-dimensional
+
+### Evidence
+
+NIST's 2025 agent-tool taxonomy recommends reasoning about tool use across multiple dimensions, including function, read/write access, reversibility, reliability, monitoring, and autonomy.
+
+### Verdict
+
+MODIFY COMMAND METADATA.
+
+### Required changes
+
+Each side-effecting command should be able to declare, where applicable:
+
+- read / constrained-write / write
+- trusted versus untrusted target environment
+- reversibility
+- persistence or externality of effects
+- required monitoring/verification
+- autonomy/approval class
+- credential scope
+- affected project/resource boundary
+
+Approval policy should derive from these attributes rather than only from a flat category.
+
+## Attack 17 — Benchmarks can overstate real capability
+
+### Evidence
+
+NIST/CAISI has documented methodological problems in agent evaluations, including agents exploiting properties of evaluation environments in ways that can inflate apparent performance. Government evaluation guidance also emphasizes clear constructs, baselines, protocol disclosure, and field validation.
+
+### Verdict
+
+MODIFY BENCHMARK GOVERNANCE.
+
+### Required changes
+
+The RELAY benchmark program needs:
+
+- held-out tasks not used to tune prompts/descriptions
+- negative and stress cases
+- version-pinned evaluation environments
+- separation between tuning artifacts and evaluation tasks
+- review of agent traces, not only final pass/fail
+- periodic real-project dogfood evaluation outside benchmark fixtures
+- explicit separation between benchmark score and production claim
+
+## Attack 18 — Model behavior is not an authorization boundary
+
+### Evidence
+
+NIST/CAISI's March 2026 analysis of more than 250,000 red-team attempts across 13 frontier models found at least one successful hijacking attempt against every target model. NIST's 2026 agent-security RFI analysis also reports broad agreement that agent security needs adaptations beyond traditional controls.
+
+### Verdict
+
+KEEP AND STRENGTHEN THE HARD BOUNDARY.
+
+### Required changes
+
+- the model may propose an action
+- RELAY policy decides whether the action is permitted
+- untrusted content cannot grant authority
+- retrieved text cannot alter approval scope
+- execution uses validated structured commands
+- important actions remain attributable and auditable
+- prompt-injection testing becomes a release-gate class
+
+## Attack 19 — Successful autonomous coding systems do not prove a general agent architecture
+
+### Evidence
+
+DARPA's AI Cyber Challenge demonstrated autonomous systems that found and patched vulnerabilities in open-source software under a tightly specified competition framework. This supports bounded specialist automation, not unconstrained agent authority.
+
+### Verdict
+
+KEEP SPECIALIZATION; REJECT OVERGENERALIZATION.
+
+### Required changes
+
+RELAY should favor bounded workflows with explicit inputs, outputs, verification, and permissions. General model reasoning may orchestrate those workflows, but broad authority must not be inferred from coding capability.
+
+## Phase 0 additional closure requirements
+
+Phase 0 now also requires:
+
+10. command/tool descriptions and shortlist policies are treated as behavior and included in interface benchmarks
+11. Context Compiler cost accounting includes the cost of compression itself
+12. command metadata supports multidimensional risk/authority attributes
+13. benchmark design includes held-out tasks, anti-gaming checks, and trace review
+14. authorization is enforced by RELAY policy boundaries rather than model behavior

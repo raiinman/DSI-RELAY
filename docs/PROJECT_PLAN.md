@@ -218,3 +218,12 @@ These are intentionally not fixed yet:
 - exact compatibility matrix for UEFN versions
 
 Research and prototypes should resolve these before code locks them in.
+
+
+## Observability quality constraint
+
+RELAY's value depends on trustworthy evidence, not just more telemetry.
+
+The product must preserve source/freshness/sampling/verification state for important evidence, track health of the observability path, benchmark instrumentation overhead, and distinguish measured facts from inferred causes.
+
+A low-cost system that confidently reasons from stale or incomplete telemetry fails the product goal.

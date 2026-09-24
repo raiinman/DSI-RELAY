@@ -194,6 +194,10 @@ From the first implementation:
 - raw credentials excluded from model-visible context
 - sensitive derived artifacts inherit source policy
 - local-only/private mode defined by testable network behavior rather than UI wording
+- team/workspace identity separated from AI client and agent identity
+- project-scoped authorization and delegated-action attribution
+- stale-plan/revision checks for important collaborative writes
+- offboarding semantics for active and queued work
 
 ## Open implementation decisions
 

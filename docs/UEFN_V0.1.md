@@ -16,6 +16,19 @@ Use UEFN/Fortnite as the first production integration to prove RELAY's core idea
 
 UEFN is the first adapter, not the architecture.
 
+## Current platform reality
+
+Fortnite 42.00 added Unreal MCP to UEFN, but Epic documents the underlying Unreal MCP feature in UE 5.8 as Experimental, with incomplete/missing features and APIs/data formats subject to change.
+
+Therefore:
+
+- Unreal/UEFN MCP is a useful adapter surface, not a RELAY Core dependency
+- capability and version detection are mandatory
+- commands must report unsupported/unavailable capability accurately
+- Epic-specific schemas stay inside the adapter
+- RELAY needs integration tests across explicitly supported UEFN versions
+- fallback/non-MCP paths should exist where practical rather than being assumed impossible or guaranteed
+
 ## Integration layers
 
 ### Static project layer
@@ -35,6 +48,10 @@ Potential responsibilities:
 ### Editor layer
 
 Live UEFN operations where supported by the available UEFN/Unreal integration surface.
+
+Native-tool-first rule:
+
+Before RELAY implements a validator, profiler, session inspector, transaction/undo mechanism, or other engine-level check, determine whether UEFN/Unreal already exposes an authoritative capability. Prefer consuming and normalizing native evidence over maintaining a parallel approximation. RELAY should add value through correlation, history, automation, cross-tool state, context compilation, and gaps the native tooling does not cover.
 
 Potential responsibilities:
 
@@ -190,6 +207,16 @@ RELAY should:
 
 ## UEFN audit
 
+relay audit is an aggregator/orchestrator, not a replacement engine validator.
+
+Each finding should identify its source when practical, for example:
+
+- Epic/UEFN native validation
+- RELAY deterministic check
+- runtime assertion
+- asset adapter
+- user/project-defined test
+
 relay audit for a UEFN project should grow toward:
 
 - project/index health
@@ -200,6 +227,7 @@ relay audit for a UEFN project should grow toward:
 - asset validation
 - performance/memory signals available through supported tooling
 - integration/version health
+- native validation/session/profiler evidence where available through supported interfaces
 
 v0.1 may implement a subset, but the result envelope and extension model should support the full direction.
 
@@ -263,6 +291,8 @@ A supported UEFN project should be able to:
 9. record a verified transaction for at least one safe supported write
 10. display the same underlying state in CLI and dashboard
 11. expose usage metrics for the workflow
+12. report UEFN adapter/version capabilities explicitly
+13. distinguish native-engine findings from RELAY-derived findings
 
 ## Known boundary
 

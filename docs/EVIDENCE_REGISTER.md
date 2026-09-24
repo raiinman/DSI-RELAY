@@ -1,0 +1,268 @@
+# Phase 0 Evidence Register
+
+## Purpose
+
+This register collects evidence that materially challenges or strengthens RELAY's architecture. Sources are included because they change a requirement, benchmark, or decision—not merely because they mention agents.
+
+Confidence labels:
+
+- High — peer-reviewed/established publication or first-party government/platform source directly relevant to the claim.
+- Medium — credible recent preprint or production report that still needs independent replication.
+- Historical — older evidence whose technology differs but whose human-factors finding is relevant.
+
+## Long context and compression
+
+### Lost in the Middle: How Language Models Use Long Contexts
+
+- Year: 2024
+- Type: peer-reviewed, TACL
+- Confidence: High
+- URL: https://aclanthology.org/2024.tacl-1.9/
+- Finding: relevant information position can significantly affect long-context performance; middle content is often used less reliably.
+- RELAY impact: do not equate context-window capacity with usable working memory.
+
+### Understanding and Improving Information Preservation in Prompt Compression for LLMs
+
+- Year: 2025
+- Type: Findings of EMNLP
+- Confidence: High
+- URL: https://aclanthology.org/2025.findings-emnlp.949/
+- Finding: some compression methods lose key information; compression should be evaluated for task performance, grounding, and information preservation.
+- RELAY impact: protect exact facts and benchmark compression quality, not only token ratio.
+
+### Context as a Tool: Context Management for Long-Horizon SWE-Agents
+
+- Year: 2026
+- Type: Findings of ACL
+- Confidence: High
+- URL: https://aclanthology.org/2026.findings-acl.1032/
+- Finding: append-only/passive context management can cause explosion and semantic drift; structured context with stable semantics, condensed memory, and high-fidelity recent history improves long-horizon SWE behavior under bounded context.
+- RELAY impact: strengthens active Context Compiler design.
+
+### Cognitive Scaffold: From Fluid Context to Crystallized Memory for Long-Horizon DeepResearch Agents
+
+- Year: 2026
+- Type: ACL
+- Confidence: High
+- URL: https://aclanthology.org/2026.acl-long.1170/
+- Finding: factorized working context plus persistent structured memory; explicitly preserves atomic numerical/entity constraints.
+- RELAY impact: strengthens exact-field protection and structured memory.
+
+### ACON: Optimizing Context Compression for Long-horizon LLM Agents
+
+- Year: 2026
+- Type: ICML / Microsoft Research
+- Confidence: High
+- URL: https://www.microsoft.com/en-us/research/publication/acon-optimizing-context-compression-for-long-horizon-llm-agents/
+- Finding: context compression can materially reduce peak tokens while preserving task performance; smaller compressors can reduce overhead.
+- RELAY impact: test small/local components for context maintenance instead of expensive frontier-model calls.
+
+## Memory quality and retrieval
+
+### How Memory Management Impacts LLM Agents: An Empirical Study of Experience-Following Behavior
+
+- Year: 2026
+- Type: ACL
+- Confidence: High
+- URL: https://aclanthology.org/2026.acl-long.27/
+- Finding: retrieved experiences can cause strong experience-following; bad or mismatched memories can propagate errors.
+- RELAY impact: memory quality, quarantine, provenance, and stale/conflict handling are required.
+
+### Grounding Agent Memory in Contextual Intent
+
+- Year: 2026
+- Type: Findings of ACL
+- Confidence: High
+- URL: https://aclanthology.org/2026.findings-acl.584/
+- Finding: semantically similar memories may be wrong under different goals/constraints; intent-aware indexing reduces retrieval noise.
+- RELAY impact: context retrieval must include goal/action/entity intent, not similarity alone.
+
+### Lightweight LLM Agent Memory with Small Language Models
+
+- Year: 2026
+- Type: ACL
+- Confidence: High
+- URL: https://aclanthology.org/2026.acl-long.588/
+- Finding: memory retrieval/writing/consolidation can be split across tiers and driven efficiently with smaller models.
+- RELAY impact: reinforces cheap local/small-model memory operations as a benchmark target.
+
+## Tool interfaces, MCP, and CLI assumptions
+
+### Model Context Protocol Tool Descriptions Are Smelly!
+
+- Year: 2026
+- Type: empirical preprint
+- Confidence: Medium
+- URL: https://arxiv.org/abs/2602.14878
+- Finding: 97.1% of 856 studied tool descriptions had at least one identified smell; better descriptions improved median task success but often increased execution steps; compact variants could retain reliability with lower token overhead.
+- RELAY impact: "MCP is bad" is too simple. Interface quality and compactness matter.
+
+### From Docs to Descriptions: Smell-Aware Evaluation of MCP Server Descriptions
+
+- Year: 2026
+- Type: empirical preprint
+- Confidence: Medium
+- URL: https://arxiv.org/abs/2602.18914
+- Finding: description quality affects tool selection and reliability at ecosystem scale.
+- RELAY impact: command metadata quality is a correctness requirement.
+
+### Semantic Tool Discovery for Large Language Models
+
+- Year: 2026
+- Type: preprint
+- Confidence: Medium
+- URL: https://arxiv.org/abs/2603.20313
+- Finding: dynamically selecting a few relevant tools can dramatically reduce schema-token overhead on the authors' benchmark.
+- RELAY impact: benchmark dynamic tool discovery against CLI/skills.
+
+### SCOUT / Hybrid Semantic Tool Discovery for Enterprise MCP Gateway
+
+- Year: 2026
+- Type: production/preprint report
+- Confidence: Medium
+- URL: https://arxiv.org/abs/2608.23992
+- Finding: reports a production architecture exposing meta-tools for tool search/execution rather than full catalogs, with large tool-token reductions.
+- RELAY impact: a thin remote MCP can remain efficient if capabilities are selected dynamically.
+
+## Government: agent security, identity, evaluation
+
+### NIST/CAISI — Insights into AI Agent Security from a Large-Scale Red-Teaming Competition
+
+- Date: 2026-03-23
+- Type: U.S. government research summary
+- Confidence: High
+- URL: https://www.nist.gov/blogs/caisi-research-blog/insights-ai-agent-security-large-scale-red-teaming-competition
+- Finding: more than 250,000 attack attempts from over 400 participants against 13 frontier models; at least one successful hijacking attack against every target model.
+- RELAY impact: project/tool content is untrusted input; model-only prompt defenses are insufficient.
+
+### NIST NCCoE — Software and AI Agent Identity and Authorization Concept Paper
+
+- Date: 2026-02-05
+- Type: U.S. government draft concept paper
+- Confidence: High for problem framing; draft status for prescriptions
+- URL: https://csrc.nist.gov/pubs/other/2026/02/05/accelerating-the-adoption-of-software-and-ai-agent/ipd
+- Finding: calls out identification, authorization, auditing, non-repudiation, and prompt-injection controls for software/AI agents.
+- RELAY impact: first-class client/agent identity and delegated authorization must be architecture-level concerns.
+
+### NIST — Back to the Future: Why Agentic AI Needs a Strong Identity Foundation
+
+- Date: 2026-08-27
+- Type: U.S. government cybersecurity guidance/blog
+- Confidence: High for design guidance
+- URL: https://www.nist.gov/blogs/cybersecurity-insights/back-future-why-agentic-ai-needs-strong-identity-foundation
+- Finding: warns against shared user credentials, static/long-lived credentials, broad scopes, unsandboxed local-agent access, and excessive human-in-the-loop prompts causing consent fatigue.
+- RELAY impact: scoped/revocable authority, agent identity, sandboxing, and risk-adaptive approvals.
+
+### NIST AI 800-2 — Practices for Automated Benchmark Evaluations of Language Models
+
+- Date: 2026-01
+- Type: U.S. government initial public draft
+- Confidence: High for evaluation methodology; draft status
+- URL: https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.800-2.ipd.pdf
+- Finding: evaluation should define objectives/measurement constructs, choose fitting benchmarks/baselines, and report protocol, uncertainty, cost controls, and results sufficiently for valid interpretation/reproducibility.
+- RELAY impact: Context Gauntlet and cost comparisons need explicit measurement protocols.
+
+### NIST AI Agent Standards Initiative
+
+- Date: 2026-02-17
+- Type: U.S. government initiative
+- Confidence: High
+- URL: https://www.nist.gov/news-events/news/2026/02/announcing-ai-agent-standards-initiative-interoperable-and-secure
+- Finding: agent interoperability, protocol development, security, and identity are active standardization areas.
+- RELAY impact: avoid locking core behavior to one current protocol.
+
+### U.S. GAO — Artificial Intelligence: An Accountability Framework
+
+- Date: 2021-06-30
+- Type: U.S. government accountability framework
+- Confidence: High
+- URL: https://www.gao.gov/products/gao-21-519sp
+- Finding: emphasizes governance, data, performance, and monitoring across the AI lifecycle and notes that system inputs/operations may not be visible.
+- RELAY impact: continuous monitoring, traceability, and auditable operating state support the dashboard/transaction design.
+
+## Government and historical human factors
+
+### NASA — Human factors of the high technology cockpit
+
+- Year: 1990
+- Type: NASA conference paper
+- Confidence: Historical
+- URL: https://ntrs.nasa.gov/citations/19910001630
+- Finding: reliable automation can reduce physical workload while retaining high cognitive demand and creating new serious human-error/complacency risks.
+- RELAY impact: automation does not eliminate the need for situation awareness.
+
+### NASA — Potential benefits and hazards of increased reliance on cockpit automation
+
+- Year: 1990
+- Type: NASA-supported conference paper
+- Confidence: Historical
+- URL: https://ntrs.nasa.gov/citations/19920056683
+- Finding: many automation problems arise at the human-automation interface, not from equipment failure.
+- RELAY impact: UX/authority visibility and recovery design are safety features.
+
+### NASA — Analysis of Autopilot Behavior
+
+- Year: 1998
+- Type: NASA technical-report record
+- Confidence: Historical
+- URL: https://ntrs.nasa.gov/citations/20020066672
+- Finding: "automation surprises" can result from mismatch between operator mental model and actual automated behavior.
+- RELAY impact: dashboard must make current automation state, authority, and actual changes legible.
+
+### Bainbridge — Ironies of Automation
+
+- Year: 1983
+- Type: classic peer-reviewed automation paper
+- Confidence: Historical
+- URL: https://doi.org/10.1016/0005-1098(83)90046-8
+- Finding: automation can expand rather than eliminate human-operator problems, especially when humans are left to handle abnormal cases.
+- RELAY impact: do not automate routine work then leave users blind during rare failures.
+
+### Endsley & Kiris — The Out-of-the-Loop Performance Problem
+
+- Year: 1995
+- Type: peer-reviewed human-factors study
+- Confidence: Historical
+- URL: https://doi.org/10.1518/001872095779064555
+- Finding: automation can reduce situation awareness and impair manual takeover after failure.
+- RELAY impact: maintain user visibility and meaningful control.
+
+### Parasuraman & Riley — Humans and Automation: Use, Misuse, Disuse, Abuse
+
+- Year: 1997
+- Type: peer-reviewed human-factors paper
+- Confidence: Historical
+- URL: https://doi.org/10.1518/001872097778543886
+- Finding: overreliance, underuse due false alarms, and poorly designed automation can all undermine performance.
+- RELAY impact: warning quality, false positives, trust calibration, and automation policy matter.
+
+## UEFN / Unreal authoritative platform evidence
+
+### Epic — Unreal MCP in Unreal Editor 5.8
+
+- Year: 2026
+- Type: first-party platform documentation
+- Confidence: High
+- URL: https://dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor
+- Finding: Unreal MCP is Experimental; features are incomplete/missing and APIs/data formats may change.
+- RELAY impact: UEFN MCP must be version/capability-gated behind an adapter, never a core dependency.
+
+### Epic — Fortnite 42.00 Ecosystem Updates
+
+- Date: 2026-08-20
+- Type: first-party platform release notes
+- Confidence: High
+- URL: https://dev.epicgames.com/documentation/fortnite/42-00-fortnite-ecosystem-updates-and-release-notes
+- Finding: Unreal MCP became available in UEFN.
+- RELAY impact: valuable first-party integration path exists, but inherits experimental surface risk.
+
+## Research gaps still open
+
+- independent replication of very recent 2026 MCP/tool-discovery claims
+- real token/cost comparison of RELAY CLI+skills versus thin dynamic MCP
+- security behavior of different cloud ChatGPT connector paths
+- exact UEFN MCP compatibility/version surface in UEFN, not only base Unreal
+- practical sandboxing model for local Windows RELAY workers
+- retention/privacy requirements for public consumer use
+- user studies for approval/alarm fatigue in this exact development workflow
+- modality-preserving retrieval for screenshots and visual history

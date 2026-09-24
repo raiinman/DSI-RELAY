@@ -36,6 +36,7 @@ Deliver:
 - crash recovery, durable-job, restore-test, migration, and outage review
 - observability truth, sampling, causality, detector quality, and instrumentation-overhead review
 - simplicity, configuration-space, time-to-first-value, and operability review
+- public-release legal/licensing, platform-terms, branding, asset-rights, and privacy-claims review
 
 Exit criteria:
 
@@ -92,6 +93,10 @@ Research/prototype:
 - configuration-space inventory and supported-profile prototype
 - relay doctor/self-diagnostic prototype
 - feature-complexity/retirement review
+- dependency/license inventory prototype
+- companion-license boundary review
+- Epic/UEFN terms compatibility register prototype
+- asset provenance/license metadata prototype
 - durable job/unknown-outcome prototype
 - crash/fault-injection harness
 - backup/restore and migration-recovery prototype
@@ -320,6 +325,11 @@ Before public beta:
 - remote-processor/provider policy documentation
 - local-only/private-mode verification
 - license decision
+- first-party companion/plugin license review
+- dependency/license notice inventory
+- Epic/UEFN/Fortnite current-terms and branding review
+- privacy/telemetry notice review
+- AI-generated-content claims review
 - contribution policy
 - telemetry policy
 - accessibility review
@@ -327,6 +337,7 @@ Before public beta:
 - compatibility matrix
 - public sample projects/fixtures
 - release channels
+- legal review of unresolved high-impact distribution questions
 - third-party adapter SDK/conformance tests
 - adapter artifact/provenance/dependency policy
 - curated/local installation workflow before any open marketplace

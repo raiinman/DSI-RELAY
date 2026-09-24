@@ -17,6 +17,7 @@
 - RESILIENCE_AND_RECOVERY.md — crashes, retries, checkpoints, backups, migrations, outages, and recovery verification.
 - OBSERVABILITY_AND_TRUTH.md — evidence quality, sampling, causality, instrumentation overhead, alert quality, and monitoring-pipeline health.
 - SIMPLICITY_AND_OPERABILITY.md — golden path, configuration/feature budgets, secure defaults, self-diagnostics, progressive depth, and toil.
+- LEGAL_LICENSING_AND_DISTRIBUTION.md — platform terms, licenses, redistribution, generated-content rights, provenance, and public-release legal gates.
 - UEFN_V0.1.md — initial UEFN/Fortnite integration and runtime instrumentation plan.
 
 ## Research and governance

@@ -31,6 +31,7 @@ Deliver:
 - index continuity and storage recovery review
 - Windows per-user host review
 - third-party adapter isolation, provenance, permission, compatibility, and distribution review
+- project-data classification, remote-egress, credential-broker, embedding-privacy, and local-only-mode review
 
 Exit criteria:
 
@@ -50,6 +51,10 @@ Exit criteria:
 - local model execution is benchmarked rather than assumed cheaper
 - the Windows background host model is compatible with interactive tool integrations
 - adapter architecture is out-of-process by default and has a conceptual capability manifest, provenance model, and quarantine behavior
+- remote processing is gated by explicit project/destination data policy
+- credentials remain outside model-visible context
+- derived embeddings/summaries/captures inherit sensitivity by default
+- local-only/private mode has testable egress semantics
 
 ## Phase 1 — Technical spike and stack selection
 
@@ -72,6 +77,10 @@ Research/prototype:
 - secure update/supply-chain assumptions
 - adapter broker/worker isolation prototype
 - adapter manifest and compatibility-contract prototype
+- data-classification and sensitivity-propagation prototype
+- credential-broker prototype
+- egress-policy/provider-profile prototype
+- local-only network-behavior test harness
 
 Exit criteria:
 
@@ -96,6 +105,9 @@ Build:
 - transaction foundation
 - usage metrics foundation
 - provenance/trust metadata foundation
+- data-classification and egress-policy foundation
+- credential-handle/broker foundation
+- outbound-processing ledger foundation
 - agent/client identity attribution foundation
 - adapter broker and worker lifecycle foundation
 - adapter manifest/capability enforcement foundation
@@ -280,6 +292,8 @@ Before public beta:
 - migration testing
 - security/threat review
 - privacy/data-retention docs
+- remote-processor/provider policy documentation
+- local-only/private-mode verification
 - license decision
 - contribution policy
 - telemetry policy

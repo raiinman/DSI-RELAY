@@ -35,6 +35,7 @@ Deliver:
 - team/workspace identity, delegated-authority, revocation, and concurrency review
 - crash recovery, durable-job, restore-test, migration, and outage review
 - observability truth, sampling, causality, detector quality, and instrumentation-overhead review
+- simplicity, configuration-space, time-to-first-value, and operability review
 
 Exit criteria:
 
@@ -75,6 +76,7 @@ Research/prototype:
 - local persistent storage, reconciliation, integrity, and recovery
 - filesystem/watch strategy
 - dashboard framework
+- progressive-depth/personal-first UX prototype
 - command/schema library
 - packaging/service installation
 - logging/diagnostics
@@ -86,6 +88,10 @@ Research/prototype:
 - evidence-quality/observability pipeline prototype
 - sampling/completeness metadata prototype
 - instrumentation-overhead benchmark
+- personal golden-path/time-to-first-value benchmark
+- configuration-space inventory and supported-profile prototype
+- relay doctor/self-diagnostic prototype
+- feature-complexity/retirement review
 - durable job/unknown-outcome prototype
 - crash/fault-injection harness
 - backup/restore and migration-recovery prototype
@@ -201,6 +207,8 @@ Exit criteria:
 - dashboard invokes the same command system as CLI
 - no dashboard-only capability
 - plain-language primary status
+- common personal workflows do not require team/enterprise concepts
+- Advanced is not required for normal supported tasks
 - raw technical detail accessible progressively
 
 ## Phase 6 — UEFN static/editor adapter
@@ -304,6 +312,8 @@ Exit criteria:
 Before public beta:
 
 - installer/update path
+- public onboarding/time-to-first-value acceptance test
+- configuration/support-profile documentation
 - migration testing
 - security/threat review
 - privacy/data-retention docs

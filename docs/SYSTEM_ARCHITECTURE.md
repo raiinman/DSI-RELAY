@@ -346,10 +346,13 @@ It should describe:
 - external-tool compatibility
 - declared capabilities/permissions
 - commands/capabilities exposed to RELAY
+- executable companion components, such as in-tool plugins/scripts/helpers/runtime instrumentation
 - dependency/component metadata
 - update channel/source
 - integrity identifier/digest
 - optional review/curation metadata
+
+Each executable companion component should retain its own version, digest, provenance, and compatibility information where practical.
 
 The manifest cannot expand RELAY policy; it requests capabilities that policy may approve or deny.
 

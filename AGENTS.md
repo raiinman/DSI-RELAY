@@ -96,7 +96,7 @@ When the user requests a durable behavior change, record it here or in the relev
 - RELAY must include a dashboard as a first-class interface for project status, observability, approvals, history, diagnostics, tests, assets, and integrations.
 - The dashboard must never be the only way to perform an operation. Headless CLI execution remains canonical, and dashboard, MCP, REST, WebSocket, and AI clients must use the same underlying command system.
 - Dashboard language should be plain and readable for someone unfamiliar with MCP or game-development infrastructure, with advanced detail available progressively rather than forced into the primary view.
-- RELAY is a reusable product, not a one-project tool. Core architecture, UI, commands, schemas, storage, tests, and documentation must not assume AquaShift or any other single project.
+- RELAY is a reusable product, not a one-project tool. Core architecture, UI, commands, schemas, storage, tests, and documentation must not assume any single project.
 - Multi-project operation is first-class: users must be able to add, discover, inspect, switch, archive, and remove projects while keeping each project's state, history, tests, assets, configuration, and permissions isolated.
 - Project-specific names, rules, fixtures, and examples belong in examples, templates, test fixtures, or project configuration, never hard-coded into RELAY core behavior.
 - Design for eventual public release from the start: no personal paths, machine-specific assumptions, private repository names, secrets, account identifiers, or user-specific defaults may be embedded in distributable code or documentation.

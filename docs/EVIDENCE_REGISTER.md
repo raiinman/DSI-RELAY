@@ -771,3 +771,137 @@ Confidence labels:
 - URL: https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-downgrading
 - Finding: downgrading application binaries preserves app data, and data written by the newer version may not be backward compatible.
 - RELAY impact: package rollback cannot be assumed to reverse RELAY data/schema migrations.
+
+
+## Observability, monitoring, and evidence-quality sources
+
+### NIST AI 800-4 — Challenges to the Monitoring of Deployed AI Systems
+
+- Year: 2026
+- Type: U.S. government report
+- Confidence: High
+- URL: https://www.nist.gov/publications/challenges-monitoring-deployed-ai-systems-center-ai-standards-and-innovation
+- Finding: real-world post-deployment monitoring is needed to validate expected behavior and surface unforeseen outputs/consequences; validated monitoring methods and terminology remain immature and fragmented.
+- RELAY impact: monitoring output is evidence requiring coverage/quality metadata, not automatic truth.
+
+### NIST AI 800-3 — Expanding the AI Evaluation Toolbox with Statistical Models
+
+- Year: 2026
+- Type: U.S. government measurement-science report
+- Confidence: High
+- URL: https://www.nist.gov/publications/expanding-ai-evaluation-toolbox-statistical-models
+- Finding: common evaluation approaches can make hidden assumptions or produce invalid uncertainty estimates; fixed-benchmark and generalized performance are distinct measurement targets.
+- RELAY impact: learned/probabilistic findings need uncertainty/calibration context and field performance should not be inferred from one benchmark score.
+
+### NIST SP 800-137 / 800-137A — Information Security Continuous Monitoring
+
+- Years: 2011 / 2020
+- Type: U.S. government continuous-monitoring guidance
+- Confidence: High
+- URLs:
+  - https://csrc.nist.gov/pubs/sp/800/137/final
+  - https://csrc.nist.gov/pubs/sp/800/137/a/final
+- Finding: monitoring is an ongoing assurance program whose strategy, operations, data, completeness, and effectiveness themselves require assessment.
+- RELAY impact: the observability pipeline needs health/coverage monitoring rather than being assumed functional.
+
+### NIST SP 800-92 — Guide to Computer Security Log Management
+
+- Year: 2006
+- Type: U.S. government log-management guidance
+- Confidence: High
+- URL: https://csrc.nist.gov/pubs/sp/800/92/final
+- Finding: effective logs require deliberate collection, infrastructure, management, analysis, storage, and lifecycle processes.
+- RELAY impact: logs are managed evidence with provenance/retention/quality concerns, not an infallible truth stream.
+
+### Gray Failure: The Achilles' Heel of Cloud-Scale Systems
+
+- Year: 2017
+- Type: HotOS / Microsoft production-systems research
+- Confidence: High
+- URL: https://www.microsoft.com/en-us/research/publication/gray-failure-achilles-heel-cloud-scale-systems/
+- Finding: production systems can suffer "differential observability," where applications experience failure while failure detectors do not see the problem.
+- RELAY impact: quiet health checks are not proof of healthy project/tool behavior; reconcile multiple perspectives.
+
+### OpenTelemetry / W3C Trace Context sampling and security
+
+- Type: first-party/open standard documentation
+- Confidence: High for protocol semantics
+- URLs:
+  - https://opentelemetry.io/docs/specs/otel/trace/tracestate-probability-sampling/
+  - https://opentelemetry.io/docs/concepts/sampling/
+  - https://www.w3.org/TR/trace-context/
+- Finding: sampling intentionally drops trace data; inconsistent decisions can create fragmented/unusable traces. W3C warns tracing metadata can be abused to create monitoring overhead, trace collisions, or monitoring denial.
+- RELAY impact: sampling/completeness must be visible, exact counts must respect sampling, and observability metadata remains untrusted input.
+
+### An empirical study on the performance overhead of code instrumentation in containerised microservices
+
+- Year: 2025
+- Type: Journal of Systems and Software peer-reviewed study
+- Confidence: High
+- DOI: 10.1016/j.jss.2025.112573
+- Finding: more than 5,000 experiments found measurable performance overhead from automatic observability instrumentation, including substantial effects in heavier cases.
+- RELAY impact: instrumentation/probes need overhead budgets and performance diagnostics must account for observer effects.
+
+### Investigating Performance Overhead of Distributed Tracing in Microservices and Serverless Systems
+
+- Year: 2025
+- Type: ICPE Companion paper
+- Confidence: Medium-High
+- URL: https://atlarge-research.com/pdfs/2025-tracing-overhead-anou.pdf
+- Finding: distributed tracing materially changed throughput and latency across evaluated configurations.
+- RELAY impact: reinforces targeted instrumentation and benchmarked low/high detail modes.
+
+### Quantifying and mitigating alarm fatigue caused by fault detection systems
+
+- Year: 2026
+- Type: Reliability Engineering & System Safety peer-reviewed
+- Confidence: High
+- DOI: 10.1016/j.ress.2025.111890
+- Finding: repeated false alarms create a cry-wolf effect; common detector metrics do not fully capture operational usability.
+- RELAY impact: alert volume, duplication, false discovery/noise, and operator response matter alongside model metrics.
+
+### Research note: The impact of absolute false positive rates on operational reliability
+
+- Year: 2026
+- Type: Reliability Engineering & System Safety peer-reviewed short communication
+- Confidence: High
+- DOI: 10.1016/j.ress.2026.112760
+- Finding: conventional accuracy/precision/recall/F1 can mask operationally unacceptable absolute false-positive volumes.
+- RELAY impact: detector dashboards need absolute alert-rate metrics, not only benchmark percentages.
+
+### Time, Causality, and Observability Failures in Distributed AI Inference Systems
+
+- Year: 2026
+- Type: recent preprint
+- Confidence: Medium
+- Source: arXiv 2604.21361
+- Finding: controlled experiments found small clock skew could make traces causally inconsistent while the underlying distributed AI pipeline remained functionally correct.
+- RELAY impact: wall-clock ordering is insufficient for causal claims; prefer explicit relationships/sequence data and record clock quality.
+
+### Accurate Distributed Tracing for Large-Scale AI Infrastructure
+
+- Year: 2026
+- Type: very recent preprint
+- Confidence: Medium-Low pending independent validation
+- Source: arXiv 2609.23301
+- Finding: argues that insufficient time synchronization can create causal inversions and unreliable fault attribution in large AI systems.
+- RELAY impact: strengthens clock-quality/causal-order research, but precise reported thresholds should not become RELAY defaults without replication.
+
+### NASA sensor-validation work
+
+- Years: 1990s
+- Type: U.S. government/NASA technology reports
+- Confidence: Historical
+- URLs:
+  - https://spinoff.nasa.gov/node/10047
+  - https://ntrs.nasa.gov/citations/20050180660
+- Finding: mission-critical automation required explicit validation of sensor inputs because bad sensor data caused operational disruption.
+- RELAY impact: the older lesson still applies: validate evidence sources rather than trusting instrumentation merely because it is automated.
+
+### Goodhart-style metric distortion
+
+- Type: established measurement/organizational phenomenon with empirical studies
+- Confidence: Historical/High for general risk
+- Example: https://pmc.ncbi.nlm.nih.gov/articles/PMC6541803/
+- Finding: when measures become targets, behavior can optimize the metric rather than the intended outcome.
+- RELAY impact: do not optimize token savings, cache hit rate, alert count, or AI-call reduction without correctness/safety guardrails.

@@ -343,3 +343,16 @@ Raw file transfer is an explicit disclosure type rather than an automatic connec
 ## Scanner semantics
 
 Secret/privacy scanners are useful detectors, but a scan with no findings does not prove project data is public. Explicit project/path/artifact policy can be stricter than automated detection.
+
+
+## Backup and recovery data policy
+
+Backups, snapshots, migration copies, crash dumps, and recovery bundles inherit the sensitivity of the data they contain.
+
+Requirements:
+
+- recovery copies follow project/workspace retention and access policy
+- secret/credential material is not copied into ad hoc recovery bundles unless explicitly required
+- encrypted backup may be required for sensitive RELAY-owned state
+- support/diagnostic recovery artifacts remain previewable and are not uploaded automatically
+- restoring older state must not silently revive revoked credentials, stale provider policy, or outdated access grants without revalidation

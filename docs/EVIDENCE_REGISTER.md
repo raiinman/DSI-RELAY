@@ -88,6 +88,24 @@ Confidence labels:
 
 ## Tool interfaces, MCP, and CLI assumptions
 
+### SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering
+
+- Year: 2024
+- Type: NeurIPS peer-reviewed
+- Confidence: High
+- URL: https://proceedings.neurips.cc/paper_files/paper/2024/hash/5a7c947568c1b1328ccc5230172e1e7c-Abstract-Conference.html
+- Finding: specially designed agent-computer interfaces materially affected software-agent performance.
+- RELAY impact: the real question is interface quality, not CLI-versus-MCP branding. RELAY needs an agent-oriented interface benchmark.
+
+### How Many Tools Should an LLM Agent See? A Chance-Corrected Answer
+
+- Year: 2026
+- Type: preprint
+- Confidence: Medium
+- URL: https://arxiv.org/abs/2605.24660
+- Finding: adaptive shortlists can preserve tool coverage while presenting far fewer tools; showing too many or too few both create failure modes.
+- RELAY impact: capability/tool shortlist depth should be adaptive and measured, not a fixed large catalog.
+
 ### Model Context Protocol Tool Descriptions Are Smelly!
 
 - Year: 2026

@@ -568,3 +568,39 @@ Integrations may expose multiple capture modes:
 - temporary high-detail
 
 The command/capability model should expose the expected observability cost/coverage trade-off where practical.
+
+
+## Complexity containment
+
+Core architecture should keep optional capabilities lazy.
+
+- inactive adapters do not start workers unless needed
+- team/organization subsystems do not burden personal workflows
+- high-detail observability stays off until requested/triggered
+- remote/provider integrations are optional for basic local value
+- advanced policy/configuration is loaded/evaluated only where relevant
+
+The data model may support future capabilities without exposing them in the default UX.
+
+## Configuration model
+
+Configuration is versioned product state.
+
+The configuration system should support:
+
+- defaults
+- validation
+- constraints/dependencies
+- project versus installation scope
+- migration
+- provenance/source of detected values
+- reset/re-detect behavior
+- supported/recommended profile metadata
+
+Configuration must be inspectable from CLI/dashboard without requiring users to reverse-engineer files.
+
+## Diagnostics interface
+
+RELAY Core should expose a normalized diagnostic/health command set that the CLI and dashboard can render consistently.
+
+A future relay doctor operation should aggregate subsystem health without implementing separate diagnostic logic in the UI.

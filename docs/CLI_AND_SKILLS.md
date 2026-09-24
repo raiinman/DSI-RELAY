@@ -248,3 +248,19 @@ Every local-AI integration should be evaluated against the same task using:
 - larger MCP tool catalog
 
 Measure context overhead, calls, tokens, latency, success, and error recovery before choosing the default.
+
+
+## Operability commands
+
+The CLI should provide a small, memorable health surface.
+
+Conceptual commands:
+
+~~~
+relay status
+relay doctor
+~~~
+
+Common diagnostic output should be concise by default and include structured detail on request.
+
+Normal supported workflows should not require users/agents to memorize internal daemon, database, IPC, adapter-broker, or policy implementation details.

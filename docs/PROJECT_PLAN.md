@@ -183,6 +183,9 @@ From the first implementation:
 - evidence retention/quota/privacy lifecycle
 - native-tool-first adapter policy
 - benchmarked defaults rather than single-demo optimization
+- third-party adapters isolated from RELAY Core by default
+- adapter capability manifests, exact-version compatibility, provenance, and update/recovery controls
+- no requirement for an open extension marketplace before these controls are proven
 
 ## Open implementation decisions
 

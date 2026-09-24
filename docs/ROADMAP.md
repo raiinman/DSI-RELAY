@@ -4,7 +4,7 @@ The roadmap is ordered to prove cost and architecture fundamentals before buildi
 
 ## Phase 0 — Documentation baseline
 
-Status: In progress
+Status: Complete (initial planning baseline)
 
 Deliver:
 

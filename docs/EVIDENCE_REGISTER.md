@@ -480,3 +480,22 @@ Confidence labels:
   - https://genai.owasp.org/llmrisk/llm072025-system-prompt-leakage/
 - Finding: prompt injection can lead to sensitive-data disclosure and connected-system actions; credentials should not be embedded in prompts/system instructions.
 - RELAY impact: credentials become opaque capabilities resolved outside model context, and multimodal input remains untrusted.
+
+
+### CodeCloak: Evaluating and Mitigating Code Leakage by LLM Code Assistants
+
+- Year: 2024
+- Type: research preprint
+- Confidence: Medium
+- Source: arXiv 2404.09066
+- Finding: cloud code assistants can receive proprietary repository context, creating a code-disclosure trade-off; the paper evaluates prompt transformations intended to reduce leakage while preserving utility.
+- RELAY impact: remote coding/model clients should receive policy-selected minimal context rather than unrestricted project access.
+
+### When GPT Spills the Tea: Knowledge File Leakage in GPTs
+
+- Year: 2025
+- Type: ACL peer-reviewed
+- Confidence: High
+- URL: https://aclanthology.org/2025.acl-long.936/
+- Finding: analysis found multiple leakage pathways involving prompts, retrieval, execution environments, and metadata such as file titles/types/sizes.
+- RELAY impact: privacy classification must cover metadata and execution-derived artifacts, not only raw file content.

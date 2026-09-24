@@ -450,3 +450,29 @@ RELAY will re-check it before making changes.
 Avoid silently replaying stale approvals.
 
 Multi-agent views should show bounded task ownership and conflicts rather than a noisy transcript of every agent message.
+
+
+## Recovery UX
+
+The dashboard should distinguish:
+
+- process running
+- system reconciling
+- degraded capability
+- blocked recovery
+- manual intervention required
+- healthy/verified
+
+A restarted host should not immediately show healthy if RELAY is still checking storage, project state, or uncertain external effects.
+
+For an uncertain action, plain language should explain:
+
+- what RELAY tried to do
+- whether the outside tool may have completed it
+- why RELAY is not retrying blindly
+- what reconciliation is running
+- whether user confirmation is needed
+
+Backup UI should distinguish "backup created" from "restore tested."
+
+Migration/update UX should show when rollback of the application would not automatically roll back data.

@@ -112,5 +112,4 @@ When the user requests a durable behavior change, record it here or in the relev
 
 ## Child DOX Index
 
-- No child DOX files exist yet. The root AGENTS.md currently owns the entire repository.
-- Before adding substantive project structure, recursively scan the repository, create child AGENTS.md files for durable boundaries where needed, and replace this entry with the actual direct-child index.
+- `docs/AGENTS.md` — owns durable product, architecture, research, roadmap, security, UX, and operating documentation under `docs/`.

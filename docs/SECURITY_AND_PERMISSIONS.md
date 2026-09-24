@@ -4,6 +4,14 @@
 
 RELAY should automate boring work aggressively while making meaningful side effects visible, attributable, and recoverable.
 
+Security assumptions:
+
+- project/tool content is untrusted data
+- model-only prompt guardrails are insufficient
+- a local agent should not silently inherit all authority of the human account
+- approval frequency itself can become a security failure through consent fatigue
+- identity, authority, and action intent must remain distinguishable in audit records
+
 ## Action categories
 
 ### Observe
@@ -132,6 +140,52 @@ Duplicate requests are expected in distributed/agent workflows.
 
 Side-effecting operations should use an idempotency mechanism where appropriate so retrying a request does not silently apply the same mutation twice.
 
+## Untrusted content and prompt injection
+
+RELAY will ingest project files, documentation, source code, logs, repositories, downloaded assets, web-derived material, telemetry, and tool output. Any of these may contain malicious or accidental natural-language instructions.
+
+Required boundaries:
+
+- retrieved content is data unless it comes from an explicitly authorized instruction/policy source
+- attach provenance, source type, project, trust level, and freshness/version metadata where practical
+- the Context Compiler must not elevate retrieved text into higher-authority policy/instructions
+- tool output should be normalized/escaped rather than blindly concatenated into system instructions
+- actions must still pass structured command validation and permissions even if retrieved content asks for an action
+- memory derived from untrusted content inherits its provenance/trust constraints
+- suspicious content should remain inspectable without requiring the model to execute/follow it
+- preserve an evidence-to-action audit chain for important writes
+
+Security tests must include indirect prompt injection through code comments, README/docs, logs, issue text, asset metadata, and tool output.
+
+## Agent/client identity and delegated authority
+
+Where technically supported:
+
+- identify the requesting AI/client separately from the human user
+- record both requester and delegating/approving user for important actions
+- prefer short-lived, revocable, audience/scoped credentials over shared static keys
+- minimize standing privilege
+- scope authority by project and action category
+- require new authorization when a job materially expands beyond the approved scope
+- do not expose arbitrary shell execution through remote interfaces
+- sandbox local workers/agents where practical instead of running every operation with broad user authority
+
+Local-only implementations may initially lack ideal agent-native identity support; that limitation must be explicit rather than hidden.
+
+## Risk-adaptive approvals
+
+Human approval is not a substitute for authorization design.
+
+To reduce consent fatigue:
+
+- batch related actions into a bounded change plan/flight plan
+- show maximum intended scope before execution
+- request another approval when scope/risk materially changes
+- avoid approval prompts for repeated low-risk read-only work
+- do not train users to click Allow for every trivial tool call
+- track approval frequency and low-value/repeated prompts during usability tests
+- make revoke/pause simple and immediate
+
 ## Secrets
 
 Never place secrets in:
@@ -172,6 +226,23 @@ Each project should have separate:
 - integration references
 
 Cross-project operations must be explicit.
+
+## Local execution hardening
+
+The local service is powerful because it can touch developer tools and project files.
+
+Requirements to investigate before public beta:
+
+- process isolation/sandboxing boundaries
+- minimum filesystem permissions
+- explicit allowed project roots
+- path traversal/symlink defenses
+- command allowlists through the registry
+- no remote raw-shell passthrough
+- controlled subprocess environment
+- resource/time limits for integrations
+- signed/verified update strategy
+- dependency and supply-chain scanning
 
 ## Remote gateway
 
@@ -227,7 +298,7 @@ Diagnostic export must:
 
 ## Public-release security work
 
-Before public beta:
+Security work begins during architecture/implementation, not only at the public-beta gate. Before public beta, verify:
 
 - threat model
 - remote gateway review

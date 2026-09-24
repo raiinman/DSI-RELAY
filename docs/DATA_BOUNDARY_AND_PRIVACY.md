@@ -318,3 +318,28 @@ Phase 1+ tests should include:
 - jurisdiction/legal requirements for public distribution
 
 These must be resolved through Phase 1 research and later public-hardening work rather than silently assumed.
+
+
+## Metadata sensitivity
+
+Project data policy also covers metadata.
+
+Examples may include filenames, paths, repository/project/branch names, asset titles, document types, sizes, timestamps, usernames, account identifiers, and other labels that can reveal private project information.
+
+## Remote AI access model
+
+Connecting a remote AI client does not automatically expose the whole project through RELAY.
+
+Preferred flow:
+
+1. client requests a fact, result, or operation
+2. RELAY retrieves locally
+3. project policy and task scope are applied
+4. the Egress Gate selects the allowed payload
+5. only that payload is sent
+
+Raw file transfer is an explicit disclosure type rather than an automatic connection feature.
+
+## Scanner semantics
+
+Secret/privacy scanners are useful detectors, but a scan with no findings does not prove project data is public. Explicit project/path/artifact policy can be stricter than automated detection.

@@ -349,7 +349,9 @@ Public adapters are executable third-party supply-chain components and must be t
 - apply time/resource limits and terminate/quarantine adapters that violate them
 - adapter failure must not corrupt or crash RELAY Core
 
-The exact Windows isolation mechanism remains a Phase 1 research decision.
+Out-of-process execution provides fault isolation but is not, by itself, a security sandbox. Security isolation requires OS-enforced restrictions or an equivalent brokered capability boundary. The exact Windows isolation mechanism remains a Phase 1 research decision.
+
+If an integration also installs code inside a target application, that companion component is part of the adapter's executable supply chain and must be inventoried separately.
 
 ### Capability manifest
 

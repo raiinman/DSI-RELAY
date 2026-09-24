@@ -74,7 +74,7 @@ Normal AI use should stop at the lowest level sufficient for the next correct de
 
 ## Context Compiler
 
-The Context Compiler builds a task-specific package from:
+The Context Compiler is not a generic summarizer. It builds a task-specific, traceable package from:
 
 - current goal
 - selected project
@@ -87,6 +87,11 @@ The Context Compiler builds a task-specific package from:
 - recent interactions where useful
 - client capabilities
 - token/context budget
+- provenance/trust metadata
+- contextual intent/current objective
+- source freshness/version
+- conflicts between historical and current state
+- memory quality/confidence where available
 
 It should maximize:
 
@@ -100,6 +105,8 @@ while minimizing:
 - duplication
 - stale information
 - irrelevant history
+- context-mismatched memories
+- untrusted instruction-like text
 - token count
 
 ## Memory tiers
@@ -123,6 +130,26 @@ Durable history of changes and important events. Current state must not erase us
 Original logs, screenshots, captures, telemetry, command output, and source artifacts.
 
 The AI may forget an item from active context without RELAY deleting it.
+
+## Retrieval and memory quality
+
+Similarity alone is not sufficient for project memory.
+
+Retrieval should consider:
+
+- current goal/intent
+- action type
+- relevant entity/resource type
+- freshness/version
+- source authority/trust
+- whether the record describes current state or history
+- conflicts with newer state
+- prior quality/verification
+- causal/dependency relationship when available
+
+Derived memories should be removable/quarantinable independently of raw evidence. A previously successful agent trajectory is evidence, not an instruction template.
+
+For important AI-assisted actions, RELAY should be able to explain which stored items materially influenced the compiled context.
 
 ## Exact versus lossy information
 
@@ -207,7 +234,9 @@ Full suites remain available on demand and at important gates.
 
 ## Screenshots and visual evidence
 
-Capture may generate many images. Store all required evidence, but send only materially relevant images to AI unless the caller requests more.
+Capture may generate many images. Store required evidence according to retention policy, but send only materially relevant images to AI unless the caller requests more.
+
+Do not automatically convert all visual history into prose. When a task depends on visual evidence, preserve access to the original image/capture and its metadata so the model can inspect the modality that contains the evidence.
 
 Local comparison should identify unchanged/minor/significant differences where technically practical.
 
@@ -224,6 +253,24 @@ If content exceeds the budget:
 - state that more detail exists
 - never silently truncate an important finding
 
+## Evidence lifecycle and storage cost
+
+External memory can reduce model context while increasing local storage, privacy exposure, and index cost.
+
+Each evidence class should eventually define:
+
+- default retention/TTL
+- project quota contribution
+- pin/keep behavior
+- deduplication/content hash strategy
+- sensitive/secret handling
+- export/delete behavior
+- migration behavior
+- backup expectations
+- derived-index rebuildability
+
+"Context eviction is not deletion" means useful truth is recoverable outside the prompt. It does not require permanent retention of every raw byte.
+
 ## Usage observability
 
 Every meaningful job should record what can be measured, including:
@@ -238,8 +285,22 @@ Every meaningful job should record what can be measured, including:
 - elapsed time
 - retries
 - tests avoided/reused where measurable
+- local CPU/memory/storage/network cost where useful
+- evidence storage growth
 
 Aggregate views should help answer whether RELAY is actually reducing usage.
+
+## Measurement discipline
+
+Separate:
+
+- measured usage
+- derived usage
+- estimated counterfactual savings
+
+"Tokens avoided" is only measured when the alternative is actually run or can be computed directly from retained inputs. Otherwise label it as an estimate and state the assumption.
+
+Context/cost benchmark reports should pin the model/client/tool versions, workloads, baseline, settings, repetitions where relevant, and uncertainty/run-to-run variation.
 
 ## Context Gauntlet
 

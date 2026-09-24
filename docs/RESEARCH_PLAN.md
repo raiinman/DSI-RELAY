@@ -254,6 +254,12 @@ Government/current sources:
   https://www.nist.gov/blogs/cybersecurity-insights/back-future-why-agentic-ai-needs-strong-identity-foundation
 - NIST AI Agent Standards Initiative:
   https://www.nist.gov/news-events/news/2026/02/announcing-ai-agent-standards-initiative-interoperable-and-secure
+- NSA/CISA/FBI and partners, Deploying AI Systems Securely:
+  https://www.nsa.gov/Press-Room/Press-Releases-Statements/Press-Release-View/Article/3741371/nsa-publishes-guidance-for-strengthening-ai-system-security/
+- NSA/CISA/FBI and partners, AI Data Security:
+  https://www.nsa.gov/Press-Room/Press-Releases-Statements/Press-Release-View/Article/4192332/nsas-aisc-releases-joint-guidance-on-the-risks-and-best-practices-in-ai-data-se/
+- CISA/NCSC/NSA and partners, Guidelines for Secure AI System Development:
+  https://www.cisa.gov/news-events/alerts/2023/11/26/cisa-and-uk-ncsc-unveil-joint-guidelines-secure-ai-system-development
 
 Required threat areas:
 

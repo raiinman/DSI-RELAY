@@ -528,3 +528,17 @@ This protects shared projects from delayed approvals and concurrent human/agent 
 Removing or narrowing access should re-evaluate active and queued work, delegated sessions, pending approvals, resource claims, and connection use at defined safe boundaries.
 
 Historical audit records remain attributable after access changes, subject to retention/privacy policy.
+
+
+## Recovery authorization and uncertain effects
+
+Recovery automation must not widen authority.
+
+- retries preserve the original command/project/credential scope
+- a restarted job does not gain a fresh approval merely because it resumed
+- unknown-outcome operations require reconciliation before another non-idempotent write
+- compensating actions pass normal policy checks
+- restored/recovered state does not bypass current membership, credential, data-egress, or adapter policy
+- queued work is revalidated after policy or identity changes
+
+Recovery history remains attributable to the original logical job and actor chain.

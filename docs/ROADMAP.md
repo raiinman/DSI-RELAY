@@ -33,6 +33,7 @@ Deliver:
 - third-party adapter isolation, provenance, permission, compatibility, and distribution review
 - project-data classification, remote-egress, credential-broker, embedding-privacy, and local-only-mode review
 - team/workspace identity, delegated-authority, revocation, and concurrency review
+- crash recovery, durable-job, restore-test, migration, and outage review
 
 Exit criteria:
 
@@ -81,6 +82,9 @@ Research/prototype:
 - workspace/project role-plus-attribute policy prototype
 - project revision/conflict-detection prototype
 - revocation propagation tests
+- durable job/unknown-outcome prototype
+- crash/fault-injection harness
+- backup/restore and migration-recovery prototype
 - secure update/supply-chain assumptions
 - adapter broker/worker isolation prototype
 - adapter manifest and compatibility-contract prototype

@@ -176,3 +176,22 @@ Unreal MCP/UEFN MCP must be capability- and version-gated behind the UEFN adapte
 Status: Approved
 
 Implementation research may continue, but Phase 1 stack choices must not become durable architecture decisions until the Phase 0 adversarial-review exit criteria are satisfied.
+
+
+## D-034 — Local deterministic work and local model inference are separate decisions
+
+Status: Approved
+
+RELAY keeps deterministic parsing, indexing, filtering, validation, and similar work local by default. Model inference location is not assumed; local, cloud, and hybrid execution must be selected from measured quality, latency, privacy, utilization, and cost.
+
+## D-035 — File notifications are accelerators, not authoritative state
+
+Status: Approved
+
+Incremental file watching reduces work but can miss change details. RELAY requires reconciliation after continuity gaps and on startup, and indexing must be replay-safe.
+
+## D-036 — Operational indexes are rebuildable derived state
+
+Status: Approved direction
+
+RELAY's project indexes and normalized state do not replace the underlying project or authoritative engine/runtime state. Phase 1 storage design must support integrity checking, migration, backup/recovery, and rebuild.

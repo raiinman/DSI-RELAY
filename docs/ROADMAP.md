@@ -59,6 +59,9 @@ Research/prototype:
 - command/schema library
 - packaging/service installation
 - logging/diagnostics
+- local privilege/sandbox model
+- client/agent identity and delegated authorization model
+- secure update/supply-chain assumptions
 
 Exit criteria:
 
@@ -82,6 +85,8 @@ Build:
 - idempotency foundation
 - transaction foundation
 - usage metrics foundation
+- provenance/trust metadata foundation
+- agent/client identity attribution foundation
 - local daemon
 - CLI
 

@@ -547,3 +547,100 @@ Secure delivery:
 - NIST SP 800-218 Rev. 1 initial public draft: https://csrc.nist.gov/pubs/sp/800/218/r1/ipd
 - CISA/FBI Product Security Bad Practices update (2025): https://www.cisa.gov/news-events/alerts/2025/01/17/cisa-and-fbi-release-updated-guidance-product-security-bad-practices
 - SLSA build provenance: https://slsa.dev/spec/v1.2/build-provenance
+
+
+## Research track T — Third-party adapter isolation and marketplace risk
+
+Questions:
+
+- Can adapters be useful while remaining out of process?
+- What Windows isolation mechanism gives the best balance of compatibility and least privilege?
+- Which capabilities need brokered access versus direct OS access?
+- Can first-party adapters use the same manifest/broker model without unacceptable overhead?
+- What should an early public extension story look like before any open marketplace exists?
+
+Threat cases to include:
+
+- overbroad filesystem access
+- unnecessary network access
+- publisher/account compromise
+- unsafe update
+- dependency compromise
+- abandoned/taken-over package
+- misleading command/tool metadata
+- excessive background resource use
+- incompatible adapter version
+- adapter crash/hang
+- cross-project access
+
+Prototype candidates:
+
+- one worker process per adapter
+- adapter pools separated by trust class
+- OS-level sandbox/restricted execution options available on supported Windows versions
+- brokered file/tool/network capabilities
+- explicit adapter capability manifest
+- local-only manual install versus curated catalog
+
+Measure:
+
+- task success
+- startup/command latency
+- memory/CPU overhead
+- failure isolation
+- compatibility with UEFN/Blender/Krita
+- ease of permission explanation
+- cross-project isolation
+- recoverability after worker failure
+
+## Research track U — Adapter provenance, components, and updates
+
+Define a machine-readable adapter record containing:
+
+- publisher identity
+- exact artifact/version/digest
+- RELAY protocol compatibility
+- supported external-tool versions
+- declared capabilities
+- dependency/component inventory
+- build/release provenance when available
+- update source/channel
+- review/curation status
+
+Evaluate:
+
+- SBOM formats and practical granularity
+- artifact signing/verification
+- provenance/attestation approaches
+- exact-version pinning
+- dependency locking
+- vulnerability monitoring
+- update staging/rollback
+- handling of publisher or update-channel compromise
+
+Do not use "signed" or "verified" as a synonym for safe.
+
+## Research track V — Extension cost and context containment
+
+Test whether adding adapters recreates the tool/context bloat RELAY is intended to eliminate.
+
+Scenarios:
+
+- 1, 10, 50, and 200 installed adapter command sets
+- all commands exposed
+- project-filtered commands
+- task-filtered dynamic discovery
+- disabled/inactive adapters
+- adapter health telemetry at different polling rates
+
+Measure:
+
+- tool/schema tokens
+- model selection accuracy
+- latency
+- AI calls
+- daemon CPU/memory
+- background I/O
+- dashboard clarity
+
+The public extension architecture is acceptable only if inactive/unrelated adapters have negligible effect on AI context and ordinary runtime cost.

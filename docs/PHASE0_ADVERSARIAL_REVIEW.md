@@ -860,3 +860,44 @@ Phase 0 now also requires:
 19. extension-provided text is covered by the untrusted-content boundary
 20. adapter cost/resource/context overhead is measurable
 21. adapter API compatibility and quarantine behavior are defined before a public extension SDK is promised
+
+
+## Attack 34 — Out-of-process is fault isolation, not automatically a security sandbox
+
+### Evidence
+
+Windows provides explicit sandboxing mechanisms such as AppContainer/Win32 app isolation that restrict filesystem, network, credential, process, and other resource access. A normal child process running under the user's ordinary token does not gain those restrictions merely because it is a separate process.
+
+### Verdict
+
+CLARIFY THE ADAPTER-ISOLATION CONTRACT.
+
+### Required changes
+
+- out-of-process execution is the minimum boundary for crash/fault containment
+- security isolation requires an OS-enforced restricted execution model or equivalent brokered capability design
+- Phase 1 must benchmark Windows isolation options against adapter compatibility
+- RELAY documentation must not use "out of process" and "sandboxed" as synonyms
+- if an adapter cannot run in a restrictive sandbox, the dashboard must expose the resulting trust/permission level clearly
+
+## Attack 35 — In-tool companion components extend the supply chain
+
+### Problem
+
+Some integrations may require code or scripts inside the target application as well as a RELAY-side adapter worker. Isolating the RELAY worker does not contain code that executes inside UEFN, Blender, Krita, or another host application.
+
+### Verdict
+
+EXTEND THE COMPONENT MODEL.
+
+### Required changes
+
+An adapter installation record must be able to enumerate all executable companion components:
+
+- RELAY-side worker
+- target-application plugin/extension/script
+- bundled helper binaries
+- runtime instrumentation package
+- transitive libraries
+
+Each component needs its own version/digest/provenance and compatibility status where practical. Updating one companion component must not silently change the trust state of the whole chain.

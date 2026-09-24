@@ -901,3 +901,207 @@ An adapter installation record must be able to enumerate all executable companio
 - transitive libraries
 
 Each component needs its own version/digest/provenance and compatibility status where practical. Updating one companion component must not silently change the trust state of the whole chain.
+
+
+## Attack 36 — Cloud AI is a data-egress boundary, not just another compute target
+
+### Evidence
+
+NSA/CISA/FBI and partner guidance on AI data security treats data used throughout development, testing, and operation as part of the AI supply chain and emphasizes provenance, trusted infrastructure, and lifecycle protection. NIST's Privacy Framework likewise treats data processing and disclosure as explicit risk-management concerns.
+
+### Verdict
+
+NEW HARD DATA-PLANE REQUIREMENT.
+
+### Required changes
+
+RELAY must treat every remote model, embedding service, gateway, support upload, and networked third-party processor as an explicit egress destination.
+
+Before remote processing:
+
+- project policy determines whether the destination may receive the data
+- the Context Compiler works only within the allowed data set
+- the minimum sufficient subset is selected
+- the outbound event is attributable and auditable
+- unknown/stale provider data-use or retention properties remain unknown rather than being guessed
+
+Remote AI is not allowed to become the implicit default path for private project material.
+
+## Attack 37 — Secret redaction is not a credential architecture
+
+### Evidence
+
+OWASP guidance on system-prompt leakage explicitly warns against placing credentials and connection strings in model prompts. More generally, sensitive-information disclosure remains a known LLM-application failure class.
+
+### Verdict
+
+REJECT RAW CREDENTIALS IN MODEL CONTEXT.
+
+### Required changes
+
+- models receive opaque connection/credential handles, not secret values
+- a trusted credential broker resolves secret material only at the execution boundary that needs it
+- secrets do not enter prompts, embeddings, summaries, ordinary logs, or AI memory
+- subprocesses receive only the specific credential required for that operation
+- secret rotation/revocation does not require rewriting model-visible state
+- secret-scanning/redaction remains defense-in-depth, not the primary control
+
+## Attack 38 — Sensitive derived data can still reveal the source
+
+### Evidence
+
+Text-embedding inversion research has repeatedly shown that private source text can be reconstructed from embeddings. EMNLP 2023 reported exact recovery for much of short text under its tested conditions, ACL 2024 demonstrated transferable inversion without the original embedding model, and ACL 2025 ALGEN substantially reduced the amount of data needed for successful attacks.
+
+### Verdict
+
+REJECT "VECTOR = SAFE" ASSUMPTIONS.
+
+### Required changes
+
+- embeddings inherit source sensitivity
+- remote embedding generation is a remote data-processing event
+- vector stores require the same project isolation and lifecycle policy as other sensitive derived data
+- source deletion/retention policy must address derived embeddings and indexes
+- summaries, cached outputs, extracted metadata, and embeddings all retain provenance and sensitivity unless a defined declassification rule says otherwise
+
+## Attack 39 — Screenshots are both sensitive data and a prompt-injection surface
+
+### Evidence
+
+Multimodal prompt-injection research shows that images can carry adversarial instructions that influence agents. OWASP also identifies multimodal injection as a risk. Separately, screenshots routinely capture source code, account identifiers, filenames, chats, unreleased assets, and occasionally credentials.
+
+### Verdict
+
+MODIFY VISUAL-OBSERVABILITY DESIGN.
+
+### Required changes
+
+- screenshots/images follow the same data classification and egress policy as text
+- capture intended windows/regions rather than full desktops where possible
+- image-only content is not assumed safe because text secret scanning found nothing
+- visual content remains untrusted for instruction purposes
+- remote visual analysis needs explicit project/provider policy
+- local crop/redaction may reduce exposure but must not be represented as perfect sanitization
+
+## Attack 40 — Prompt injection plus broad read access creates a data-exfiltration path
+
+### Evidence
+
+NIST/CAISI added database-exfiltration tasks to agent-hijacking evaluations and reported that agents could frequently be induced to follow malicious instructions. A 2025 study using AgentDojo found prompt-injection attacks could cause tool-calling agents to leak personal data observed during task execution, with no built-in defense fully preventing leakage in the extended evaluation.
+
+### Verdict
+
+SEPARATE DATA ACCESS FROM EGRESS AUTHORITY.
+
+### Required changes
+
+- permission to read project data does not imply permission to transmit it
+- network/remote-model egress is separately authorized
+- egress scope is bounded to the current task/project
+- untrusted content cannot broaden retrieval or egress scope
+- the model may request more context, but RELAY policy decides what can be disclosed
+- high-sensitivity data and external-send capabilities should not be co-granted by default
+
+## Attack 41 — Data minimization can fail if it is only a token optimization
+
+### Evidence
+
+NIST's Privacy Framework includes outcomes around selective collection/disclosure, data minimization, processing permissions, deletion, and limiting observability/linkability. These are privacy controls, not merely cost controls.
+
+### Verdict
+
+MODIFY CONTEXT-COMPILER ORDERING.
+
+### Required changes
+
+Context compilation must apply data policy before relevance/ranking:
+
+1. determine destination and task
+2. establish eligible data classes
+3. exclude prohibited material
+4. select the minimum sufficient relevant evidence
+5. apply token/context-budget optimization
+6. record lineage and policy decision
+
+A smaller prompt is not necessarily a safer prompt if it still contains the wrong data.
+
+## Attack 42 — "Local-only" is meaningless unless the whole product obeys it
+
+### Problem
+
+Even if model inference is local, project content can still leave through remote embeddings, crash reports, analytics, support bundles, remote gateways, adapter networking, update diagnostics, or future convenience features.
+
+### Verdict
+
+NEW PRIVACY MODE REQUIREMENT.
+
+### Required changes
+
+A local-only/private project mode must have testable egress semantics.
+
+When enabled, project content should not leave through:
+
+- remote model calls
+- remote embedding services
+- remote gateway payloads
+- analytics containing project content
+- automatic diagnostic upload
+- third-party adapter network access unless separately authorized
+
+Product update checks and other non-project networking must be documented separately so "local-only" is not a misleading label.
+
+## Attack 43 — Provider privacy promises are versioned external dependencies
+
+### Problem
+
+Remote AI providers can differ by product tier, endpoint, workspace, region, retention, training/data-use policy, and time. RELAY cannot safely encode a single permanent rule such as "Provider X never trains on this."
+
+### Verdict
+
+NEW PROVIDER-POLICY PROFILE.
+
+### Required changes
+
+Each remote processor profile should record what RELAY actually knows:
+
+- endpoint/account identity
+- allowed data classes/modalities
+- data-use/training policy source
+- retention policy source
+- region/residency where relevant
+- date/version of policy verification
+- organization/user overrides
+
+Unknown or stale fields stay unknown and can trigger conservative policy.
+
+## Attack 44 — AI responses can re-export sensitive input
+
+### Problem
+
+A response may quote, transform, summarize, or reproduce protected source material. Sending that response to another model, logging system, support bundle, or public share can create a second disclosure path.
+
+### Verdict
+
+EXTEND SENSITIVITY TO OUTPUTS.
+
+### Required changes
+
+- AI output inherits relevant source sensitivity/provenance
+- model-to-model forwarding is a new egress decision
+- result retention follows project data policy
+- diagnostics and support exports do not automatically include raw model transcripts
+- public/share/export actions pass through data policy again
+- local deletion must not be represented as proof that a remote processor erased every copy
+
+## Phase 0 data-boundary closure requirements
+
+Phase 0 now also requires:
+
+22. a documented data-classification and sensitivity-propagation model
+23. a hard egress-policy boundary outside model reasoning
+24. credential-handle/broker architecture that keeps raw secrets out of AI context
+25. embeddings and derived artifacts inherit source sensitivity
+26. screenshot/multimodal handling is included in privacy and prompt-injection policy
+27. local-only/private mode has testable network-egress semantics
+28. provider data-use/retention metadata is treated as versioned external policy, not assumption
+29. outbound processing and sensitive result lineage are auditable

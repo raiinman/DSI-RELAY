@@ -63,7 +63,7 @@ Human control room over the same command system. It shows projects, health, jobs
 
 ### Skills
 
-Compact agent instructions and shell wrappers that teach local AI clients how to use RELAY without loading a large tool catalog into context.
+Compact agent instructions and shell wrappers are the initial local-AI strategy for using RELAY without loading a large tool catalog into context. This is a benchmarked preference, not an assumption: thin/dynamic MCP discovery remains a candidate client surface.
 
 ### Remote gateway
 
@@ -79,7 +79,7 @@ RELAY keeps three distinct layers:
 
 1. Raw evidence — logs, screenshots, tool output, telemetry, files, measurements.
 2. Structured state/history — entities, results, transactions, dependencies, current state, immutable events.
-3. Compiled AI context — small task-specific packages generated for a goal and token budget.
+3. Compiled AI context — small task-specific packages generated for a goal and token budget, with provenance, intent, freshness, trust, conflict, and exact-field constraints.
 
 Removing data from an AI context never deletes the underlying evidence.
 
@@ -178,6 +178,11 @@ From the first implementation:
 - clear separation between local-only and remote capabilities
 - project isolation
 - install/update path designed for non-experts
+- project/tool content treated as untrusted input
+- scoped/revocable client/agent authority where supported
+- evidence retention/quota/privacy lifecycle
+- native-tool-first adapter policy
+- benchmarked defaults rather than single-demo optimization
 
 ## Open implementation decisions
 

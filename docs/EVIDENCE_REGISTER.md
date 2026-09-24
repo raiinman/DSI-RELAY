@@ -634,3 +634,22 @@ Confidence labels:
   - https://csrc.nist.gov/pubs/sp/800/92/r1/ipd
 - Finding: log generation, transport, storage, access, retention, analysis, and disposal require deliberate management.
 - RELAY impact: team audit history is itself controlled security/privacy data, not an unlimited plaintext diary.
+
+
+### Bounded Agents: Delegation Security for Multi-Agent AI Systems
+
+- Year: 2026
+- Type: recent preprint
+- Confidence: Medium
+- Source: arXiv 2608.15888
+- Finding: proposes tracking delegated authority through a principal chain with accumulated session state, scope, budgets, and external enforcement; reports large reductions in attack success on the authors' evaluated suites.
+- RELAY impact: strengthens the hypothesis that delegated scope/budgets should be enforced outside model reasoning, while requiring independent validation before adopting the exact mechanism.
+
+### Authorization Architectures for Tool-Using AI Agents
+
+- Year: 2026
+- Type: recent review preprint
+- Confidence: Medium
+- Source: arXiv 2609.15906
+- Finding: reviews agent identity, credential lifecycle, delegation, runtime policy enforcement, prompt injection, auditability, and non-repudiation across a principal hierarchy.
+- RELAY impact: supports treating human, orchestrator/client, agent, sub-agent, and tool identities as distinct layers rather than one "user."

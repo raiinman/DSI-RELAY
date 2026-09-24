@@ -486,3 +486,88 @@ Token reduction, AI-call avoidance, alert count, cache hit rate, and similar met
 Status: Approved
 
 External trace/correlation IDs, log metadata, and diagnostic control fields cannot grant authority or force unbounded collection; they are validated and resource-limited.
+
+
+## D-085 — Simplicity is a first-class product constraint
+
+Status: Approved
+
+RELAY is evaluated not only for capability, security, and correctness but also for cognitive load, onboarding burden, configuration burden, diagnostic effort, and maintenance complexity.
+
+## D-086 — Safe defaults are part of product security
+
+Status: Approved
+
+Public users should not need to design their own security/privacy/recovery architecture before first use. Safe project isolation, credential handling, egress, retry, retention, and adapter defaults should be opinionated and usable out of the box.
+
+## D-087 — Choice design is contextual
+
+Status: Approved
+
+RELAY does not assume fewer options are always better. It uses strong defaults, contextual choices, search/filter, recommendations, and progressive depth according to task difficulty and user uncertainty.
+
+## D-088 — Configuration options consume a test/support budget
+
+Status: Approved
+
+Every user-visible configuration option is additional product state with testing, migration, documentation, interaction, and support cost. Internal knobs do not automatically become public settings.
+
+## D-089 — Important configuration is validated early
+
+Status: Approved
+
+RELAY should run startup/preflight checks for important configuration and integration assumptions where practical rather than waiting for rare paths or failures to expose invalid settings.
+
+## D-090 — Human verification load is part of AI cost
+
+Status: Approved direction
+
+A workflow that saves model tokens but forces repeated manual verification can still be expensive. AI/client UX benchmarks include human review, approvals, correction, and fatigue where practical.
+
+## D-091 — Core features require admission and retirement discipline
+
+Status: Approved
+
+A feature enters RELAY Core only when its user value justifies long-term implementation, test-matrix, security/privacy, migration, documentation, runtime, and support cost. Removal, merge, and demotion are valid product improvements.
+
+## D-092 — Generic adapter abstractions are evidence-driven
+
+Status: Approved direction
+
+The first real integration should not be forced into an imagined universal engine model. Core abstractions remain minimal until validated against materially different integrations.
+
+## D-093 — RELAY has an operability/toil budget
+
+Status: Approved direction
+
+Repetitive reconnection, reconfiguration, update repair, permission cleanup, compatibility triage, reindexing, approval, and support tasks are measured and targeted for automation or root-cause removal.
+
+## D-094 — Common diagnostics have one low-friction entry point
+
+Status: Approved direction
+
+A future relay doctor/dashboard equivalent should summarize what is wrong, what still works, what RELAY already tried, and the next useful action without requiring users to understand internal architecture.
+
+## D-095 — Personal UI does not inherit enterprise complexity
+
+Status: Approved
+
+The data model may support future team/organization capabilities, but normal personal onboarding and project workflows hide SSO, custom roles, organization policy, audit administration, and similar concepts until relevant.
+
+## D-096 — Basic value does not require remote AI
+
+Status: Approved
+
+A supported personal project should produce a useful deterministic local scan/audit before the user configures cloud AI, team identity, custom adapters, or advanced policy.
+
+## D-097 — Complexity regression can fail a milestone
+
+Status: Approved direction
+
+Milestones track time/steps to useful value, mandatory decisions/concepts, configuration growth, background components, compatibility surface, support/diagnostic effort, and similar measures. Functional completeness alone does not excuse an unacceptable complexity regression.
+
+## D-098 — Inactive integrations stay operationally quiet
+
+Status: Approved
+
+Adapters/features not relevant to the active project/task should contribute negligible routine AI context and should avoid unnecessary background CPU, memory, network, health polling, and dashboard noise.

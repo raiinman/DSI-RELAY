@@ -554,3 +554,14 @@ Logs, traces, correlation identifiers, profiler data, screenshots, and telemetry
 - result confidence reflects missing/degraded collection where relevant
 
 Observability endpoints and collectors should apply resource limits so diagnostic requests cannot create unbounded CPU, memory, disk, network, or vendor cost.
+
+
+## Secure-by-default usability
+
+Security architecture should reduce the number of security decisions required for normal use.
+
+Defaults should be safe enough that a new personal user does not need to understand credential brokering, egress policy internals, adapter sandboxing, or recovery semantics before receiving basic local value.
+
+Advanced overrides remain inspectable and attributable.
+
+A security control that creates frequent low-value prompts or encourages routine bypass requires redesign, not merely more warning text.

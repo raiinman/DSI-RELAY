@@ -33,6 +33,7 @@ The full evidence remains available in RELAY without being dumped into chat.
 8. Keep AI providers and transport standards replaceable.
 9. Create a practical first integration for UEFN/Fortnite while preserving a general core.
 10. Build toward a public-installable product.
+11. Keep RELAY simpler to operate than the development complexity it removes.
 
 ## Non-goals
 
@@ -202,6 +203,10 @@ From the first implementation:
 - tested restore/recovery procedures for RELAY-owned state
 - migration/update recovery separated from binary rollback
 - graceful degraded operation during remote-provider outage
+- a personal golden path that provides useful local value before remote AI or team configuration
+- secure/sensible defaults that avoid mandatory policy hardening
+- configuration and feature growth governed by explicit complexity budgets
+- common diagnostics available through one low-friction health path
 
 ## Open implementation decisions
 

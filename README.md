@@ -69,6 +69,7 @@ Start with docs/PROJECT_PLAN.md.
 - docs/DATA_BOUNDARY_AND_PRIVACY.md — project data classification, credentials, remote egress, embeddings, screenshots, and privacy
 - docs/RESILIENCE_AND_RECOVERY.md — crash recovery, unknown effects, durable jobs, backups, migrations, and outage handling
 - docs/OBSERVABILITY_AND_TRUTH.md — evidence quality, sampling, causality, monitoring overhead, and truth status
+- docs/SIMPLICITY_AND_OPERABILITY.md — golden path, secure defaults, configuration/feature budgets, diagnostics, and product complexity
 - docs/ROADMAP.md — staged delivery plan
 - docs/RESEARCH_PLAN.md — academic and technical research program
 - docs/PHASE0_ADVERSARIAL_REVIEW.md — red-team review of current assumptions

@@ -195,3 +195,10 @@ Incremental file watching reduces work but can miss change details. RELAY requir
 Status: Approved direction
 
 RELAY's project indexes and normalized state do not replace the underlying project or authoritative engine/runtime state. Phase 1 storage design must support integrity checking, migration, backup/recovery, and rebuild.
+
+
+## D-037 — Interactive integrations require user-session hosting
+
+Status: Approved direction
+
+The primary Windows host must be compatible with the signed-in user's UEFN, Blender, Krita, and related tool sessions. Phase 1 will compare per-user background-host options before fixing the process model.

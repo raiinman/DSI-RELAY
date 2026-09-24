@@ -503,3 +503,28 @@ Preferred path:
 - client receives the approved result/context only
 
 Raw-file retrieval, if supported at all, remains project-policy controlled and is not an implicit capability of connecting an AI client.
+
+
+## Team identity and delegation
+
+Shared projects require separate attribution for human, client, agent/session, and adapter identities where the platform supports it.
+
+- an agent acts under delegated scope rather than inheriting blanket workspace authority
+- sub-agent delegation may preserve or narrow scope but not silently widen it
+- project/resource scope and expiry belong to the authorization decision
+- membership and external connection ownership are separate facts
+- external permission changes require refresh/revalidation
+
+## Collaborative write freshness
+
+Approvals and plans are state-dependent.
+
+Important writes should be checked against the project/resource state they were planned for. If relevant state changed, RELAY should stop, mark the plan stale/conflicted, and re-inspect.
+
+This protects shared projects from delayed approvals and concurrent human/agent edits.
+
+## Revocation propagation
+
+Removing or narrowing access should re-evaluate active and queued work, delegated sessions, pending approvals, resource claims, and connection use at defined safe boundaries.
+
+Historical audit records remain attributable after access changes, subject to retention/privacy policy.

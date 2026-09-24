@@ -330,3 +330,27 @@ The user should be able to inspect what will be included before sharing.
 The dashboard should not require familiarity with MCP, agent jargon, or internal component names to understand basic health and next actions.
 
 Advanced users still need complete raw/technical access.
+
+
+## Adapter installation UX
+
+Installing an adapter is a security-sensitive action and must not feel like installing a cosmetic theme.
+
+Before enabling a third-party adapter, the dashboard should show:
+
+- publisher/identity information available to RELAY
+- exact adapter version/artifact
+- source/update channel
+- requested capabilities/permissions
+- affected projects/resources
+- external applications it will control
+- network/credential requirements
+- review/curation status
+- compatibility status
+- whether the adapter is first-party, curated, or unverified
+
+The user should approve the bounded capability request rather than a vague "full access" prompt.
+
+Updates that request new capabilities, change publisher/provenance, or materially change trust status require renewed review/approval.
+
+Incompatible or quarantined adapters should explain the reason plainly and remain disabled rather than failing unpredictably.

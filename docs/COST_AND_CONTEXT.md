@@ -41,6 +41,8 @@ Do not spend intelligence on computation.
 
 If RELAY can measure, parse, index, diff, validate, filter, deduplicate, classify by explicit rules, or execute an operation deterministically, it should do that before asking a model.
 
+"Local first" applies strongly to deterministic work, but not automatically to model inference. Local, cloud, and hybrid model execution must be compared using end-to-end quality, latency, utilization, energy/resource use, privacy, and actual monetary cost for the target workload.
+
 ## Result Store
 
 Large outputs belong in RELAY, not chat.

@@ -30,6 +30,7 @@ Deliver:
 - local execution economics review
 - index continuity and storage recovery review
 - Windows per-user host review
+- third-party adapter isolation, provenance, permission, compatibility, and distribution review
 
 Exit criteria:
 
@@ -48,6 +49,7 @@ Exit criteria:
 - file-change tracking has a documented reconciliation path
 - local model execution is benchmarked rather than assumed cheaper
 - the Windows background host model is compatible with interactive tool integrations
+- adapter architecture is out-of-process by default and has a conceptual capability manifest, provenance model, and quarantine behavior
 
 ## Phase 1 — Technical spike and stack selection
 
@@ -68,6 +70,8 @@ Research/prototype:
 - local privilege/sandbox model
 - client/agent identity and delegated authorization model
 - secure update/supply-chain assumptions
+- adapter broker/worker isolation prototype
+- adapter manifest and compatibility-contract prototype
 
 Exit criteria:
 
@@ -93,6 +97,8 @@ Build:
 - usage metrics foundation
 - provenance/trust metadata foundation
 - agent/client identity attribution foundation
+- adapter broker and worker lifecycle foundation
+- adapter manifest/capability enforcement foundation
 - local daemon
 - CLI
 
@@ -282,6 +288,9 @@ Before public beta:
 - compatibility matrix
 - public sample projects/fixtures
 - release channels
+- third-party adapter SDK/conformance tests
+- adapter artifact/provenance/dependency policy
+- curated/local installation workflow before any open marketplace
 
 Exit criteria:
 
@@ -289,6 +298,9 @@ Exit criteria:
 - no private/personal defaults
 - upgrade/downgrade/migration scenarios documented
 - security/public support requirements met
+- third-party adapters cannot execute inside RELAY Core by default
+- incompatible adapters fail closed
+- adapter install/update permissions and provenance are visible to users
 
 ## Phase 12 — Additional engine/tool adapters
 

@@ -1413,3 +1413,252 @@ Phase 0 now also requires:
 34. important writes/approvals have revision or equivalent preconditions
 35. multi-agent workflows define synchronization/conflict primitives and cost budgets
 36. audit records can reconstruct actor, delegator, project/resource, approval, and verification state
+
+
+## Attack 58 — Durable workflow state does not make external effects exactly-once
+
+### Evidence
+
+AWS's current Durable Execution guidance explicitly distinguishes at-least-once and at-most-once retry semantics and states that neither automatically guarantees an external step runs exactly once across the whole workflow. Amazon's idempotent-API guidance describes the classic uncertain-outcome case where an operation may have succeeded even though the caller never received the response.
+
+Recent systems work such as Fractal (NSDI 2026) likewise treats side-effectful commands as a separate recovery problem requiring explicit handling.
+
+### Verdict
+
+NEW DURABLE-EFFECT CONTRACT.
+
+### Required changes
+
+- durable job/checkpoint recovery and external-effect recovery are separate layers
+- every side-effecting command declares retry/idempotency semantics
+- retries reuse a stable logical request/idempotency key where supported
+- a missing acknowledgement may become UNKNOWN_OUTCOME rather than FAILED
+- recovery reconciles the external system before repeating an uncertain non-idempotent action
+
+## Attack 59 — "Rollback" can be a dangerously dishonest word
+
+### Problem
+
+RELAY will coordinate editors, files, remote APIs, models, and third-party tools. Many of those effects cannot be atomically rolled back together.
+
+### Verdict
+
+MODIFY TRANSACTION TERMINOLOGY.
+
+### Required changes
+
+RELAY must distinguish:
+
+- true rollback
+- reliable inverse operation
+- compensation
+- restore from snapshot/backup
+- manual recovery
+
+A compensation may repair current state without erasing the original external event. UI and APIs must not promise rollback where only compensation is possible.
+
+## Attack 60 — Retries can turn a small outage into duplicate work or a retry storm
+
+### Evidence
+
+AWS reliability guidance recommends verifying idempotency before retries, limiting retry calls, using timeouts/backoff, and avoiding unbounded retry behavior. Standard SQS queues explicitly provide at-least-once delivery and may deliver duplicates.
+
+### Verdict
+
+MODIFY JOB/QUEUE RECOVERY.
+
+### Required changes
+
+- retries are bounded and command-specific
+- retryable writes require idempotency or explicit reconciliation
+- duplicate delivery is expected by design
+- queues expose backlog/degraded state
+- repeated failure can enter blocked/dead-letter/manual-review state
+- provider outage does not trigger infinite retries or repeated user approvals
+
+## Attack 61 — A backup that has never been restored is not proven recovery
+
+### Evidence
+
+CISA's StopRansomware guidance recommends offline/encrypted backups and regular testing of backup availability and integrity in disaster-recovery scenarios. NIST SP 800-184 emphasizes recovery planning, playbooks, realistic testing, and improvement. CSF 2.0 specifically calls for verifying restoration assets before use and verifying restored assets before normal operation resumes.
+
+### Verdict
+
+NEW RESTORE-TEST REQUIREMENT.
+
+### Required changes
+
+- RELAY-owned durable state has documented backup/restore procedures
+- restore/integrity tests are part of release and maintenance testing
+- backup creation success is not displayed as "recovery verified"
+- recovery playbooks define which data is rebuildable versus irreplaceable
+- RELAY clearly states that it is not automatically the backup system for the user's game/project source
+
+## Attack 62 — One RPO/RTO for all RELAY data is wasteful and misleading
+
+### Evidence
+
+NIST contingency-planning guidance defines Recovery Time Objective and Recovery Point Objective based on the impact/tolerance of the supported process.
+
+### Verdict
+
+MODIFY DATA-DURABILITY CLASSES.
+
+### Required changes
+
+Different RELAY state classes need different recovery targets.
+
+Examples:
+
+- rebuildable index/cache: tolerate loss, rebuild quickly
+- transaction/approval state: low tolerated loss
+- project policy/config: low tolerated loss
+- raw evidence: retention-class dependent
+- AI context cache: disposable
+
+Do not pay premium durability cost for data that can be reconstructed.
+
+## Attack 63 — Application downgrade does not imply data downgrade
+
+### Evidence
+
+Microsoft MSIX documentation warns that installing an older application version preserves app data and that data created by the newer app may not be backward compatible. PostgreSQL's upgrade documentation likewise describes cases where reverting requires a backup after the newer system has written to migrated/shared data.
+
+### Verdict
+
+NEW MIGRATION RECOVERY CONTRACT.
+
+### Required changes
+
+Before incompatible data/schema migration:
+
+- preflight/check mode where practical
+- record source schema/version
+- create a verified recovery point when required
+- durable migration progress/state
+- define forward-recovery and rollback limits
+- verify application health after migration
+- block old binaries from opening data they cannot safely understand
+
+Binary rollback and data rollback are separate operations.
+
+## Attack 64 — Restarted is not recovered
+
+### Evidence
+
+NIST CSF 2.0 Recover calls for verifying restoration assets, verifying restored assets, and confirming normal operating status. NIST SP 800-160 Vol. 2 frames resilience as the ability to anticipate, withstand, recover, and adapt—not merely restart a process.
+
+### Verdict
+
+NEW RECOVERY TRUST STATES.
+
+### Required changes
+
+After crash/reboot/recovery RELAY may report:
+
+- Reconciling
+- Degraded
+- Blocked
+- Manual recovery required
+- Healthy
+
+"Healthy" requires relevant storage integrity, project-state reconciliation, adapter revalidation, and resolution/exposure of uncertain side effects.
+
+## Attack 65 — Crash consistency needs deliberate fault injection
+
+### Evidence
+
+CrashMonkey research found previously unknown crash-consistency bugs even in mature file systems, and bounded black-box crash testing reproduced most known bugs in its target set while discovering additional data-loss/atomicity failures. OSDI 2025 continued active research on crash-consistent storage design.
+
+### Verdict
+
+MODIFY TEST STRATEGY.
+
+### Required changes
+
+Phase 1+ tests must kill RELAY at critical boundaries:
+
+- before/after durable job checkpoint
+- before/after external tool effect
+- during result persistence
+- during database/index update
+- during migration
+- during update/install
+- under disk-full/write-failure conditions
+
+Normal unit/integration tests are not sufficient evidence for recovery correctness.
+
+## Attack 66 — Storage exhaustion can become a project-wide failure
+
+### Problem
+
+RELAY intentionally stores logs, screenshots, telemetry, transaction evidence, indexes, and AI results. A public user may run it for months.
+
+### Verdict
+
+NEW STORAGE-PRESSURE REQUIREMENT.
+
+### Required changes
+
+- enforce project/global quotas and retention policy
+- monitor remaining storage
+- protect critical transaction/recovery metadata from evidence growth
+- enter an explicit degraded/read-mostly mode where practical before uncontrolled exhaustion
+- never silently delete pinned or critical recovery state
+- surface what can safely be pruned/rebuilt
+
+## Attack 67 — Remote provider outage must not destroy local usefulness
+
+### Evidence
+
+NIST cyber-resilience guidance emphasizes continuing essential functions in adverse/degraded conditions. Distributed-systems guidance similarly recommends safe client behavior, bounded retries, and avoiding failure amplification.
+
+### Verdict
+
+KEEP LOCAL-FIRST CORE, ADD GRACEFUL DEGRADATION.
+
+### Required changes
+
+When remote AI/gateway services are unavailable:
+
+- local deterministic inspection/audit remains available
+- dashboard and stored results remain available
+- remote-only jobs wait/fail clearly according to policy
+- RELAY does not silently switch providers if that would change privacy/data policy
+- retry/backlog state is visible and bounded
+
+## Attack 68 — Recovery itself can restore bad or stale state
+
+### Evidence
+
+NIST CSF 2.0 specifically calls for checking backup/restoration integrity before use and verifying restored assets before normal operations resume.
+
+### Verdict
+
+NEW POST-RESTORE RECONCILIATION REQUIREMENT.
+
+### Required changes
+
+After database restore, migration rollback, or operational-state recovery:
+
+- validate storage integrity
+- re-check project and external-tool state
+- invalidate stale capability/permission/provider caches
+- rebuild derived indexes where appropriate
+- resolve or surface in-flight/unknown operations
+- only then declare normal operation restored
+
+## Phase 0 resilience closure requirements
+
+Phase 0 now also requires:
+
+37. external effects have explicit retry/idempotency/unknown-outcome semantics
+38. rollback, compensation, restore, and manual recovery are distinct concepts
+39. durable queues/jobs have bounded retry and duplicate-delivery handling
+40. RELAY backup design includes tested restore/integrity procedures
+41. recovery targets differ by durability/data class
+42. migration/update design separates binary rollback from data rollback
+43. startup/recovery has explicit reconciling/degraded/healthy states
+44. crash/fault injection is part of the implementation test plan
+45. storage-pressure behavior and evidence quotas are defined
+46. provider outages degrade capability without violating data/provider policy

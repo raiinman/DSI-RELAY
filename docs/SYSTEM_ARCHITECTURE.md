@@ -266,6 +266,10 @@ Controlled tools may not.
 
 For example, a static project audit can be available while an editor-specific visualization command may require the editor process to be running. Dependency state is part of the command/result contract.
 
+## Index consistency
+
+Incremental change feeds reduce work but are not authoritative. RELAY must support startup reconciliation, recovery after missed change notifications, replay-safe index updates, and a complete reconciliation path when continuity cannot be proven.
+
 ## Storage layers
 
 The architecture requires persistent storage for:

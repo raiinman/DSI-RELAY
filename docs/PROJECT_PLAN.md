@@ -141,7 +141,7 @@ The first usable milestone should prove the architecture rather than attempt uni
 Required capabilities:
 
 - project registry and onboarding
-- local daemon
+- per-user local host foundation
 - command registry and structured execution
 - CLI
 - persistent result store

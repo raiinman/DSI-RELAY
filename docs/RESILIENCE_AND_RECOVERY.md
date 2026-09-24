@@ -347,3 +347,16 @@ Examples:
 - adapter effect-reconciliation interface
 - offline/cloud outage queue policy
 - disaster-recovery UX
+
+
+## Observability during recovery
+
+Recovery state depends on the health of the evidence used to verify recovery.
+
+After crash/restart:
+
+- collection adapters must re-establish coverage
+- stale pre-crash telemetry must be separated from fresh post-restart evidence
+- dropped/unknown event windows should be recorded
+- recovery cannot rely only on the same failed monitor that missed the original problem
+- normal health status waits for the required observability path to become trustworthy again

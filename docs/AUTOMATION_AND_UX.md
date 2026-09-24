@@ -508,3 +508,60 @@ For repeated automated findings show:
 - user disposition history where useful
 
 RELAYS should surface a noisy detector as a detector-quality issue rather than forcing the user to dismiss the same warning forever.
+
+
+## Personal golden path
+
+The default personal experience should aim for:
+
+~~~
+Install
+ -> open RELAY
+ -> detect/add project
+ -> run local audit
+ -> understand result
+~~~
+
+without first requiring remote AI, team setup, custom policy, custom adapter configuration, or raw config editing.
+
+Advanced capabilities appear when relevant.
+
+## Progressive depth
+
+The UI should present Simple, Detailed, and Advanced/raw depth without changing the underlying vocabulary.
+
+If a normal supported task regularly requires Advanced, treat that as a product-surface defect.
+
+## Configuration and defaults
+
+RELAY should make a recommended choice automatically when a safe, broadly correct default exists.
+
+For settings with meaningful alternatives:
+
+- explain the recommended option
+- show consequences rather than protocol jargon
+- reveal only context-relevant choices initially
+- validate unsupported combinations early
+- allow users to inspect/reset automatic detection
+
+Avoid presenting internal implementation knobs merely because they are configurable.
+
+## Self-diagnostic entry point
+
+The dashboard should have one obvious health/diagnostic action equivalent to a future relay doctor command.
+
+It should summarize:
+
+- what is wrong
+- what remains usable
+- what RELAY already tried
+- one or a few next actions
+- relevant advanced details on demand
+
+The first response to a common support problem should not be "open three logs and edit YAML."
+
+## Personal versus team surface
+
+Solo users should not see custom-role, organization-policy, SSO/SCIM, contractor-offboarding, and audit-admin interfaces until a team/workspace context actually needs them.
+
+Future-capable data models do not require future-facing terminology in personal onboarding.

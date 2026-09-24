@@ -328,3 +328,68 @@ Confidence labels:
 - retention/privacy requirements for public consumer use
 - user studies for approval/alarm fatigue in this exact development workflow
 - modality-preserving retrieval for screenshots and visual history
+
+
+## Adapter and extension ecosystem evidence
+
+### Beyond the Protocol: Unveiling Attack Vectors in the Model Context Protocol Ecosystem
+
+- Year: 2025
+- Type: research preprint
+- Confidence: Medium
+- Source: arXiv 2506.02040
+- Finding: researchers demonstrated multiple unsafe-server attack classes and reported insufficient review on several MCP aggregation platforms; a small user study found users struggled to identify unsafe servers.
+- RELAY impact: a registry/marketplace cannot be the trust boundary.
+
+### Toward Understanding Security Issues in the Model Context Protocol Ecosystem
+
+- Year: 2025
+- Type: research preprint
+- Confidence: Medium
+- Source: arXiv 2510.16558
+- Finding: analysis of 67,057 servers across six public registries identified weak vetting and server-hijack risks.
+- RELAY impact: adapter distribution needs artifact identity, publisher/provenance metadata, capability boundaries, and quarantine.
+
+### An Empirical Study of Model Context Protocol Applications
+
+- Year: 2026
+- Type: research preprint
+- Confidence: Medium
+- Source: arXiv 2607.25635
+- Finding: among 1,723 studied MCP applications, logging and enable/disable controls were common but only 37.2% used blocking approval before tool execution.
+- RELAY impact: oversight semantics vary widely and must be explicit in RELAY rather than inherited from host defaults.
+
+### Developers Are Victims Too: A Comprehensive Analysis of the VS Code Extension Ecosystem
+
+- Year: 2024
+- Type: research preprint
+- Confidence: Medium
+- Source: arXiv 2411.07479
+- Finding: analysis of 52,880 extensions found about 5.6% with suspicious behavior and highlighted the power third-party development extensions can gain over developer environments.
+- RELAY impact: third-party adapter code should not run unchecked inside the core process.
+
+### CISA vulnerability bulletin covering the 2025 Nx package compromise
+
+- Year: 2025
+- Type: U.S. government vulnerability bulletin
+- Confidence: High for incident record
+- URL: https://www.cisa.gov/news-events/bulletins/sb25-272
+- Finding: compromised build-system packages/plugins were distributed through npm.
+- RELAY impact: previously trusted packages and update channels can be compromised; signatures/provenance and rollback are necessary but not sufficient by themselves.
+
+### NIST Software Bill of Materials guidance
+
+- Type: U.S. government software supply-chain guidance
+- Confidence: High
+- URL: https://www.nist.gov/itl/executive-order-14028-improving-nations-cybersecurity/software-supply-chain-security-guidance-20
+- Finding: NIST emphasizes machine-readable component inventories, supplier provenance, signatures, and ongoing vulnerability context.
+- RELAY impact: adapters should expose dependency/component inventory and provenance suitable for automated assessment.
+
+### NIST IR 8536 — Supply Chain Traceability Principles
+
+- Year: 2026
+- Type: U.S. government report
+- Confidence: High for traceability principles
+- URL: https://csrc.nist.gov/pubs/ir/8536/final
+- Finding: verifiable provenance chains, interoperable traceability, cryptographic linkage, and selective disclosure can improve supply-chain assurance.
+- RELAY impact: use these as design principles for adapter provenance/history; the report is manufacturing-focused and is not itself a software-plugin standard.

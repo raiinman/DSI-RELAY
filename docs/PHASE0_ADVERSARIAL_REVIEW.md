@@ -540,3 +540,80 @@ Phase 0 now also requires:
 12. command metadata supports multidimensional risk/authority attributes
 13. benchmark design includes held-out tasks, anti-gaming checks, and trace review
 14. authorization is enforced by RELAY policy boundaries rather than model behavior
+
+
+## Attack 20 — Local inference is not automatically cheaper
+
+### Evidence
+
+Recent systems research does not support a universal rule that local model inference is cheaper, faster, or more energy-efficient.
+
+- A 2026 mobile-device study reported lower energy efficiency for on-device inference than batched server inference on its tested devices.
+- A 2025 mobile/edge/cloud measurement study found only smaller models ran comfortably on phones and cloud inference was faster for its workload.
+- Other 2025–2026 work finds local consumer GPUs or hybrid edge/cloud routing can reduce cost under different workloads.
+
+These studies use different hardware and workloads, so RELAY must measure its own desktop workloads.
+
+### Verdict
+
+MODIFY THE COST PRINCIPLE.
+
+### Required changes
+
+Keep local deterministic work first.
+
+Treat model placement as a measured routing decision based on:
+
+- task capability requirements
+- privacy
+- latency
+- utilization
+- hardware
+- energy/thermal conditions
+- actual API and local operating cost
+
+Do not claim local-model savings without matched measurements.
+
+## Attack 21 — Incremental file watchers are not a source of truth
+
+### Evidence
+
+Microsoft documents that ReadDirectoryChangesW can overflow its buffer, discard buffered change details, and require directory re-enumeration. .NET FileSystemWatcher likewise documents that overflow causes file-system events to be lost.
+
+NTFS change journals are more durable, but Microsoft also documents that old records can be deleted and journal discontinuities can occur.
+
+### Verdict
+
+MODIFY INDEXING ARCHITECTURE.
+
+### Required changes
+
+- filesystem watchers are accelerators, not truth
+- detect watcher overflow and monitoring errors
+- reconcile stored state against the actual project at startup
+- support periodic or triggered reconciliation
+- use NTFS journal information only as an optimization, with reconciliation after discontinuity
+- persist checkpoints only after durable index updates
+- make indexing idempotent and safe to replay
+
+## Attack 22 — Derived state can silently diverge from the project
+
+### Evidence
+
+SQLite documents that WAL mode is unsuitable for network filesystems, that WAL files are part of persistent database state, and that live databases require supported backup techniques. SQLite also provides explicit integrity checks and online backup mechanisms.
+
+The larger risk is independent of database choice: a derived index can become stale or damaged while appearing authoritative.
+
+### Verdict
+
+MODIFY STORAGE CONTRACT.
+
+### Required changes
+
+- project files and authoritative engine/runtime state remain the source of truth
+- RELAY indexes and normalized state are derived and rebuildable
+- mutable RELAY databases should default to a local application-data location rather than a project directory that may be synced, network-mounted, or version-controlled
+- portable project configuration may remain with a project when useful
+- storage must support integrity checks, migrations, backups/snapshots, and recovery
+- Phase 1 storage tests must include abrupt termination and recovery
+- stale or uncertain state must be reconciled before being presented as high-confidence current state

@@ -299,3 +299,37 @@ A supported UEFN project should be able to:
 "RELAY runs headlessly" does not mean "UEFN and Fortnite can perform every command without their applications running."
 
 Commands must declare dependencies and return clear blocked/unavailable states.
+
+
+## Legal/platform automation boundary
+
+UEFN is the first integration, but RELAY must distinguish documented developer automation from general Fortnite automation.
+
+Current engineering rule:
+
+- use Epic-documented UEFN MCP/editor/play-session tooling
+- do not automate Fortnite gameplay/player-client use outside documented developer/test workflows
+- do not attempt to bypass gameplay-integrity controls
+- record the Epic terms/documentation versions used for the adapter compatibility review
+
+If future UEFN features require automation beyond clearly documented developer interfaces, public release requires legal/official clarification.
+
+## Published runtime networking boundary
+
+Current UEFN terms prohibit published Developer-Made Content/code from connecting to non-Epic servers.
+
+Therefore the runtime bridge must not become a published phone-home client.
+
+Use supported Verse/UEFN logs, debugging, play-session inspection, or Epic-hosted mechanisms. Any development-only RELAY component must be excluded from publishable content.
+
+## Content rights metadata
+
+UEFN projects may mix:
+
+- developer-authored content
+- Epic assets
+- third-party licensed assets
+- marketplace/Fab content
+- generated/AI-assisted content
+
+RELAY should preserve the provenance/license distinction and avoid representing project inclusion as proof of ownership.

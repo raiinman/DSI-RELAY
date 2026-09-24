@@ -471,3 +471,48 @@ Store metadata such as:
 A local-only/private project profile must disable remote project-content processing across models, embeddings, gateway payloads, analytics, automatic diagnostics, and adapter networking unless a separately documented exception is approved.
 
 The mode is valid only if its network behavior is testable.
+
+
+## Durable job and recovery semantics
+
+Jobs that can outlive a process must persist enough state to resume safely.
+
+The durable model must distinguish:
+
+- completed deterministic stages
+- completed external effects
+- pending stages
+- unknown-outcome external effects
+- approvals
+- idempotency keys
+- project/base revision
+- adapter/tool versions
+
+Recovery may replay deterministic work, but side effects follow command-specific retry semantics.
+
+## Unknown external effects
+
+If an external tool may have applied a change before RELAY lost acknowledgement, the job enters an unknown/reconciling state.
+
+RELAY must query the external source of truth or surface manual recovery rather than converting uncertainty into a blind retry.
+
+## Recovery state
+
+The local host/dashboard should expose system recovery state separately from process health.
+
+Possible states include Healthy, Degraded, Reconciling, Blocked, and Manual Recovery Required.
+
+Normal operation resumes only after required storage/project/integration reconciliation completes.
+
+## Storage durability classes
+
+Not all state requires equal durability.
+
+- project indexes/caches: rebuildable
+- job/checkpoint state: durable while active
+- transaction/approval state: high durability
+- project policy/configuration: high durability
+- evidence: retention-policy dependent
+- context caches: disposable/rebuildable
+
+The chosen storage layer must support these distinctions.

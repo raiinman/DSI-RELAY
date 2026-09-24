@@ -209,3 +209,40 @@ The primary Windows host must be compatible with the signed-in user's UEFN, Blen
 Status: Approved direction
 
 Public update design must verify release integrity and preserve user project data when an update is interrupted or rolled back.
+
+
+## D-040 — Third-party adapters are isolated from RELAY Core
+
+Status: Approved direction
+
+Public third-party adapters should run out of process by default behind a brokered, versioned protocol. Untrusted adapter code must not be loaded directly into RELAY Core.
+
+## D-041 — Open marketplace distribution is deferred
+
+Status: Approved
+
+An open public adapter marketplace is not required for early RELAY releases. Explicit local installation and curated distribution are preferred until adapter identity, provenance, permissions, update, compatibility, and review controls are proven.
+
+## D-042 — Adapters use capability manifests
+
+Status: Approved direction
+
+Adapters declare the minimum project, tool, network, credential, subprocess, and AI-facing capabilities they need. RELAY policy grants a bounded subset and adapters cannot expand their own authority.
+
+## D-043 — Adapter trust is multidimensional
+
+Status: Approved
+
+Publisher identity, artifact integrity, build provenance, review status, granted permissions, and runtime behavior are separate trust facts. A valid signature or curation badge must not be represented as proof that an adapter is safe.
+
+## D-044 — Adapter-provided text remains untrusted data
+
+Status: Approved
+
+Third-party command descriptions, documentation, errors, results, and metadata cannot become RELAY policy or higher-authority AI instructions. AI-facing descriptions are normalized/rendered by RELAY from reviewed command semantics and bounded adapter metadata.
+
+## D-045 — Adapter distribution is exact-version and compatibility gated
+
+Status: Approved direction
+
+Adapter artifacts should be exact-version pinned and integrity-identified, with dependency/component inventory, compatibility declarations, update history, and rollback/recovery support. Incompatible adapters fail closed or are quarantined rather than loaded optimistically.

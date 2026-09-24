@@ -653,3 +653,121 @@ Confidence labels:
 - Source: arXiv 2609.15906
 - Finding: reviews agent identity, credential lifecycle, delegation, runtime policy enforcement, prompt injection, auditability, and non-repudiation across a principal hierarchy.
 - RELAY impact: supports treating human, orchestrator/client, agent, sub-agent, and tool identities as distinct layers rather than one "user."
+
+
+## Resilience, crash recovery, retries, and migration evidence
+
+### NIST SP 800-184 — Guide for Cybersecurity Event Recovery
+
+- Year: 2016
+- Type: U.S. government recovery guidance
+- Confidence: High
+- URL: https://csrc.nist.gov/pubs/sp/800/184/final
+- Finding: recovery planning should include prioritized resources, playbooks, realistic test scenarios, metrics, and improvement from lessons learned.
+- RELAY impact: recovery is a tested lifecycle, not merely process restart.
+
+### NIST CSF 2.0 — Recover function
+
+- Year: 2024
+- Type: U.S. government cybersecurity framework
+- Confidence: High
+- URL: https://csrc.nist.gov/pubs/cswp/29/the-nist-cybersecurity-framework-csf-20/final
+- Finding: RC.RP calls for scoped/prioritized recovery, verification of restoration assets before use, verification of restored assets, and confirmation of normal operating status.
+- RELAY impact: restored RELAY state must be verified/reconciled before claiming healthy operation.
+
+### NIST SP 800-34 Rev. 1 — Contingency Planning Guide
+
+- Year: 2010
+- Type: U.S. government contingency-planning guidance
+- Confidence: High
+- URL: https://csrc.nist.gov/pubs/sp/800/34/r1/upd1/final
+- Finding: defines RTO/RPO concepts and ties recovery strategy to tolerable outage/data loss.
+- RELAY impact: durability and recovery targets should differ by state class instead of using one global policy.
+
+### NIST SP 800-160 Vol. 2 Rev. 1 — Developing Cyber-Resilient Systems
+
+- Year: 2021
+- Type: U.S. government systems-security engineering guidance
+- Confidence: High
+- URL: https://csrc.nist.gov/pubs/sp/800/160/v2/r1/final
+- Finding: cyber resiliency includes anticipating, withstanding, recovering from, and adapting to adverse conditions while preserving mission/business functions.
+- RELAY impact: degraded capability is a legitimate resilience mode; "process restarted" is not sufficient.
+
+### CISA StopRansomware Guide
+
+- Type: U.S. government operational guidance
+- Confidence: High
+- URL: https://www.cisa.gov/stopransomware/ransomware-guide
+- Finding: recommends offline/encrypted backups and regular testing of backup availability/integrity under disaster-recovery conditions.
+- RELAY impact: backup success and tested restore capability are separate states.
+
+### AWS — Making retries safe with idempotent APIs
+
+- Type: first-party distributed-systems engineering guidance
+- Confidence: High for AWS experience pattern
+- URL: https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/
+- Finding: a timeout can leave callers unsure whether a side effect occurred; idempotent request identifiers and reconciliation reduce unsafe duplicate effects.
+- RELAY impact: unknown outcome and stable idempotency keys become first-class command semantics.
+
+### AWS Durable Execution — Idempotency and retries
+
+- Year: current documentation
+- Type: first-party workflow runtime guidance
+- Confidence: High for documented semantics
+- URL: https://docs.aws.amazon.com/durable-execution/patterns/best-practices/idempotency/
+- Finding: replay/retry can execute side effects multiple times; at-least-once and at-most-once retry semantics do not automatically guarantee exactly-once execution across a workflow.
+- RELAY impact: durable job recovery and external-effect safety are separate design problems.
+
+### Amazon SQS — At-least-once delivery
+
+- Type: first-party queue documentation
+- Confidence: High
+- URL: https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/standard-queues-at-least-once-delivery.html
+- Finding: standard queues can deliver a message more than once; consumers should be idempotent.
+- RELAY impact: duplicate queued work must be assumed unless a stronger end-to-end guarantee is proven.
+
+### CrashMonkey / bounded black-box crash testing
+
+- Years: 2017–2018
+- Type: USENIX systems research
+- Confidence: High
+- URLs:
+  - https://www.usenix.org/conference/hotstorage17/program/presentation/martinez
+  - https://www.usenix.org/conference/osdi18/presentation/mohan
+- Finding: deliberate crash testing reproduced most known crash-consistency bugs in the studied set and found new bugs in mature file systems.
+- RELAY impact: recovery correctness needs kill/power-loss/fault injection, not only ordinary unit tests.
+
+### Fractal — Fault-Tolerant Shell-Script Distribution
+
+- Year: 2026
+- Type: NSDI peer-reviewed
+- Confidence: High
+- URL: https://www.usenix.org/conference/nsdi26/presentation/huang
+- Finding: fault recovery explicitly distinguishes recoverable computation from side-effectful regions and tracks progress/dependencies to prevent unsafe repeated effects.
+- RELAY impact: command workflows need explicit durable boundaries around external side effects.
+
+### SQLite atomic commit and corruption guidance
+
+- Type: first-party database documentation
+- Confidence: High for SQLite behavior
+- URLs:
+  - https://sqlite.org/atomiccommit.html
+  - https://www.sqlite.org/howtocorrupt.html
+- Finding: crash recovery depends on preserving transaction/journal state correctly; moving or losing a hot journal can prevent automatic recovery.
+- RELAY impact: storage recovery must follow the chosen database's actual durability model and be fault tested.
+
+### PostgreSQL pg_upgrade
+
+- Type: first-party database documentation
+- Confidence: High for PostgreSQL behavior
+- URL: https://www.postgresql.org/docs/current/pgupgrade.html
+- Finding: some upgrade modes can make the previous cluster unsafe to restart after the new version writes to shared/migrated data, requiring restore from backup.
+- RELAY impact: application rollback and data rollback are distinct; migrations need recovery points and compatibility gates.
+
+### Microsoft MSIX downgrade documentation
+
+- Type: first-party Windows packaging documentation
+- Confidence: High
+- URL: https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-downgrading
+- Finding: downgrading application binaries preserves app data, and data written by the newer version may not be backward compatible.
+- RELAY impact: package rollback cannot be assumed to reverse RELAY data/schema migrations.

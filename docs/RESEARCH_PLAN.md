@@ -791,3 +791,14 @@ Compare revision/hash preconditions, optimistic conflict detection, resource cla
 Measure silent conflicts, successful recovery, added latency, replanning work, model/tool calls, and user interruptions.
 
 SyncMind (ICML 2025) is a primary academic baseline.
+
+
+## Research track AD — Workspace roles and delegated identity
+
+Compare simple role templates, role-based policy with constraints, role plus resource/attribute policy, and external provider permissions combined with stricter RELAY project policy.
+
+Test multiple humans, outside collaborators, one user in multiple workspaces, personal versus shared connections, one user using multiple AI clients, and agent-to-sub-agent delegation.
+
+Measure policy correctness, administrative complexity, user comprehension, over-granting, and audit reconstruction.
+
+Research baselines include NIST RBAC/ABAC work, NIST zero-trust guidance, RFC 8693 delegation semantics, RFC 8707 resource indicators, and RFC 9700 OAuth security BCP.

@@ -71,6 +71,7 @@ Start with docs/PROJECT_PLAN.md.
 - docs/OBSERVABILITY_AND_TRUTH.md — evidence quality, sampling, causality, monitoring overhead, and truth status
 - docs/SIMPLICITY_AND_OPERABILITY.md — golden path, secure defaults, configuration/feature budgets, diagnostics, and product complexity
 - docs/LEGAL_LICENSING_AND_DISTRIBUTION.md — platform terms, licenses, redistribution, asset provenance, AI output rights, and public-release legal gates
+- docs/VERSIONING_AND_COMPATIBILITY.md — contract stability, version skew, schema evolution, deprecation, migrations, and support lifecycle
 - docs/ROADMAP.md — staged delivery plan
 - docs/RESEARCH_PLAN.md — academic and technical research program
 - docs/PHASE0_ADVERSARIAL_REVIEW.md — red-team review of current assumptions

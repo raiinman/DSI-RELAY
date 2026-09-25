@@ -36,6 +36,7 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `LEGAL_LICENSING_AND_DISTRIBUTION.md` — platform terms, redistribution, copyleft boundaries, asset provenance, AI output rights, privacy claims, and public-release legal gates.
 - `VERSIONING_AND_COMPATIBILITY.md` — contract stability, version skew, schema evolution, deprecation, migrations, support windows, and compatibility debt.
 - `PERFORMANCE_AND_RESOURCE_ECONOMICS.md` — foreground priority, indexing scale, local AI contention, storage maintenance, hardware tiers, and resource budgets.
+- `PHASE1_START_HERE.md` — active Phase 1 execution order, prototype gates, and fresh-chat handoff.
 - `ROADMAP.md` — staged delivery plan and milestone exit criteria.
 - `RESEARCH_PLAN.md` — academic/technical research and benchmark program.
 - `PHASE0_ADVERSARIAL_REVIEW.md` — adversarial challenge to current assumptions and required architecture changes.

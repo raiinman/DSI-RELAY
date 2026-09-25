@@ -503,3 +503,39 @@ Default AI context should expose only the current task-relevant contract surface
 Cached context packages, summaries, and generated skills should include enough producing-version/schema metadata to detect stale interpretation after a RELAY upgrade.
 
 A cache hit is not valuable when the underlying contract semantics changed.
+
+
+## Local resource economics
+
+AI-token reduction is only one component of cost.
+
+RELAY usage accounting should be able to relate, where measurable:
+
+- AI tokens/calls
+- local CPU time
+- local RAM/working set
+- GPU/VRAM usage
+- disk reads/writes
+- network transfer
+- persistent storage growth
+- foreground latency impact
+- power/energy measurements or proxies
+
+No single conversion to dollars is assumed.
+
+A route can be cheaper in one dimension and more expensive in another.
+
+## Resource-aware context work
+
+Context compilation, embedding, semantic indexing, and model-based summarization are background-compute candidates.
+
+They should support:
+
+- incremental processing
+- cache reuse
+- idle/deferred execution
+- lower-cost deterministic alternatives
+- cancellation/resume
+- active-project prioritization
+
+A context optimization that causes foreground stutter or large persistent local cost is not a successful optimization.

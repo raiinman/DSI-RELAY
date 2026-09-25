@@ -680,3 +680,50 @@ If a renderer cannot faithfully interpret an older result, RELAY reports partial
 Aliases/shims are implemented outside the default command-discovery surface where practical.
 
 They remain discoverable to legacy clients/migration tools but do not add routine AI context cost to current clients.
+
+
+## Resource scheduler
+
+The local host should include a resource-policy layer for background work.
+
+Responsibilities may include:
+
+- active-project/foreground state
+- job priority and resource-intensity metadata
+- foreground-safe backoff
+- idle/batch scheduling
+- optional local-model scheduling
+- adapter-worker lifecycle
+- storage-maintenance deferral
+- diagnostic-burst expiry
+- resource pressure signals
+
+The implementation should evaluate Windows-native QoS/Job Object/process-priority mechanisms before custom scheduling.
+
+## Progressive project readiness
+
+Project state should expose readiness stages rather than one binary Ready flag.
+
+Potential stages:
+
+- discovered
+- lightweight metadata ready
+- basic audit ready
+- deep/content index ready
+- semantic/vector index ready
+
+Commands declare the minimum readiness they require.
+
+## Performance budgets
+
+Core subsystems should expose measurable resource ownership.
+
+A job/worker should be attributable to:
+
+- project
+- job
+- subsystem/adapter
+- priority/resource mode
+- CPU/RAM/GPU/I/O usage where measurable
+
+This supports relay doctor/dashboard diagnostics and makes resource regressions traceable.

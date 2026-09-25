@@ -264,3 +264,34 @@ relay doctor
 Common diagnostic output should be concise by default and include structured detail on request.
 
 Normal supported workflows should not require users/agents to memorize internal daemon, database, IPC, adapter-broker, or policy implementation details.
+
+
+## CLI contract versioning
+
+Human-readable CLI text is not a stable parsing surface.
+
+Machine clients should use structured output that declares its contract/schema version.
+
+Stable CLI compatibility includes:
+
+- command identity
+- structured request/response shape
+- exit-code categories
+- field meaning
+- side-effect semantics
+- deprecation metadata
+
+Human prose, spacing, progress rendering, and explanatory wording may change without being considered machine-contract compatibility.
+
+## Skill compatibility
+
+Generated skills/wrappers are clients of the command contract.
+
+Skills should carry:
+
+- RELAY contract/version range
+- generation version
+- required capabilities
+- deprecated-command references where any
+
+RELAY should detect stale/incompatible skills and offer regeneration/migration rather than preserving every obsolete command in normal model context.

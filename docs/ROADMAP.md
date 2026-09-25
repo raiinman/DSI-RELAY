@@ -4,7 +4,7 @@ The roadmap is ordered to prove cost and architecture fundamentals before buildi
 
 ## Phase 0 — Documentation baseline and adversarial evidence review
 
-Status: Reopened — adversarial evidence review in progress
+Status: Complete — Phase 0 closed on 2026-09-24
 
 Deliver:
 
@@ -78,7 +78,9 @@ Exit criteria:
 
 ## Phase 1 — Technical spike and stack selection
 
-Gate: Phase 0 must be closed again before stack choices become durable architecture decisions.
+Status: Active
+
+Gate: Passed — Phase 0 is closed. Stack choices become durable only after Phase 1 prototypes and benchmarks justify them.
 
 Goal: choose the minimum durable stack based on prototypes, not preference.
 
@@ -130,6 +132,7 @@ Research/prototype:
 - USN-assisted indexing benchmark
 - foreground-interference/local-AI coexistence benchmark
 - storage/index maintenance benchmark
+- Evidence Storage Lifecycle compression/deduplication benchmark
 - hardware-tier performance fixture definition
 - long-run resource-aging/soak harness
 

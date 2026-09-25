@@ -1498,3 +1498,14 @@ Separate:
 - national/data-center context
 
 Do not merge incomparable measurements into one "energy saved" number.
+
+
+## Research track BT — Evidence Storage Lifecycle
+
+Phase 1 should benchmark storage reduction as a pipeline rather than a single codec.
+
+Compare whole-blob deduplication, project/workspace dedupe boundaries, fast versus archival compression levels, database BLOB versus file/blob storage, image retention formats, log/event aggregation, telemetry downsampling, hot/warm/cold tiers, and idle-time recompression.
+
+Later work may evaluate embedding quantization and content-defined chunking, but neither is a v0.1 dependency without measured benefit.
+
+Measure original bytes, dedupe/compression savings, CPU/RAM/I/O overhead, read latency, long-run storage growth, UEFN interference, and restore correctness.

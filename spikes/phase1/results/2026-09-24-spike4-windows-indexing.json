@@ -1,0 +1,214 @@
+{
+  "benchmark": "phase1-spike4-windows-indexing",
+  "recorded_at": "2026-09-25T02:17:48.711Z",
+  "decision_informed": "Which Windows indexing/change-detection path should RELAY use without treating notifications or journals as authoritative project state.",
+  "hypothesis": "A baseline scan plus recursive notifications and changed-only parsing will provide the least-privilege default; USN may accelerate continuity recovery only if it can be isolated behind optional privilege without becoming a core dependency.",
+  "runtime": {
+    "os": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "arch": "x64"
+    },
+    "node": "v24.19.0",
+    "cpu_model": "AMD Ryzen 7 5800X3D 8-Core Processor",
+    "logical_cpu_count": 16,
+    "total_memory_bytes": 51437408256
+  },
+  "fixture": {
+    "directories": 150,
+    "files": 15000,
+    "logical_bytes_written": 16028956,
+    "elapsed_ms": 4621.365
+  },
+  "baseline": {
+    "metadata_scan": {
+      "elapsed_ms": 2420.173,
+      "cpu_ms": 2610,
+      "rss_before_bytes": 134414336,
+      "rss_after_bytes": 142905344,
+      "rss_delta_bytes": 8491008,
+      "max_rss_kib_reported": 139556,
+      "windows_process_io_delta": null,
+      "logical_content_bytes_read": 0
+    },
+    "full_content_parse": {
+      "elapsed_ms": 10561.821,
+      "cpu_ms": 5374,
+      "rss_before_bytes": 143319040,
+      "rss_after_bytes": 155852800,
+      "rss_delta_bytes": 12533760,
+      "max_rss_kib_reported": 152700,
+      "windows_process_io_delta": null,
+      "logical_content_bytes_read": 16028956
+    }
+  },
+  "notifications": {
+    "api": "node:fs.watch recursive on Windows (ReadDirectoryChangesW-backed platform surface)",
+    "watcher_error": null,
+    "idle": {
+      "sample_ms": 3000,
+      "cpu_ms": 0,
+      "rss_before_bytes": 156024832,
+      "rss_after_bytes": 156024832
+    },
+    "raw_event_count": 58,
+    "unique_event_paths": 56,
+    "actual_changed_paths": 170,
+    "detected_changed_paths": 36,
+    "path_coverage_ratio": 0.211765,
+    "detection_latency": {
+      "n": 36,
+      "min_ms": 5,
+      "p50_ms": 31,
+      "p95_ms": 57,
+      "p99_ms": 58,
+      "max_ms": 58,
+      "mean_ms": 32.083
+    },
+    "parent_cpu_ms_during_external_mutation_and_settle": 95,
+    "paced_control": {
+      "delay_between_mutations_ms": 10,
+      "watcher_error": null,
+      "raw_event_count": 43,
+      "unique_event_paths": 41,
+      "actual_changed_paths": 40,
+      "detected_changed_paths": 40,
+      "path_coverage_ratio": 1,
+      "detection_latency": {
+        "n": 40,
+        "min_ms": 2,
+        "p50_ms": 3,
+        "p95_ms": 4,
+        "p99_ms": 6,
+        "max_ms": 6,
+        "mean_ms": 2.875
+      },
+      "reconciliation_scan": {
+        "elapsed_ms": 2490.162,
+        "cpu_ms": 2593,
+        "rss_before_bytes": 165089280,
+        "rss_after_bytes": 167546880,
+        "rss_delta_bytes": 2457600,
+        "max_rss_kib_reported": 163620,
+        "windows_process_io_delta": null
+      }
+    }
+  },
+  "live_update": {
+    "actual_diff": {
+      "added": 20,
+      "removed": 10,
+      "modified": 120,
+      "renamed": 10
+    },
+    "reconciliation_scan": {
+      "elapsed_ms": 2388.971,
+      "cpu_ms": 2485,
+      "rss_before_bytes": 156319744,
+      "rss_after_bytes": 158019584,
+      "rss_delta_bytes": 1699840,
+      "max_rss_kib_reported": 154316,
+      "windows_process_io_delta": null
+    },
+    "changed_only_parse": {
+      "elapsed_ms": 103.241,
+      "cpu_ms": 46,
+      "rss_before_bytes": 161226752,
+      "rss_after_bytes": 161423360,
+      "rss_delta_bytes": 196608,
+      "max_rss_kib_reported": 157804,
+      "windows_process_io_delta": null,
+      "files_parsed": 150,
+      "logical_content_bytes_read": 154660
+    },
+    "full_parse_same_state": {
+      "elapsed_ms": 10562.554,
+      "cpu_ms": 5141,
+      "rss_before_bytes": 161427456,
+      "rss_after_bytes": 164798464,
+      "rss_delta_bytes": 3371008,
+      "max_rss_kib_reported": 162456,
+      "windows_process_io_delta": null,
+      "files_parsed": 15010,
+      "logical_content_bytes_read": 16034366
+    },
+    "parse_byte_reduction_ratio": 0.990354
+  },
+  "continuity_loss": {
+    "watcher_was_intentionally_stopped": true,
+    "offline_changed_paths_recovered_by_reconciliation": 70,
+    "reconciliation_scan": {
+      "elapsed_ms": 2333.708,
+      "cpu_ms": 2514,
+      "rss_before_bytes": 168042496,
+      "rss_after_bytes": 195985408,
+      "rss_delta_bytes": 27942912,
+      "max_rss_kib_reported": 191596,
+      "windows_process_io_delta": null
+    },
+    "changed_only_parse_after_reconciliation": {
+      "elapsed_ms": 43.399,
+      "cpu_ms": 16,
+      "rss_before_bytes": 196235264,
+      "rss_after_bytes": 197345280,
+      "rss_delta_bytes": 1110016,
+      "max_rss_kib_reported": 193752,
+      "windows_process_io_delta": null,
+      "files_parsed": 60,
+      "logical_content_bytes_read": 61498
+    }
+  },
+  "usn": {
+    "query_before": {
+      "journal_id": "0x01d8d362ed12bc5e",
+      "first_usn": "0x0000001020a30000",
+      "next_usn": "0x0000001022b4c710",
+      "lowest_valid_usn": "0x0000000000000000",
+      "max_usn": "0x00000fffffff0000",
+      "elapsed_ms": 30.944299999995565
+    },
+    "query_after": {
+      "journal_id": "0x01d8d362ed12bc5e",
+      "first_usn": "0x0000001020a30000",
+      "next_usn": "0x0000001022b4f8c8",
+      "lowest_valid_usn": "0x0000000000000000",
+      "max_usn": "0x00000fffffff0000",
+      "elapsed_ms": 25.5708999999988
+    },
+    "journal_advanced": true,
+    "continuity_metadata": {
+      "valid": true,
+      "reason": "continuous"
+    },
+    "file_id_to_node_inode_correlation": {
+      "matched": true,
+      "node_inode_hex": "200000029c758",
+      "usn_file_ref": "0x0000000000000000000200000029c758"
+    },
+    "read_journal_as_signed_in_user": {
+      "available": false,
+      "elapsed_ms": 28.862,
+      "code": 1,
+      "access_denied": true
+    },
+    "production_implication": "Journal metadata is queryable, but reading records is denied in the signed-in user context. USN cannot be a normal-host dependency; only an optional narrowly privileged helper remains a candidate."
+  },
+  "pass_fail": {
+    "full_scan_complete": true,
+    "recursive_notifications_operational": true,
+    "reconciliation_recovers_offline_changes": true,
+    "changed_only_parse_reduces_bytes": true,
+    "file_id_mapping_proven": true,
+    "usn_default_least_privilege_viable": false,
+    "burst_notifications_complete": false,
+    "paced_notifications_complete": true,
+    "notifications_authoritative": false
+  },
+  "limitations": [
+    "Synthetic 15,000-file fixture on one high-end Windows workstation; hardware-tier and real UEFN fixtures remain required.",
+    "Raw Windows per-process I/O counter snapshots were unavailable in this run; logical content bytes, file counts, stat calls, elapsed time, CPU, and RSS are reported as the reproducible I/O/resource comparison.",
+    "This benchmark does not force an actual ReadDirectoryChangesW buffer overflow; watcher downtime is used to prove the required reconciliation path.",
+    "USN journal record reading could not be benchmarked because the signed-in non-elevated process received Access Denied. No elevation bypass was attempted.",
+    "NTFS USN is volume-local and does not cover non-NTFS/network project roots; reconciliation remains mandatory even if an optional privileged USN helper is later adopted."
+  ]
+}

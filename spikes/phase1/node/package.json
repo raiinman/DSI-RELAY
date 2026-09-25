@@ -11,6 +11,7 @@
     "test": "node --test",
     "bench:spike1": "node bench/spike1.mjs",
     "bench:spike2": "node bench/spike2.mjs",
-    "bench:spike3": "node bench/spike3.mjs"
+    "bench:spike3": "node bench/spike3.mjs",
+    "bench:spike4": "node bench/spike4.mjs"
   }
 }

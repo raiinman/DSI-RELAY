@@ -89,7 +89,8 @@ Completed prototype evidence:
 - Spike 1: per-user host + CLI + structured command round trip; Node/runtime and named-pipe security remain provisional.
 - Spike 2: SQLite project/result/checkpoint durability with hard-kill recovery and degraded damaged-store behavior.
 - Spike 3: Evidence Storage Lifecycle compression/deduplication and BLOB-vs-file benchmark.
-- Current next work: Spike 4 — Windows indexing and reconciliation.
+- Spike 4: Windows indexing benchmark; notifications are hints, reconciliation + changed-only parsing is the least-privilege baseline, and USN reading remains optional/privileged.
+- Current next work: Spike 5 — Resource coexistence.
 
 Research/prototype:
 

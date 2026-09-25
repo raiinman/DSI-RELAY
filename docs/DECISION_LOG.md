@@ -901,3 +901,27 @@ On the synthetic lifecycle corpus, project-scoped whole-blob dedupe removed 71.7
 SQLite BLOBs were faster on the small layout fixture, but `VACUUM INTO` required another database-sized copy. Metadata + hashed files had sub-millisecond-to-low-millisecond reads/writes while limiting atomic recompression headroom to one blob. The image-format result is not sufficient to pick a production codec because the synthetic image is not representative of UEFN screenshots.
 
 Evidence: `spikes/phase1/results/2026-09-24-spike3-evidence-lifecycle-windows.json`.
+
+## D-149 — Windows indexing uses watcher hints plus reconciliation; USN is optional privilege
+
+Status: Phase 1 provisional
+
+Spike 4 rejects both repeated full parsing and file notifications as standalone sources of truth.
+
+The least-privilege Windows prototype path is:
+
+1. establish a persisted baseline/reconciliation snapshot
+2. use recursive file notifications as low-latency dirty-path hints
+3. parse/hash only candidate files during normal incremental work
+4. reconcile against project state on startup, after watcher downtime/errors, after uncertain bursts, and according to later resource-aware policy
+5. expose Reconciling/Degraded state instead of calling an uncertain index current
+
+On the 15,000-file synthetic fixture, a metadata reconciliation scan took 2.420 s and a full content parse took 10.562 s while reading 16,028,956 logical bytes. After 160 live file operations, changed-only parsing handled 150 files in 103.241 ms and read 154,660 bytes, a 99.0354% byte reduction versus parsing the full current tree.
+
+Windows recursive notifications were fast but not complete under burst load. A rapid burst exposed only 36 of 170 changed paths (21.1765%). A control run with 40 edits spaced 10 ms apart detected 40 of 40 paths with 3 ms p50 latency. Therefore notification delivery is an accelerator/hint channel, not authoritative project truth.
+
+An intentional watcher outage followed by 70 changed paths was fully recovered by reconciliation; the scan took 2.334 s and changed-only parsing of the recovered candidates took 43.399 ms while reading 61,498 bytes.
+
+NTFS USN remains useful in principle but is not a normal-host dependency. Journal metadata was queryable in the signed-in user context, the journal advanced across offline mutations, continuity metadata remained valid, and Node file inode values matched NTFS USN file-reference IDs. However reading journal records returned Access Denied without elevation on the benchmark fixture. A future narrowly privileged helper may be benchmarked only if its recovery/latency benefit exceeds installer, security, compatibility, and operability cost. RELAY Core must remain correct without it.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike4-windows-indexing.json`.

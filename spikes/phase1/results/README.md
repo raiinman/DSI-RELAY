@@ -38,3 +38,22 @@ Artifact: `2026-09-24-spike3-evidence-lifecycle-windows.json`
 - image results prove lossless versus lossy roles, but the synthetic image is not representative enough to select a production codec
 
 See D-146 through D-148 in `docs/DECISION_LOG.md` for the current architecture consequences.
+
+## Spike 4 — Windows indexing
+
+Artifact: `2026-09-24-spike4-windows-indexing.json`
+
+- 15,000-file metadata reconciliation scan: 2.420 s
+- full content parse: 10.562 s / 16,028,956 logical bytes
+- changed-only parse after the live mutation burst: 103.241 ms / 154,660 bytes
+- changed-only parsing reduced logical bytes by 99.0354%
+- rapid 160-operation burst: 36/170 changed paths surfaced by notifications (21.1765% coverage)
+- paced 40-file control at 10 ms spacing: 40/40 paths surfaced, 3 ms p50 detection latency
+- recursive watcher sampled 0 CPU ms while idle for 3 seconds on this fixture
+- 70 offline changes were recovered by reconciliation; candidate parsing then took 43.399 ms / 61,498 bytes
+- USN journal metadata was queryable and file-reference IDs matched Node inode IDs
+- USN journal record reading returned Access Denied in the signed-in non-elevated context
+
+Current implication: recursive notifications are fast dirty-path hints, changed-only parsing is strongly favored, reconciliation remains authoritative, and USN may only return as an optional narrowly privileged accelerator if a later benchmark justifies that complexity.
+
+See D-149 in `docs/DECISION_LOG.md`.

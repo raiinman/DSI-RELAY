@@ -1,6 +1,6 @@
 # Purpose
 
-Own the selected Rust Phase 1 local core foundation and its evidence-backed parity/isolation spikes. Spike 8 adds operational SQLite state, Spike 9 adds registry-driven contracts, and Spike 10 adds the selected synthetic adapter broker/worker foundation while Node remains the compatibility/reference implementation.
+Own the selected Rust Phase 1 local core foundation and its evidence-backed parity/isolation spikes. Spike 8 adds operational SQLite state, Spike 9 adds registry-driven contracts, Spike 10 adds the selected synthetic adapter broker/worker foundation, and Spike 11 proves the selected strong Windows isolation semantics while Node remains the compatibility/reference implementation.
 
 # Ownership
 
@@ -32,7 +32,7 @@ Own the selected Rust Phase 1 local core foundation and its evidence-backed pari
 
 - Run `cargo test`.
 - Build `--release`.
-- Run the neutral Windows comparison that owns the changed decision: Spike 7 for host/IPC, Spike 8 for operational storage, Spike 9 for command contracts, or Spike 10 for adapter isolation/broker behavior.
+- Run the neutral Windows comparison that owns the changed decision: Spike 7 for host/IPC, Spike 8 for operational storage, Spike 9 for command contracts, Spike 10 for adapter broker/Job Object behavior, or Spike 11 for strong Windows sandbox/egress behavior.
 - Verify no `target/`, EXE, PDB, credentials, personal paths, or user SID values are staged.
 
 # Child DOX Index

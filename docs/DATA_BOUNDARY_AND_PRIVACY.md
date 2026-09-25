@@ -231,6 +231,8 @@ When configured as local-only, remote project-data egress is disabled for:
 
 Update checks and other product networking need separately documented behavior. A "local-only" label is invalid unless the actual network behavior is tested.
 
+Phase 1 D-156 gives adapter egress a concrete Windows enforcement direction: untrusted workers start with network denied at the OS sandbox boundary and receive network only when RELAY's trusted broker maps an approved policy to an allowlisted capability plus an explicit egress rule. The synthetic fixture verified that a parent-only secret and `USERPROFILE` were absent from the worker environment. Adapter-provided content cannot request or expand this sandbox policy on its own.
+
 ## Egress ledger
 
 RELAY should record important outbound processing events.

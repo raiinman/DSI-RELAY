@@ -85,6 +85,8 @@ Hard resource caps can themselves cause pathological latency or failures, so use
 
 Phase 1 Spike 5 evidence currently favors deferral/backoff over permanent throttling. With a live UEFN editor on the high-end fixture, Normal-priority heavy background work did not materially move editor message-pump p95 even at full logical-CPU saturation. Below-Normal/EcoQoS remained valid soft signals but reduced background throughput without a measured p95 gain. A 25% Job Object hard cap cut background throughput by more than half and worsened p99 tail latency, so hard caps are not a routine foreground-safety default. These results do not replace the required minimum/recommended hardware and Fortnite play-session benchmarks.
 
+Phase 1 Spike 11 measures a separate security-performance trade-off for untrusted adapters. A fresh strongly sandboxed worker round trip measured 63.200 ms p50 versus 7.424 ms p50 for Spike 10's unsandboxed synthetic worker, about 55.776 ms additional p50 cost. This is acceptable for the correctness/security boundary but means later persistent-worker pooling may be worth benchmarking for high-frequency integrations. Any pooling optimization must preserve the selected AppContainer/process-sandbox policy, capability grants, environment minimization, and outer Job Object limits rather than reverting to an unrestricted resident worker.
+
 ## Workload modes
 
 Conceptual modes:

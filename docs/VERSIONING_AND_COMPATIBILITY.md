@@ -233,6 +233,8 @@ The adapter broker negotiates capabilities and quarantines unsupported combinati
 
 Phase 1 D-155 establishes adapter manifest format 1 and adapter protocol version 1 for the synthetic broker foundation. Before launch, manifest command/version bindings must resolve through the trusted command registry; worker hello identity, protocol, process ID, and exact capability set must match the accepted manifest. Incompatible manifest formats/protocol ranges/command versions fail closed rather than launching optimistically. Repeated runtime failures feed explicit backoff/quarantine state.
 
+Phase 1 D-156 treats sandbox-policy compatibility as another negotiated/fail-closed boundary. The measured SandboxSpec version is `0.1.0`; unsupported spec versions are rejected before process launch. Windows capability names are also allowlisted by RELAY rather than passed through optimistically because the experimental API did not reliably reject an unknown capability during exploratory probing. The experimental backend/export is an implementation detail, not a public adapter protocol commitment.
+
 The protocol should prefer additive changes and optional capabilities over forcing every adapter to release in lockstep.
 
 ## AI skill evolution

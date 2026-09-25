@@ -1128,3 +1128,49 @@ Before open third-party adapters can be treated as strongly isolated, Phase 1 mu
 No UEFN, Fortnite, Blender, Krita, or other real adapter behavior was implemented in Spike 10.
 
 Evidence: \`spikes/phase1/results/2026-09-24-spike10-adapter-broker-windows.json\`.
+
+
+## D-156 — Strong adapter isolation requires an OS capability sandbox; the experimental Windows backend remains provisional
+
+Status: Phase 1 selected security model; backend provisional
+
+Spike 11 selects the security semantics that must wrap untrusted third-party adapter workers in addition to D-155's broker and Job Object containment.
+
+The selected Windows boundary is:
+
+- launch the worker in an AppContainer/process sandbox rather than under the unrestricted signed-in-user token
+- grant only explicit filesystem paths; the broker-owned mailbox is read/write and the executable-worker directory is read-only
+- deny filesystem access outside granted roots by default
+- deny network access by default
+- translate only broker-approved capability names into OS capabilities; unsupported capability names fail in RELAY before process launch
+- require an explicit egress policy as well as the required Windows network capability before network is enabled
+- supply a custom minimized environment instead of inheriting the parent environment
+- inherit no handles
+- disable Win32k system calls for the synthetic worker
+- preserve the outer D-155 Job Object limits: one active process, process-memory limit, and kill-on-close
+- fail closed when the sandbox contract/version is unsupported; never silently retry the worker unrestricted
+
+On the measured Windows fixture, `processmodel.dll` exports Microsoft's experimental `Experimental_CreateProcessInSandbox` API and reports file version 10.0.26100.9444. The prototype dynamically loads this API rather than adding a hard loader dependency.
+
+The synthetic worker itself verified `TokenIsAppContainer=true`. With no network grant, it could read/write the mailbox, read its executable from the read-only worker directory, but could not write that read-only directory, read or write a sibling blocked directory, open outbound TCP, observe the synthetic parent secret, observe `USERPROFILE`, or create a second process. Default TCP denial surfaced as WSAEACCES 10013. Child-process creation failed while the query-verified outer Job Object retained active-process limit 1, 32 MiB process-memory limit, and kill-on-close.
+
+A positive egress test also passed. On this serviced build, the `internetClient` capability appeared in the AppContainer token but did not by itself permit TCP; the final explicit-grant path combines RELAY's capability allowlist, `internetClient`, and SandboxSpec egress default-allow. The same network-enabled worker still could not access the blocked filesystem roots or create a child process.
+
+RELAY does not trust the experimental API to validate capability names. During exploratory probing on this fixture, Windows accepted an unknown capability string rather than rejecting launch as expected. The final path therefore allowlists supported capability names in the trusted broker before building the sandbox specification. An unsupported sandbox-spec version is also rejected before process launch, proving no unrestricted fallback.
+
+Measured deny-mode sandbox cost across 30 fresh workers was:
+
+- sandbox process creation: 30.037 ms p50 / 53.149 ms p95
+- full sandboxed mailbox round trip: 63.200 ms p50 / 108.509 ms p95
+- D-155 unsandboxed on-demand worker invocation reference: 7.424 ms p50
+- strong sandbox overhead: about 55.776 ms p50, or 8.51× the unsandboxed synthetic worker path
+
+The stronger boundary therefore has a real per-launch cost. Persistent worker pooling may later be benchmarked for trusted/high-frequency integrations, but no pooling exception may weaken the selected isolation semantics for untrusted adapters.
+
+The implementation added one direct Rust dependency, `flatbuffers` 25.12.19 (Apache-2.0), and three resolved packages versus Spike 10. The release build graph grew from 34 to 37 packages. The selected core executable remained 2,271,744 bytes because the sandbox backend is not yet wired into the daemon command surface and unused code is stripped. The synthetic sandbox worker measured 256,000 bytes. A clean optimized all-binary build measured 36.074 seconds on cached crates.
+
+The current direct backend is **not** selected as RELAY's permanent public Windows sandbox API. Microsoft documents `CreateProcessInSandbox` as experimental, and its behavior may change. D-156 selects the isolation policy/semantics and validates this backend on the measured host. Before public open third-party adapters, RELAY must prove a stable Windows process-container/fallback implementation and OS-version support matrix with the same adversarial fixture. If a host cannot provide the required strong boundary, untrusted adapter launch must remain unavailable rather than degrade to the D-155 worker-only model.
+
+No UEFN, Fortnite, Blender, Krita, or other real adapter behavior was implemented in Spike 11.
+
+Evidence: `spikes/phase1/results/2026-09-25-spike11-windows-adapter-sandbox.json`.

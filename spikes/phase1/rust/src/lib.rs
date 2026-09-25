@@ -3,6 +3,7 @@ pub mod dashboard;
 pub mod pipe;
 pub mod protocol;
 pub mod registry;
+pub mod sandbox;
 pub mod security;
 pub mod state;
 pub mod storage;

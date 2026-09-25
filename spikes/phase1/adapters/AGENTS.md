@@ -1,6 +1,6 @@
 # Purpose
 
-Own Phase 1 synthetic adapter-worker fixtures and manifest examples used to select RELAY's adapter broker/isolation foundation without implementing a real tool integration.
+Own Phase 1 synthetic adapter-worker and adversarial-sandbox fixtures used to select RELAY's broker/isolation/security foundations without implementing a real tool integration.
 
 # Ownership
 
@@ -10,7 +10,7 @@ Own Phase 1 synthetic adapter-worker fixtures and manifest examples used to sele
 
 # Local Contracts
 
-- Use deterministic synthetic adapters only in Spike 10; do not implement UEFN/Fortnite/Blender/Krita product behavior.
+- Use deterministic synthetic adapters/workers only in Spike 10–12; do not implement UEFN/Fortnite/Blender/Krita product behavior.
 - Manifests request capabilities/permissions; they never grant themselves authority.
 - Adapter-provided names, descriptions, stdout, stderr, errors, and structured results are untrusted data.
 - Every fixture must declare identity/version, protocol compatibility, command bindings, requested permissions, target/tool requirements, provenance/trust metadata, artifact/component identity, and update/source metadata.
@@ -24,9 +24,10 @@ Own Phase 1 synthetic adapter-worker fixtures and manifest examples used to sele
 
 # Verification
 
-- Run Spike 10 Rust integration tests.
-- Run the neutral Spike 10 broker benchmark.
+- Run the owning Rust integration tests (Spike 10 broker and Spike 11+ sandbox tests).
+- Run the neutral benchmark that owns the changed adapter decision.
 - Verify manifests with incompatible protocol, unknown command/version, bad digest, or excess permission fail closed.
+- For strong-isolation work, verify ungranted filesystem/network/process access is denied and sandbox incompatibility never falls back unrestricted.
 
 # Child DOX Index
 

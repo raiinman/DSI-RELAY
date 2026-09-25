@@ -404,7 +404,7 @@ pub struct JobLimitEvidence {
     pub kill_on_close: bool,
 }
 
-struct JobGuard {
+pub(crate) struct JobGuard {
     handle: HANDLE,
     evidence: JobLimitEvidence,
 }
@@ -420,7 +420,20 @@ impl Drop for JobGuard {
 }
 
 impl JobGuard {
-    fn create_for(child: &Child, max_process_memory_bytes: usize) -> Result<Self, AdapterError> {
+    pub(crate) fn create_for(
+        child: &Child,
+        max_process_memory_bytes: usize,
+    ) -> Result<Self, AdapterError> {
+        Self::create_for_handle(
+            child.as_raw_handle() as HANDLE,
+            max_process_memory_bytes,
+        )
+    }
+
+    pub(crate) fn create_for_handle(
+        process_handle: HANDLE,
+        max_process_memory_bytes: usize,
+    ) -> Result<Self, AdapterError> {
         unsafe {
             let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
             if job.is_null() {
@@ -450,7 +463,6 @@ impl JobGuard {
                 ));
             }
 
-            let process_handle = child.as_raw_handle() as HANDLE;
             if AssignProcessToJobObject(job, process_handle) == 0 {
                 CloseHandle(job);
                 return Err(AdapterError::new(
@@ -486,7 +498,7 @@ impl JobGuard {
         }
     }
 
-    fn evidence(&self) -> JobLimitEvidence {
+    pub(crate) fn evidence(&self) -> JobLimitEvidence {
         self.evidence.clone()
     }
 }

@@ -202,3 +202,30 @@ Artifact: `2026-09-24-spike10-adapter-broker-windows.json`
 Current implication: D-155 selects the generic adapter broker/manifest/lifecycle foundation. Open third-party adapters remain experimental/controlled until Spike 11 proves an OS-enforced Windows capability/egress sandbox.
 
 See D-155 in `docs/DECISION_LOG.md`.
+
+
+## Spike 11 — Windows adapter sandbox + egress/capability enforcement
+
+Artifact: `2026-09-25-spike11-windows-adapter-sandbox.json`
+
+- measured backend: dynamically loaded Microsoft `Experimental_CreateProcessInSandbox` / SandboxSpec 0.1.0 on the Windows fixture; D-156 does not release-lock this experimental export
+- sandboxed worker verified `TokenIsAppContainer=true`
+- mailbox read/write succeeded through one explicit read/write path grant
+- worker executable directory was readable but a write into that read-only grant failed
+- ungranted sibling-directory read and write both failed
+- outbound TCP was denied by default with WSAEACCES 10013
+- explicit network grant succeeded only through RELAY's capability allowlist + `internetClient` + SandboxSpec egress default-allow
+- synthetic parent secret and `USERPROFILE` were absent from the worker environment
+- child-process creation failed; outer Job Object still verified active-process limit 1, 32 MiB process-memory limit, and kill-on-close
+- unsupported sandbox-spec version failed `SANDBOX_SPEC_INCOMPATIBLE` before launch
+- unknown capability name failed `SANDBOX_CAPABILITY_UNSUPPORTED` in RELAY before reaching Windows
+- fresh sandbox creation: 30.037 ms p50 / 53.149 ms p95
+- full denied-worker mailbox round trip: 63.200 ms p50 / 108.509 ms p95
+- Spike 10 unsandboxed synthetic invocation reference: 7.424 ms p50; strong isolation added about 55.776 ms p50 (8.51x)
+- explicit network-granted run completed in 98.106 ms while keeping filesystem/process restrictions
+- Spike 11 added one direct dependency (`flatbuffers` 25.12.19, Apache-2.0) and three resolved packages; core release EXE stayed 2,271,744 bytes because unused sandbox code is stripped from the current daemon
+- clean optimized all-bin build: 36.074 s; synthetic sandbox worker: 256,000 bytes
+
+Current implication: D-156 selects the strong AppContainer/process-sandbox security semantics for untrusted adapters, but the experimental processmodel backend remains provisional. Spike 12 must reproduce the same guarantees through a stable Windows process-container/fallback matrix before public open third-party adapters.
+
+See D-156 in `docs/DECISION_LOG.md`.

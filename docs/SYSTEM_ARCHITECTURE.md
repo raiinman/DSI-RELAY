@@ -346,7 +346,11 @@ Adapters communicate through a versioned protocol and receive only the capabilit
 
 Phase 1 D-155 selects the initial broker/worker foundation: validated adapters launch on demand out of process, bind their declared command/version capabilities to the trusted D-154 command registry, verify the launched artifact/component digest, negotiate adapter protocol/identity/capabilities, validate arguments/results/errors through Core-owned schemas, and attach manifest/artifact provenance to accepted results. Worker crashes, hangs, invalid messages, and repeated failures remain outside Core and feed bounded timeout/backoff/quarantine state.
 
-On Windows, the first containment layer uses Job Objects with kill-on-close, one active process, and a bounded process-memory limit. This is lifecycle/resource containment only. It is not the complete third-party security sandbox because the worker still has the signed-in user's token until a stronger OS capability boundary is selected and proven.
+On Windows, the first containment layer uses Job Objects with kill-on-close, one active process, and a bounded process-memory limit. This is lifecycle/resource containment only.
+
+Phase 1 D-156 adds the selected strong isolation semantics for untrusted workers: AppContainer/process sandbox execution, explicit read/write and read-only filesystem grants, default-deny network, broker-allowlisted OS capabilities, minimized explicit environment, no inherited handles, Win32k disablement for the synthetic worker, and the outer Job Object limits. RELAY Core remains outside that restricted worker boundary. The synthetic proof uses a broker-owned filesystem mailbox because the measured sandbox API rejects inherited handles; final adapter transport remains separately versioned.
+
+The current measured backend dynamically loads Microsoft's experimental `Experimental_CreateProcessInSandbox` API. D-156 selects the isolation policy, not that experimental export as a permanent public dependency. Unsupported strong-isolation backends must disable untrusted-adapter launch rather than falling back to an unrestricted D-155 worker.
 
 Inactive installed adapters keep only validated manifest metadata; workers are not kept resident until needed.
 

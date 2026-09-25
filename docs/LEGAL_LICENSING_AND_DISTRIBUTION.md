@@ -180,6 +180,8 @@ Track where practical:
 
 Security SBOM and legal license inventory may share data, but they answer different questions.
 
+Phase 1 Spike 11 adds the Rust `flatbuffers` 25.12.19 runtime (Apache-2.0) to build the measured Windows sandbox specification. The Windows `processmodel.dll` implementation is supplied by the operating system rather than redistributed by RELAY. Any stable sandbox backend selected by Spike 12 must be added to the same dependency/license/notice inventory before distribution.
+
 Unknown/incompatible licenses block release until resolved.
 
 ## Adapter license manifest

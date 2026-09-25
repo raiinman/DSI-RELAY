@@ -14,8 +14,9 @@ This subtree contains disposable-but-reproducible prototypes used to select RELA
 - Spike 8 — Rust operational SQLite parity, degraded/future-schema recovery, bidirectional Node/Rust database compatibility, and dependency/build economics
 - Spike 9 — single JSON command registry, bounded JSON Schema 2020-12 validation, command-version compatibility, and derived CLI/dashboard/adapter/AI discovery metadata
 - Spike 10 — synthetic out-of-process adapter workers, versioned manifests, registry-bound capabilities, integrity/provenance checks, timeout/backoff/quarantine, and query-verified Windows Job Object resource containment
+- Spike 11 — synthetic adversarial AppContainer/process sandboxing, explicit filesystem grants, default-deny/explicit-grant network egress, environment minimization, child-process denial, and experimental-backend cost
 
-D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation. D-154 selects the JSON command registry + bounded JSON Schema 2020-12 profile as the semantic command-contract source. D-155 selects the on-demand out-of-process adapter broker/manifest foundation while explicitly keeping stronger OS sandboxing as the next gate. Node remains a compatibility/reference implementation rather than the intended shipping daemon. See D-146 through D-155 in `docs/DECISION_LOG.md`.
+D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation. D-154 selects the JSON command registry + bounded JSON Schema 2020-12 profile as the semantic command-contract source. D-155 selects the on-demand out-of-process adapter broker/manifest foundation. D-156 selects the strong adapter-isolation semantics while keeping the measured experimental Windows sandbox backend provisional. Node remains a compatibility/reference implementation rather than the intended shipping daemon. See D-146 through D-156 in `docs/DECISION_LOG.md`.
 
 ## Run
 
@@ -64,6 +65,7 @@ node spike7.mjs
 node spike8.mjs
 node spike9.mjs
 node spike10.mjs
+node spike11.mjs
 ```
 
 ## Known open gates
@@ -78,6 +80,6 @@ node spike10.mjs
 - Process-name creator detection is a spike mechanism; production scheduling should consume trusted adapter/project activity state rather than hard-code one application's executable name.
 - The dashboard is still read-only in Phase 1; write/approval authorization and client identity remain open.
 - D-154 selects the JSON command registry + bounded JSON Schema 2020-12 profile; signed/external extension contract packaging and the eventual public stability policy remain later work.
-- D-155 selects the adapter broker/manifest/lifecycle/resource-containment foundation, but Job Objects are not a complete security sandbox; Spike 11 must prove an OS-enforced Windows filesystem/network/process capability boundary before open third-party adapters receive a strong isolation claim.
+- D-156 selects the strong adapter-isolation semantics and proves them through the measured experimental Windows backend, but that API is not release-locked; Spike 12 must prove a stable Windows sandbox backend/OS-tier fallback matrix before public open third-party adapter support.
 - Node remains a compatibility/reference implementation for schema-1 interoperability testing, not the intended shipping daemon.
 - Rust's Win32 boundary is larger and uses explicit `unsafe` code; keep that boundary narrow and regression-tested rather than spreading native calls across RELAY Core.

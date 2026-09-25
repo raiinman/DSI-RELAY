@@ -565,3 +565,16 @@ Defaults should be safe enough that a new personal user does not need to underst
 Advanced overrides remain inspectable and attributable.
 
 A security control that creates frequent low-value prompts or encourages routine bypass requires redesign, not merely more warning text.
+
+
+## Compatibility and security changes
+
+Compatibility policy does not override security policy.
+
+If a stable contract is found unsafe:
+
+- RELAY may disable or change it through the documented emergency-breaking-change process
+- affected versions and mitigations are explicit
+- old clients receive a clear blocked/deprecated response where practical
+- compatibility shims must not preserve a known unsafe behavior merely to avoid migration
+- downgraded components/data are not trusted until security/version checks pass

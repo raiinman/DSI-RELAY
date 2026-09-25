@@ -19,6 +19,7 @@
 - SIMPLICITY_AND_OPERABILITY.md — golden path, configuration/feature budgets, secure defaults, self-diagnostics, progressive depth, and toil.
 - LEGAL_LICENSING_AND_DISTRIBUTION.md — platform terms, licenses, redistribution, generated-content rights, provenance, and public-release legal gates.
 - VERSIONING_AND_COMPATIBILITY.md — API/CLI/schema versioning, deprecation, migration, version skew, support windows, and compatibility debt.
+- PERFORMANCE_AND_RESOURCE_ECONOMICS.md — foreground responsiveness, indexing/storage economics, local AI coexistence, hardware tiers, and performance budgets.
 - UEFN_V0.1.md — initial UEFN/Fortnite integration and runtime instrumentation plan.
 
 ## Research and governance

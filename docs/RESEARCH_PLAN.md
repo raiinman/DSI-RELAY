@@ -1342,3 +1342,159 @@ Test:
 - downgrade refusal on newer schema
 
 Success criterion: new software never fabricates a modern interpretation of an older result whose semantics changed.
+
+
+## Research track BL — Foreground interference and local AI coexistence
+
+Benchmark RELAY with the creator workload active.
+
+Scenarios:
+
+- UEFN only
+- UEFN + Fortnite play session
+- UEFN + RELAY deep indexing
+- UEFN + local LLM
+- UEFN + local LLM + RELAY probes
+- Blender/Krita + local LLM
+
+Measure:
+
+- editor/input latency
+- frame time/jank where measurable
+- GPU/VRAM
+- CPU/RAM
+- disk I/O
+- local-model throughput
+- crashes/OOM
+- user-visible stalls
+
+Compare local-now, queue-until-idle, smaller local model, CPU inference, and approved cloud routing.
+
+Nixie (OSDI 2026), SERENO (OSDI 2026), and classic interactive-latency research are primary systems baselines.
+
+## Research track BM — Windows background QoS and scheduler controls
+
+Prototype:
+
+- EcoQoS
+- reduced process/thread priority
+- memory priority
+- Job Object CPU/memory controls and notifications
+- user-activity/idle-aware backoff
+
+Measure foreground responsiveness and background completion time.
+
+Compare soft priority/backoff with hard CPU/memory caps. Reject controls that create pathological tail latency or failures.
+
+## Research track BN — Incremental indexing at scale
+
+Build project fixtures with large file counts and change bursts.
+
+Compare:
+
+- repeated full scan
+- filesystem notifications
+- USN journal-assisted updates
+- content-hash targeted parsing
+- hybrid journal + periodic reconciliation
+
+Measure:
+
+- startup time
+- changed-file detection latency
+- CPU/disk I/O
+- missed-change recovery
+- memory
+- index freshness
+
+Use Microsoft USN guidance as a platform baseline while retaining reconciliation after journal discontinuity.
+
+## Research track BO — Storage/index maintenance economics
+
+For candidate databases/indexes measure:
+
+- steady-state growth
+- deleted-data/free-space behavior
+- checkpoint/compaction/vacuum
+- temporary disk amplification
+- concurrent read/write latency
+- maintenance pause/tail latency
+- crash during maintenance
+- large binary storage choices
+
+If SQLite remains a candidate, include WAL/checkpoint starvation and VACUUM headroom scenarios explicitly.
+
+## Research track BP — Multi-project idle and warm/cold behavior
+
+Scale from 1 to many registered projects.
+
+Measure:
+
+- idle CPU
+- idle RAM
+- open handles/watchers
+- background wakeups
+- storage metadata growth
+- project-switch latency
+- cold/warm index load
+- adapter-worker count
+- local-model/vector-index residency
+
+Goal: inactive projects approach near-zero active compute while remaining cheap to re-open.
+
+## Research track BQ — Hardware-tier performance matrix
+
+Define versioned Windows hardware fixtures aligned with:
+
+- current UEFN minimum-class requirements
+- current UEFN recommended-class requirements
+- high-end creator workstation
+
+Run common RELAY benchmark suite against each.
+
+Publish exact fixture hardware/software, project fixture, background state, and result distributions.
+
+Do not extrapolate performance from one developer machine.
+
+## Research track BR — Long-run resource aging
+
+Run accelerated/soak workloads covering:
+
+- repeated scans
+- captures/screenshots
+- telemetry retention
+- test histories
+- transactions/results
+- project switching
+- adapter restart cycles
+- update/migration cycles
+
+Measure:
+
+- database/index/evidence growth
+- memory leaks
+- CPU idle drift
+- watcher/handle leaks
+- query slowdown
+- maintenance frequency
+- storage pressure behavior
+
+The product should remain predictable after months-equivalent histories.
+
+## Research track BS — Performance and energy measurement
+
+Evaluate practical measurement sources:
+
+- Windows performance counters/WPR/WPA
+- process CPU/RAM/I/O
+- GPU/VRAM counters
+- battery/power proxies
+- wall-power measurement for controlled lab tests
+
+Separate:
+
+- measured local energy
+- model/provider reported estimates
+- national/data-center context
+
+Do not merge incomparable measurements into one "energy saved" number.

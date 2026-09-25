@@ -1262,3 +1262,10 @@ The Phase 1 Node side-by-side updater is evidence code, not the shipping updater
 No UEFN, Fortnite, Blender, Krita, or real adapter payload was packaged.
 
 Evidence: `spikes/phase1/results/2026-09-25-spike13-packaging-update-windows.json`.
+
+
+## D-159 — Bounded structured JSONL is the default local diagnostic record; ETW is optional deep tracing
+
+Status: Phase 1 selected logging/diagnostic foundation
+
+Spike 14 selects bounded structured JSONL for the default local diagnostic record. SQLite remains the operational-state store, not the default raw-log store. ETW remains an optional temporary Windows deep-trace path.

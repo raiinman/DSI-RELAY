@@ -1,3 +1,4 @@
+pub mod adapter;
 pub mod dashboard;
 pub mod pipe;
 pub mod protocol;

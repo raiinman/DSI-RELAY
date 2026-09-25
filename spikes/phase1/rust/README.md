@@ -22,6 +22,8 @@ D-153 selects this Rust implementation as the Phase 1 foundation for the RELAY p
 - deterministic argument/result/error validation around the command dispatcher
 - optional per-command contract versions with fail-closed incompatible-version handling
 - registry-derived CLI catalog/help/describe, dashboard exposure, adapter/AI discovery, and command capability IDs
+- synthetic on-demand out-of-process adapter broker/worker foundation with manifest validation, SHA-256 artifact verification, provenance, timeout/backoff/quarantine, and registry-bound commands
+- query-verified Windows Job Object worker containment: kill-on-close, active-process limit 1, and synthetic process-memory cap
 
 ## What it intentionally does not prove yet
 
@@ -32,7 +34,8 @@ D-153 selects this Rust implementation as the Phase 1 foundation for the RELAY p
 - indexing/watch/reconciliation port into Rust
 - evidence compression/blob storage port into Rust
 - background job scheduling
-- UEFN/adapters
+- real UEFN/Blender/Krita adapters
+- OS-enforced third-party worker filesystem/network/registry/local-IPC sandboxing beyond Job Object lifecycle/resource containment
 - production HTTP concurrency, installer/update, or desktop packaging
 
 ## Run
@@ -60,7 +63,7 @@ In another shell using the same `RELAY_STATE_DIR`:
 .\target\release\relay-rust-challenger.exe shutdown
 ```
 
-Neutral comparisons are owned outside this candidate subtree. Use `../compare/spike7.mjs` for host/IPC evidence, `../compare/spike8.mjs` for operational SQLite parity/dependency economics, and `../compare/spike9.mjs` for command-registry/IDL evidence rather than ad-hoc candidate-only timing.
+Neutral comparisons are owned outside this candidate subtree. Use `../compare/spike7.mjs` for host/IPC evidence, `../compare/spike8.mjs` for operational SQLite parity/dependency economics, `../compare/spike9.mjs` for command-registry/IDL evidence, and `../compare/spike10.mjs` for adapter broker/isolation evidence rather than ad-hoc candidate-only timing.
 
 ## Security boundary
 
@@ -74,4 +77,6 @@ D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation. Spike 
 
 D-154 selects `../contracts/commands.registry.json` plus the bounded JSON Schema 2020-12 validator as the semantic built-in command-contract source. The registry drives runtime validation and discovery metadata without adding another Rust dependency; breaking command changes require explicit command-version evolution rather than silent drift.
 
-The selection does not make every Rust subsystem final. Storage maintenance/concurrency hardening, adapter isolation, packaging/update, and the remaining Phase 1 foundations still require their own evidence.
+D-155 selects the synthetic adapter broker/manifest foundation, including on-demand workers and Job Object lifecycle/resource containment. It does not make the worker a security sandbox; OS-enforced adapter filesystem/network/process capability restrictions remain the next Phase 1 gate.
+
+The selection does not make every Rust subsystem final. Storage maintenance/concurrency hardening, stronger adapter sandboxing, packaging/update, and the remaining Phase 1 foundations still require their own evidence.

@@ -344,6 +344,12 @@ The broker is responsible for:
 
 Adapters communicate through a versioned protocol and receive only the capabilities granted to that adapter instance.
 
+Phase 1 D-155 selects the initial broker/worker foundation: validated adapters launch on demand out of process, bind their declared command/version capabilities to the trusted D-154 command registry, verify the launched artifact/component digest, negotiate adapter protocol/identity/capabilities, validate arguments/results/errors through Core-owned schemas, and attach manifest/artifact provenance to accepted results. Worker crashes, hangs, invalid messages, and repeated failures remain outside Core and feed bounded timeout/backoff/quarantine state.
+
+On Windows, the first containment layer uses Job Objects with kill-on-close, one active process, and a bounded process-memory limit. This is lifecycle/resource containment only. It is not the complete third-party security sandbox because the worker still has the signed-in user's token until a stronger OS capability boundary is selected and proven.
+
+Inactive installed adapters keep only validated manifest metadata; workers are not kept resident until needed.
+
 ### Adapter manifest
 
 The manifest is part of the adapter contract.

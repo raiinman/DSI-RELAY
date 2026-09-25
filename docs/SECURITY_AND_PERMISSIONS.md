@@ -355,6 +355,8 @@ Public adapters are executable third-party supply-chain components and must be t
 
 Out-of-process execution provides fault isolation but is not, by itself, a security sandbox. Security isolation requires OS-enforced restrictions or an equivalent brokered capability boundary. The exact Windows isolation mechanism remains a Phase 1 research decision.
 
+Phase 1 D-155 proves the first Windows containment layer: workers launch on demand behind manifest/policy validation and are placed in a query-verified Job Object with kill-on-close, one active process, and a process-memory limit. Crash/hang/invalid-message failures are contained and feed backoff/quarantine. This does **not** make manifest network/filesystem/credential denial an OS security boundary: the worker still runs with the signed-in user's token. Stronger filesystem/network/process capability enforcement is the next explicit sandbox gate before arbitrary third-party workers can be described as strongly isolated.
+
 If an integration also installs code inside a target application, that companion component is part of the adapter's executable supply chain and must be inventoried separately.
 
 ### Capability manifest

@@ -35,6 +35,7 @@ Own Phase 1 stack-selection prototypes, benchmark fixtures, and measured evidenc
 
 # Child DOX Index
 
+- `adapters/AGENTS.md` — owns synthetic adapter-worker fixtures and manifest examples for Phase 1 broker/isolation selection.
 - `compare/AGENTS.md` — owns neutral cross-runtime comparison harnesses and shared candidate measurements.
 - `contracts/AGENTS.md` — owns Phase 1 machine-readable command/schema registry sources and cross-surface contract rules.
 - `node/AGENTS.md` — owns the provisional Node.js runtime candidate, tests, benchmark harnesses, and platform-helper boundaries.

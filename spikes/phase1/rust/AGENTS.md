@@ -1,6 +1,6 @@
 # Purpose
 
-Own the selected Rust Phase 1 local core foundation and its evidence-backed parity spikes. Spike 8 adds operational SQLite state, durability, recovery, and dependency economics while Node remains the compatibility/reference implementation.
+Own the selected Rust Phase 1 local core foundation and its evidence-backed parity/isolation spikes. Spike 8 adds operational SQLite state, Spike 9 adds registry-driven contracts, and Spike 10 adds the selected synthetic adapter broker/worker foundation while Node remains the compatibility/reference implementation.
 
 # Ownership
 
@@ -11,7 +11,7 @@ Own the selected Rust Phase 1 local core foundation and its evidence-backed pari
 # Local Contracts
 
 - Preserve the proven Spike 7 host/IPC contracts and Spike 8 operational-state contracts: project registry, durable result IDs, job checkpoints, migration metadata, SQLite integrity checks, degraded damaged-store startup, blocked writes while unavailable, and graceful/hard-kill persistence.
-- Further subsystem ports into Rust require their own owning Phase 1 spike or implementation milestone; do not pull indexing, evidence lifecycle, resource scheduling, adapters, or UEFN feature work into unrelated changes.
+- Further subsystem ports into Rust require their own owning Phase 1 spike or implementation milestone; Spike 10 owns the adapter broker/worker foundation, while indexing, evidence lifecycle, resource scheduling, real tool adapters, and UEFN feature work remain outside unrelated changes.
 - Keep SQLite operational metadata/compact results separate from heavyweight evidence; Spike 8 does not reopen the BLOB decision.
 - Use an explicit current-user Windows named-pipe security descriptor; do not rely on the default named-pipe DACL.
 - Keep the random application-level auth token as defense in depth even when the OS DACL is explicit.
@@ -32,7 +32,7 @@ Own the selected Rust Phase 1 local core foundation and its evidence-backed pari
 
 - Run `cargo test`.
 - Build `--release`.
-- Run the neutral Windows comparison that owns the changed decision: Spike 7 for host/IPC or Spike 8 for operational storage.
+- Run the neutral Windows comparison that owns the changed decision: Spike 7 for host/IPC, Spike 8 for operational storage, Spike 9 for command contracts, or Spike 10 for adapter isolation/broker behavior.
 - Verify no `target/`, EXE, PDB, credentials, personal paths, or user SID values are staged.
 
 # Child DOX Index

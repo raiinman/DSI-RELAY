@@ -174,3 +174,31 @@ Artifact: `2026-09-24-spike9-command-registry-windows.json`
 Current implication: D-154 selects the JSON registry + bounded JSON Schema 2020-12 profile as the semantic built-in command-contract source. Public catalog stability and extension contract packaging remain later work.
 
 See D-154 in `docs/DECISION_LOG.md`.
+
+
+## Spike 10 — Adapter worker isolation + manifest/broker foundation
+
+Artifact: `2026-09-24-spike10-adapter-broker-windows.json`
+
+- selected shape: on-demand out-of-process adapter workers behind a trusted broker
+- manifest format 1 carries adapter/publisher identity, protocol range, command bindings, requested permissions, target requirements, artifact/component digests, dependencies, update source, provenance, and review status
+- worker executable SHA-256 is verified before launch
+- adapter command/version bindings must resolve to the trusted D-154 command registry and adapter surface
+- worker hello revalidates identity, protocol, PID, and exact capability set
+- command arguments, results, and errors are registry-validated; adapter prose/stdout/stderr remain untrusted data
+- query-verified Windows Job Object limits: kill-on-close, active-process limit 1, process-memory limit 33,554,432 bytes
+- a synthetic 128 MiB worker reservation was blocked
+- manifest/digest/policy/command validation: 0.291 ms p50
+- full on-demand worker invocation including launch/handshake/validation/teardown: 7.424 ms p50 / 9.103 ms p95
+- worker crash: `ADAPTER_WORKER_EXITED` in 6.203 ms; invalid JSON: `ADAPTER_INVALID_MESSAGE`
+- forced 100 ms hang: `ADAPTER_TIMEOUT` in 122.097 ms
+- crash/backoff/quarantine, bad digest, over-permissioned manifest, incompatible protocol/command, identity/capability mismatch, bad result schema, undeclared error, hostile stderr, and memory-cap behavior passed synthetic tests
+- 0 installed adapters: 4,460,544 bytes RSS / 0 sampled CPU ms / 0 adapter workers
+- 100 installed inactive adapters: 5,275,648 bytes RSS / 0 sampled CPU ms / 0 adapter workers
+- 100 inactive adapter manifests added 815,104 bytes RSS; install/validation took 56.487 ms
+- no new direct Cargo dependency or resolved package was added over Spike 9
+- Job Objects are lifecycle/resource containment, not a complete malicious-worker filesystem/network/registry/IPC sandbox
+
+Current implication: D-155 selects the generic adapter broker/manifest/lifecycle foundation. Open third-party adapters remain experimental/controlled until Spike 11 proves an OS-enforced Windows capability/egress sandbox.
+
+See D-155 in `docs/DECISION_LOG.md`.

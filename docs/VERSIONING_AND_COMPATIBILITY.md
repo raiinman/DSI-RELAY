@@ -231,6 +231,8 @@ Adapter manifests should declare:
 
 The adapter broker negotiates capabilities and quarantines unsupported combinations.
 
+Phase 1 D-155 establishes adapter manifest format 1 and adapter protocol version 1 for the synthetic broker foundation. Before launch, manifest command/version bindings must resolve through the trusted command registry; worker hello identity, protocol, process ID, and exact capability set must match the accepted manifest. Incompatible manifest formats/protocol ranges/command versions fail closed rather than launching optimistically. Repeated runtime failures feed explicit backoff/quarantine state.
+
 The protocol should prefer additive changes and optional capabilities over forcing every adapter to release in lockstep.
 
 ## AI skill evolution

@@ -1075,3 +1075,56 @@ TypeSpec, CUE, and Protocol Buffers remain valid technologies, but Phase 1 does 
 The selected registry mechanism is not a freeze of the current 13-command catalog and is not a promise that every future extension contract must live in the built-in core registry. Signed/versioned extension contract packaging remains later work.
 
 Evidence: `spikes/phase1/results/2026-09-24-spike9-command-registry-windows.json`.
+
+
+## D-155 — Out-of-process adapter broker + manifest becomes the Phase 1 adapter execution foundation
+
+Status: Phase 1 selected
+
+Spike 10 selects the generic adapter execution foundation before any real UEFN or other tool adapter work.
+
+The selected shape is:
+
+- third-party adapter implementation code runs in a separate worker process, never loaded directly into RELAY Core
+- manifest format 1 declares adapter identity/version, publisher/source, artifact digest, RELAY adapter-protocol range, command/version bindings, requested permissions, target-tool requirements, component/dependency metadata, update source/channel, build provenance, and review status
+- the manifest requests capabilities; broker policy decides what is actually granted
+- command bindings must resolve to the trusted D-154 command registry and adapter-visible command surface before a worker can launch
+- the worker executable SHA-256 is verified before launch; the executable worker component carries its own version/source/digest inventory
+- workers launch on demand rather than remaining resident merely because an adapter is installed
+- worker identity, protocol, process ID, and exact capability set are rechecked during the worker hello
+- arguments and results/errors are validated through the trusted RELAY command registry; adapter-provided schemas or prose do not become Core policy
+- stdout, stderr, errors, and structured worker results remain untrusted adapter data with provenance attached
+- crash/hang/invalid-message failures feed explicit restart backoff and quarantine state
+
+Windows Job Objects are selected for the first containment layer. The broker sets and queries back:
+
+- kill-on-job-close
+- active-process limit of 1
+- per-process memory limit
+
+The synthetic fixture used a 32 MiB memory limit. A worker attempting to reserve 128 MiB reported failure. These exact resource values are spike settings, not final product defaults.
+
+The neutral benchmark measured:
+
+- manifest/digest/policy/command compatibility validation: 0.291 ms p50
+- full on-demand worker invocation, including process launch, hello, Job Object assignment, registry validation, result validation, and teardown: 7.424 ms p50 / 9.103 ms p95
+- synthetic worker crash surfaced as \`ADAPTER_WORKER_EXITED\` in 6.203 ms without crashing the broker
+- a 100 ms hang test surfaced as \`ADAPTER_TIMEOUT\` in 122.097 ms
+- invalid JSON surfaced as \`ADAPTER_INVALID_MESSAGE\`
+- hostile stderr remained an untrusted observation and did not alter the broker's network-deny policy
+- 0 installed adapters: 4,460,544 bytes RSS and 0 sampled CPU ms over five seconds
+- 100 installed inactive adapters: 5,275,648 bytes RSS and 0 sampled CPU ms; the 100-adapter delta was 815,104 bytes
+- both idle cases had zero adapter-worker processes; the observed child was Windows \`conhost.exe\`, not an adapter worker
+- installing/validating 100 inactive manifests took 56.487 ms
+- no new direct Cargo dependency or resolved package was added over Spike 9
+- the selected core executable remained 2,271,744 bytes in this prototype because the broker is not yet wired into the daemon command surface; the synthetic worker executable was 215,040 bytes. Final daemon-integration binary cost remains to be measured.
+
+Eight synthetic integration tests also covered over-permissioned manifests, incompatible protocol/command bindings, bad artifact/component digests, identity/capability mismatch, crash/backoff/quarantine, hang timeout, invalid JSON, bad result schema, undeclared worker errors, hostile stderr, and the memory cap.
+
+This decision does **not** classify the current worker process as a security sandbox. The worker still executes under the signed-in user's token. Job Objects provide process lifecycle/resource containment but do not by themselves deny arbitrary filesystem, registry, local IPC, or network access. Manifest/policy denial therefore remains an authorization boundary enforced by the trusted broker, not an OS containment guarantee against a malicious worker.
+
+Before open third-party adapters can be treated as strongly isolated, Phase 1 must test an OS-enforced Windows capability boundary for filesystem/network/process access while preserving the developer-tool integration workflows RELAY needs. Until then, third-party adapter execution remains experimental/controlled rather than a general marketplace security promise.
+
+No UEFN, Fortnite, Blender, Krita, or other real adapter behavior was implemented in Spike 10.
+
+Evidence: \`spikes/phase1/results/2026-09-24-spike10-adapter-broker-windows.json\`.

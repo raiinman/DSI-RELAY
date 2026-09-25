@@ -37,6 +37,7 @@ Deliver:
 - observability truth, sampling, causality, detector quality, and instrumentation-overhead review
 - simplicity, configuration-space, time-to-first-value, and operability review
 - public-release legal/licensing, platform-terms, branding, asset-rights, and privacy-claims review
+- public contract versioning, schema evolution, deprecation, version-skew, and compatibility-lifecycle review
 
 Exit criteria:
 
@@ -96,6 +97,10 @@ Research/prototype:
 - dependency/license inventory prototype
 - companion-license boundary review
 - Epic/UEFN terms compatibility register prototype
+- contract/stability inventory prototype
+- schema compatibility checker prototype
+- mixed-version/skew test matrix
+- deprecation/migration metadata prototype
 - asset provenance/license metadata prototype
 - durable job/unknown-outcome prototype
 - crash/fault-injection harness
@@ -160,6 +165,8 @@ Build:
 - change/delta model
 - dependency graph foundation
 - configuration/migration framework
+- contract stability/version metadata foundation
+- version/capability negotiation foundation
 
 Exit criteria:
 
@@ -305,6 +312,7 @@ Build:
 - visual regression automation
 - queued dependency jobs
 - support bundle/redaction
+- deprecated-contract usage/local compatibility scan
 
 Exit criteria:
 
@@ -335,6 +343,9 @@ Before public beta:
 - accessibility review
 - crash recovery
 - compatibility matrix
+- documented support/version-skew policy
+- stable API/CLI/adapter SDK deprecation policy
+- historical-result/schema support policy
 - public sample projects/fixtures
 - release channels
 - legal review of unresolved high-impact distribution questions

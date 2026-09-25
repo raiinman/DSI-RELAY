@@ -84,6 +84,13 @@ Gate: Passed — Phase 0 is closed. Stack choices become durable only after Phas
 
 Goal: choose the minimum durable stack based on prototypes, not preference.
 
+Completed prototype evidence:
+
+- Spike 1: per-user host + CLI + structured command round trip; Node/runtime and named-pipe security remain provisional.
+- Spike 2: SQLite project/result/checkpoint durability with hard-kill recovery and degraded damaged-store behavior.
+- Spike 3: Evidence Storage Lifecycle compression/deduplication and BLOB-vs-file benchmark.
+- Current next work: Spike 4 — Windows indexing and reconciliation.
+
 Research/prototype:
 
 - implementation language/runtime

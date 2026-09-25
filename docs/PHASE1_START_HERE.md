@@ -6,6 +6,14 @@ Phase 1 — Technical spike and stack selection — is active.
 
 Phase 0 is closed as the approved architecture/research baseline. Phase 1 must test the assumptions rather than quietly replacing them.
 
+Current prototype progress:
+
+- Spike 1 complete: per-user host + CLI + structured command round trip is proven on Windows. Node remains provisional because its idle RSS is material and explicit named-pipe DACL/cross-user denial is still unproven.
+- Spike 2 complete: project registry, durable result IDs, job checkpoints, schema migration metadata, integrity checks, hard-kill persistence, and degraded corrupted-store startup are proven with the provisional SQLite candidate.
+- Spike 3 complete: exact whole-blob dedupe, Zstandard cost curves, SQLite-BLOB versus metadata+file layout, log aggregation, telemetry downsampling, idle recompression, and lossless/reference image handling have benchmark evidence.
+- Current next spike: Spike 4 — Windows indexing.
+- Benchmark artifacts live under `spikes/phase1/results/`; provisional architecture consequences are recorded in D-146 through D-148.
+
 ## Phase 1 goal
 
 Choose the minimum durable implementation stack through prototypes and benchmarks.

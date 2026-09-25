@@ -113,3 +113,4 @@ When the user requests a durable behavior change, record it here or in the relev
 ## Child DOX Index
 
 - `docs/AGENTS.md` — owns durable product, architecture, research, roadmap, security, UX, and operating documentation under `docs/`.
+- `spikes/AGENTS.md` — owns Phase 1 technical spikes, benchmark harnesses/results, and prototype verification under `spikes/`.

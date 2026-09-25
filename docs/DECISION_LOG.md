@@ -856,3 +856,48 @@ Soak tests track database/index growth, evidence retention, memory leaks, stale 
 Status: Approved
 
 RELAY's cost model includes local CPU/GPU/RAM/disk/network/power and human-visible latency. "Cheaper AI" is not success if the local workstation pays a larger resource cost.
+
+## D-146 — Node per-user host remains a provisional Phase 1 candidate
+
+Status: Phase 1 provisional
+
+Spike 1 proved a normal signed-in-user Node 24.19 process can host the structured RELAY contract over a Windows named pipe with authenticated version/capability negotiation, non-interactive CLI execution, diagnostics, and hard-kill restart recovery.
+
+On the 2026-09-24 Windows fixture using the integrated Spikes 1–3 source snapshot, startup-to-ready was 91.536 ms p50, authenticated handshake + status was 1.058 ms p50, and a full CLI process + status was 141.929 ms p50. The host sampled 118,153,216 bytes RSS while idle.
+
+Node may continue through Phase 1 because it gives a dependency-free prototype path to SQLite and Zstandard on the current fixture. It is not the final runtime choice: idle memory is material, and explicit Windows named-pipe DACL/cross-user denial has not yet been proven. Final host/IPC selection requires a lower-footprint comparison and OS access-control tests.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike1-node-windows.json`.
+
+## D-147 — SQLite is the provisional operational-state store
+
+Status: Phase 1 provisional
+
+Node's built-in SQLite 3.53.3 in WAL mode with `synchronous=FULL` is approved to continue as the prototype store for project registry data, compact results, job/checkpoint state, and schema migration metadata.
+
+Spike 2 measured 2.013 ms p50 durable result writes, 1.136 ms p50 result reads, and 1.164 ms p50 `quick_check` round trips. Results and checkpoints survived a hard process kill, and deliberately damaged storage caused a `Degraded` host with blocked writes rather than false health.
+
+This decision does not approve heavyweight evidence BLOBs in SQLite. Concurrency, checkpoint starvation, VACUUM/compaction, disk-full injection, backup/restore, and interrupted migration remain required before the storage architecture is final.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike2-node-sqlite-windows.json`.
+
+## D-148 — Evidence reduction is a scoped pipeline, not maximum compression
+
+Status: Phase 1 provisional
+
+Spike 3 supports this prototype direction:
+
+- hash exact bytes before storage and deduplicate whole blobs before compression
+- use project-scoped deduplication by default; workspace-scoped deduplication requires an explicit policy because it crosses project boundaries
+- use fast Zstandard, currently level 1, as the hot/warm exact-evidence candidate only when compression actually reduces bytes
+- store incompressible payloads raw rather than paying CPU to make them larger
+- keep heavyweight evidence as hashed files/blobs with SQLite metadata unless later real-workload evidence reverses the maintenance tradeoff
+- treat log aggregation and telemetry downsampling as retention-class transformations, never invisible replacements for exact evidence
+- allow colder idle-time recompression only when a measured break-even justifies the extra CPU/I/O
+- keep lossy image encodings as reference derivatives; pinned/exact evidence requires lossless storage
+
+On the synthetic lifecycle corpus, project-scoped whole-blob dedupe removed 71.7% of raw referenced bytes before compression; workspace scope removed 80.0%. Level-19 Zstandard took roughly 6.8–9.4 seconds on the ~9–12 MB structured-text fixtures for relatively small gains over fast levels, while incompressible data grew slightly at every tested level. Recompressing the layout corpus from level 1 to level 9 saved only 0.3573% more bytes for 143 ms of work.
+
+SQLite BLOBs were faster on the small layout fixture, but `VACUUM INTO` required another database-sized copy. Metadata + hashed files had sub-millisecond-to-low-millisecond reads/writes while limiting atomic recompression headroom to one blob. The image-format result is not sufficient to pick a production codec because the synthetic image is not representative of UEFN screenshots.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike3-evidence-lifecycle-windows.json`.

@@ -2,7 +2,9 @@
 
 ## Status
 
-Phase 0 is reopened.
+Closed — Phase 0 architecture and adversarial research baseline accepted on 2026-09-24.
+
+Unresolved implementation choices and empirical validation move to Phase 1. Reopen Phase 0 only if new evidence materially invalidates the baseline rather than for normal implementation discoveries.
 
 This review deliberately attacks RELAY's current assumptions before implementation. The goal is not to prove the concept right; it is to find where the design is weak, overly confident, expensive, unsafe, duplicative, or likely to age badly.
 

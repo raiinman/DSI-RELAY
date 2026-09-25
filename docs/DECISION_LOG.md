@@ -644,3 +644,100 @@ The Core/SDK/companion license strategy is selected only after integration bound
 Status: Approved
 
 Marketing, onboarding, telemetry/privacy notices, and UI claims such as local-only/private/encrypted/no-upload must remain consistent with actual tested behavior and documented limitations.
+
+
+## D-111 — Version numbers do not substitute for compatibility tests
+
+Status: Approved
+
+RELAY may use Semantic Versioning or another release-number policy, but automated compatibility testing and explicit capability/schema contracts determine actual interoperability.
+
+## D-112 — Breaking-change review includes behavior
+
+Status: Approved
+
+A breaking change can include command side effects, error/exit semantics, permission requirements, idempotency/retry behavior, privacy/egress defaults, ordering/pagination, and material performance/rate/concurrency contracts—not only renamed or removed fields.
+
+## D-113 — Mixed-version operation is expected
+
+Status: Approved
+
+CLI, local host, dashboard, gateway, adapters, companions, skills, and stored data may be on different supported versions. Each durable interface defines supported skew and fails safely outside it.
+
+## D-114 — Serialization format defines schema-evolution rules
+
+Status: Approved direction
+
+RELAY's eventual IDL/serialization choices must be accompanied by explicit forward/backward compatibility rules for every supported representation. Safe evolution in one encoding is not assumed safe in another.
+
+## D-115 — Historical results keep producing-version semantics
+
+Status: Approved
+
+Durable results retain producing RELAY/schema/command/rule/adapter version metadata. New code must not silently reinterpret old result fields using changed semantics.
+
+## D-116 — Deprecation is a managed lifecycle
+
+Status: Approved
+
+Stable public contracts require replacement/migration metadata, owner, support/removal rules, and appropriate warning/usage signals before removal.
+
+## D-117 — Breaking changes should ship migration assistance
+
+Status: Approved direction
+
+For meaningful public contract changes RELAY should provide scanners, data/config migrations, command rewrite guidance, regenerated skills/wrappers, or explicit manual steps where practical.
+
+## D-118 — Compatibility shims have retirement criteria
+
+Status: Approved
+
+Aliases/shims are versioned compatibility debt with owner, tests, supported range, usage signal, and removal condition. They do not remain indefinitely by default.
+
+## D-119 — Feature flags are lifecycle-managed compatibility state
+
+Status: Approved direction
+
+Flags used for rollout or compatibility have owner, introduction version, purpose/default, compatibility implications, and removal/review criteria.
+
+## D-120 — Human CLI text is not the automation contract
+
+Status: Approved
+
+Scripts and AI skills use structured versioned output and documented exit-code semantics. Human presentation can evolve without becoming an accidental machine API.
+
+## D-121 — Capability negotiation complements version negotiation
+
+Status: Approved
+
+Peers exchange both protocol/version compatibility and actual capabilities when available; clients do not infer every feature from release number alone.
+
+## D-122 — Retired schema identifiers are not reused unsafely
+
+Status: Approved
+
+Where the chosen schema technology gives identifiers lasting wire/storage meaning, retired IDs/names are reserved or otherwise protected from reuse according to that technology's evolution rules.
+
+## D-123 — Security fixes may explicitly break compatibility
+
+Status: Approved direction
+
+Serious security/privacy flaws can justify a breaking change, but the compatibility impact, affected versions, mitigation, migration, and support exception must be communicated explicitly.
+
+## D-124 — Public compatibility support is bounded
+
+Status: Approved direction
+
+Before stable public release RELAY defines realistic release/API/SDK/data-migration/skill support windows rather than promising indefinite compatibility.
+
+## D-125 — Contracts have stability classes
+
+Status: Approved direction
+
+Internal, experimental, preview, and stable surfaces carry different compatibility/deprecation promises so immature interfaces are not frozen prematurely.
+
+## D-126 — Legacy compatibility stays off the normal context path
+
+Status: Approved
+
+Deprecated/legacy commands, schemas, and skill descriptions remain available only to clients/migrations that need them and do not inflate ordinary AI context or dashboard complexity.

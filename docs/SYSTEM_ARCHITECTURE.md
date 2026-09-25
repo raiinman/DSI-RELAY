@@ -81,7 +81,7 @@ Responsibilities:
 
 The daemon must remain useful with no dashboard open and no AI connected.
 
-Phase 1 Spike 7 currently favors Rust as the next runtime/IPC candidate to carry into deeper parity work. The narrow Rust challenger materially reduced host footprint/startup and proved a kernel-verified current-user-only Windows named-pipe DACL while remaining interoperable with the Node protocol implementation. This is not yet a final language lock: Node remains the working reference until Rust proves persistent operational-state, migration/integrity, dependency, and recovery parity.
+Phase 1 D-153 selects Rust as the local host/runtime foundation. The per-user Rust host uses the kernel-verified current-user-only Windows named pipe plus a random per-start application token, hosts the embedded static/HTTP dashboard surface, and owns the operational SQLite connection. The selected storage path uses `rusqlite` with default features disabled and bundled SQLite, preserving schema-version-1 database compatibility with the Node reference implementation. Node remains useful as a compatibility/reference implementation during Phase 1, not the intended shipping daemon.
 
 ### relay CLI
 

@@ -37,6 +37,8 @@ pub struct HostState {
     pub protocol: ProtocolRange,
     pub capabilities: Vec<String>,
     pub recovery_state: String,
+    #[serde(default)]
+    pub storage_schema_version: Option<i64>,
     pub ipc_security: IpcSecurityState,
     pub dashboard: Option<DashboardState>,
     pub started_at_unix_ms: u128,
@@ -54,6 +56,13 @@ pub fn state_dir() -> PathBuf {
 
 pub fn state_path() -> PathBuf {
     state_dir().join("host-rust.json")
+}
+
+pub fn db_path() -> PathBuf {
+    if let Some(value) = std::env::var_os("RELAY_DB_PATH") {
+        return PathBuf::from(value);
+    }
+    state_dir().join("relay.sqlite3")
 }
 
 pub fn write_state(path: &Path, state: &HostState) -> Result<(), String> {
@@ -94,6 +103,7 @@ mod tests {
             protocol: ProtocolRange { min: 1, max: 1 },
             capabilities: vec!["system.status@1".to_string()],
             recovery_state: "Healthy".to_string(),
+            storage_schema_version: Some(1),
             ipc_security: IpcSecurityState {
                 explicit_dacl: true,
                 kernel_acl_verified: true,

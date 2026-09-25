@@ -859,7 +859,7 @@ RELAY's cost model includes local CPU/GPU/RAM/disk/network/power and human-visib
 
 ## D-146 — Node per-user host remains a provisional Phase 1 candidate
 
-Status: Phase 1 provisional
+Status: Superseded by D-152 and D-153
 
 Spike 1 proved a normal signed-in-user Node 24.19 process can host the structured RELAY contract over a Windows named pipe with authenticated version/capability negotiation, non-interactive CLI execution, diagnostics, and hard-kill restart recovery.
 
@@ -871,7 +871,7 @@ Evidence: `spikes/phase1/results/2026-09-24-spike1-node-windows.json`.
 
 ## D-147 — SQLite is the provisional operational-state store
 
-Status: Phase 1 provisional
+Status: Confirmed and selected by D-153
 
 Node's built-in SQLite 3.53.3 in WAL mode with `synchronous=FULL` is approved to continue as the prototype store for project registry data, compact results, job/checkpoint state, and schema migration metadata.
 
@@ -982,7 +982,7 @@ Evidence: `spikes/phase1/results/2026-09-24-spike6-dashboard-shell-windows.json`
 
 ## D-152 — Rust becomes the preferred Phase 1 runtime/IPC candidate for deeper parity
 
-Status: Phase 1 provisional
+Status: Superseded by D-153
 
 Spike 7 changes the preferred runtime/IPC candidate from Node to Rust for the next parity work. It does not yet make Rust the final implementation language or approve a rewrite of every proven subsystem.
 
@@ -1003,6 +1003,49 @@ Rust also closes the unresolved local-IPC access-control gate. The challenger cr
 
 The trade-off is real. The selected Node host path measured 556 source lines and no unsafe boundary, while the Rust challenger measured 1,420 source lines and 21 `unsafe` mentions concentrated around Win32 interoperability. Rust required three direct Cargo dependencies / 14 resolved packages, a roughly 12.7-second clean optimized build, and a 438,272-byte stripped release executable. Node requires no compile step and no npm runtime packages, although the Node executable on the fixture was about 92.8 MB.
 
-Therefore Rust is promoted only to **preferred candidate for deeper parity**. Node remains the working reference/fallback until Rust proves that its footprint/security advantage survives the operational-state requirements that Node currently satisfies through built-in SQLite. The next gate is durable SQLite state, migration/integrity behavior, dependency/package economics, and hard-kill durability—not a broad port of indexing/evidence/UEFN features.
+At the close of Spike 7, Rust was promoted only to **preferred candidate for deeper parity** while Node remained the working storage reference. Spike 8 subsequently completed that durability/dependency gate; D-153 supersedes this runtime-selection state.
 
 Evidence: `spikes/phase1/results/2026-09-24-spike7-runtime-ipc-challenger-windows.json`.
+
+
+## D-153 — Rust + bundled SQLite becomes the selected Phase 1 local core foundation
+
+Status: Phase 1 selected
+
+Spike 8 closes the runtime/storage selection gate that D-152 left open. The selected Phase 1 local foundation is now:
+
+- Rust for the normal signed-in-user `relayd` host and canonical local CLI/runtime
+- the kernel-verified current-user Windows named pipe plus random per-start token from Spike 7
+- the embedded static/HTTP dashboard surface from D-151, hosted by the same Rust process
+- SQLite for operational metadata/compact results/jobs/migration state
+- `rusqlite 0.40.2` with default features disabled and bundled SQLite enabled
+- schema version 1 kept database-compatible with the Node reference implementation
+
+Node remains a compatibility/reference implementation during Phase 1, not the intended shipping daemon.
+
+The neutral Spike 8 harness replayed the Spike 2 workload against both runtimes: 1 project, 300 result writes, 600 result reads, 100 checkpoint updates, and 20 `quick_check` calls. Both runtimes survived a hard process kill with the selected result, checkpoint, project registry, and schema intact. Both also started `Degraded` on a deliberately malformed database and on a future schema version, blocked storage writes, and preserved the damaged/future store instead of silently replacing or downgrading it.
+
+Cross-runtime schema compatibility was tested in both directions: Node-created schema-1 projects/results/jobs were opened and read correctly by Rust, and Rust-created schema-1 data was opened and read correctly by Node. Stored payload hashes and producer versions were preserved. Node used SQLite 3.53.3; the Rust bundled build used SQLite 3.53.2.
+
+The runtime advantage survived real storage:
+
+- post-restart idle RSS: Node 120,500,224 bytes; Rust 9,367,552 bytes — Rust remained 92.23% lower
+- initial storage-ready startup: Node 87.836 ms; Rust 46.915 ms
+- restart storage-ready startup: Node 90.713 ms; Rust 47.205 ms
+- result write p50: Node 1.031 ms; Rust 1.002 ms
+- result read p50: Node 0.360 ms; Rust 0.343 ms
+- `quick_check` p50: Node 0.382 ms; Rust 0.363 ms
+- checkpoint update p50: Node 0.794 ms; Rust 1.563 ms
+- both clean-close databases were 1,462,272 bytes and both cleared WAL/SHM files after clean shutdown
+
+The Rust checkpoint path is slower on this fixture, but the absolute p50 remains low and does not reverse the runtime/resource decision. Concurrency and maintenance behavior remain separate gates rather than being inferred from single-writer latency.
+
+The dependency/build cost also became concrete. Relative to the Spike 7 Rust host, the storage-enabled release executable grew from 438,272 bytes to 2,153,472 bytes, direct Cargo dependencies from 3 to 5, and the resolved package graph from 14 to 34 packages. A clean optimized build with cached crates measured 32.013 seconds; an incremental no-change release build measured 264 ms. Selected dependency metadata reports `rusqlite` MIT, `libsqlite3-sys` MIT, and `sha2` MIT OR Apache-2.0. The bundled SQLite 3.53.2 amalgamation contains SQLite's upstream copyright disclaimer/public-domain dedication; final installer notice generation and release-license auditing remain packaging gates.
+
+This selection confirms D-147's SQLite operational-store architecture while superseding its Node-specific implementation path. It does not reopen D-148: heavyweight evidence remains outside SQLite by default.
+
+Open storage gates remain concurrent-reader/writer behavior, long-reader WAL/checkpoint pressure, VACUUM/maintenance interruption, disk-full injection, backup/restore, and interrupted future migrations. Those are maintenance/release-hardening work; they no longer block the Phase 1 language/runtime choice.
+
+D-153 supersedes the runtime-choice portions of D-146 and D-152.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike8-rust-storage-parity-windows.json`.

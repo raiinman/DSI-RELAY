@@ -202,6 +202,8 @@ Requirements:
 
 See RESILIENCE_AND_RECOVERY.md for rollback/restore rules.
 
+Phase 1 Spike 8 proves schema version 1 is representation-compatible across the Node reference and selected Rust implementation: each runtime can open the other's database and preserve projects, compact result JSON, payload hashes, producer versions, jobs, and checkpoints. Both runtimes reject an intentionally future schema version 999 by starting `Degraded` and blocking storage writes rather than guessing compatibility or downgrading the data. This is a schema-1 interoperability result, not approval for arbitrary mixed-version rolling upgrades or future migrations.
+
 ## Adapter protocol evolution
 
 Adapter compatibility is declared, not guessed.

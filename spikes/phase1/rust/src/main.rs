@@ -5,12 +5,14 @@ use relay_rust_challenger::security::{
     current_user_pipe_security, random_hex, verify_pipe_security,
 };
 use relay_rust_challenger::state::{
-    clear_state, read_state, state_path, write_state, HostState, IpcSecurityState, ProtocolRange,
+    clear_state, db_path, read_state, state_path, write_state, HostState, IpcSecurityState,
+    ProtocolRange,
 };
+use relay_rust_challenger::storage::{RelayStorage, StorageHealth};
 use relay_rust_challenger::{CAPABILITIES, PROTOCOL_MAX, PROTOCOL_MIN, RELAY_VERSION, SCHEMA_VERSION};
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 fn fnv1a64(value: &str) -> u64 {
@@ -69,6 +71,21 @@ fn run_host(dashboard_enabled: bool) -> Result<(), String> {
         ));
     }
     let state_file = state_path();
+    let db_file = db_path();
+    let (storage, storage_health) = match RelayStorage::open(&db_file) {
+        Ok(storage) => match storage.integrity() {
+            Ok(health) if health.ok => (Some(Arc::new(Mutex::new(storage))), health),
+            Ok(health) => (None, health),
+            Err(error) => (
+                None,
+                StorageHealth::unavailable(format!("{}: {}", error.code, error.message)),
+            ),
+        },
+        Err(error) => (
+            None,
+            StorageHealth::unavailable(format!("{}: {}", error.code, error.message)),
+        ),
+    };
 
     let shutdown = Arc::new(AtomicBool::new(false));
     let context = HostContext {
@@ -80,6 +97,8 @@ fn run_host(dashboard_enabled: bool) -> Result<(), String> {
             && acl_verification.owner_is_current_user,
         acl_owner_current_user: acl_verification.owner_is_current_user,
         acl_ace_count: acl_verification.ace_count,
+        storage,
+        storage_health: storage_health.clone(),
     };
 
     let dashboard_server = if dashboard_enabled {
@@ -99,7 +118,12 @@ fn run_host(dashboard_enabled: bool) -> Result<(), String> {
             max: PROTOCOL_MAX,
         },
         capabilities: CAPABILITIES.iter().map(|value| (*value).to_string()).collect(),
-        recovery_state: "Healthy".to_string(),
+        recovery_state: if storage_health.ok {
+            "Healthy".to_string()
+        } else {
+            "Degraded".to_string()
+        },
+        storage_schema_version: storage_health.schema_version,
         ipc_security: IpcSecurityState {
             explicit_dacl: true,
             kernel_acl_verified: context.kernel_acl_verified,
@@ -124,6 +148,8 @@ fn run_host(dashboard_enabled: bool) -> Result<(), String> {
             "kernel_acl_verified": context.kernel_acl_verified,
             "owner_current_user": context.acl_owner_current_user,
             "acl_ace_count": context.acl_ace_count,
+            "recovery_state": state.recovery_state,
+            "storage_schema_version": state.storage_schema_version,
             "dashboard": state.dashboard
         }))
         .map_err(|error| format!("serialize ready: {error}"))?

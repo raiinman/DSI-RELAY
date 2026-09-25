@@ -125,3 +125,27 @@ Artifact: `2026-09-24-spike7-runtime-ipc-challenger-windows.json`
 Current implication: Rust is the preferred candidate for deeper parity, not the final runtime. Node remains the working reference/fallback until Rust proves the durable SQLite/result/checkpoint/migration contracts without erasing its footprint and operability advantage.
 
 See D-152 in `docs/DECISION_LOG.md`.
+
+## Spike 8 — Rust operational-state parity + dependency economics
+
+Artifact: `2026-09-24-spike8-rust-storage-parity-windows.json`
+
+- schema-1 project/result/job durability passed on both Node and Rust after hard kill
+- malformed stores and intentionally future schema 999 start `Degraded`, block writes, and are not silently replaced/downgraded
+- Node-created databases were opened/read correctly by Rust; Rust-created databases were opened/read correctly by Node
+- Node SQLite: 3.53.3; Rust bundled SQLite: 3.53.2
+- post-restart idle RSS with SQLite loaded: Node 120,500,224 bytes; Rust 9,367,552 bytes (92.23% lower)
+- initial storage-ready startup: Node 87.836 ms; Rust 46.915 ms
+- result write p50: Node 1.031 ms; Rust 1.002 ms
+- result read p50: Node 0.360 ms; Rust 0.343 ms
+- checkpoint p50: Node 0.794 ms; Rust 1.563 ms
+- `quick_check` p50: Node 0.382 ms; Rust 0.363 ms
+- clean-close DB size matched at 1,462,272 bytes and both cleared WAL/SHM files
+- Rust release binary grew from 438,272 bytes (Spike 7) to 2,153,472 bytes with bundled SQLite
+- Rust direct dependencies grew from 3 to 5; resolved Cargo packages from 14 to 34
+- clean optimized Rust build with cached crates: 32.013 s; incremental no-change release build: 264 ms
+- selected dependency metadata: `rusqlite` MIT, `libsqlite3-sys` MIT, `sha2` MIT OR Apache-2.0
+
+Current implication: D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation. Node remains a schema/protocol compatibility reference. Heavyweight evidence remains outside operational SQLite.
+
+See D-153 in `docs/DECISION_LOG.md`.

@@ -250,6 +250,8 @@ On startup or after an unclean shutdown, RELAY should be able to:
 - reconcile external project/tool state
 - withhold "verified current" status until required checks complete
 
+Phase 1 Spike 8 validates the selected Rust + bundled-SQLite path against these rules for schema version 1. Rust and the Node reference both survived a hard process kill with project/result/checkpoint state intact, passed `PRAGMA quick_check` after restart, and opened each other's schema-1 databases without rewriting stored hashes or producer metadata. A malformed database and an intentionally future schema version 999 both caused `Degraded` startup with storage writes blocked; neither store was silently replaced or downgraded. Disk-full injection, backup/restore, concurrent-reader/WAL pressure, maintenance interruption, and interrupted future migrations remain open hardening gates.
+
 ## Migrations and upgrades
 
 Schema/data migration is itself a side-effecting workflow.

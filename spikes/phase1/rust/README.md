@@ -1,6 +1,6 @@
-# Rust Runtime / IPC Challenger
+# Rust Phase 1 Local Core Foundation
 
-This is the Phase 1 lower-footprint Windows challenger for the RELAY per-user host. It is not yet the production runtime.
+D-153 selects this Rust implementation as the Phase 1 foundation for the RELAY per-user host, local IPC, embedded dashboard transport, and operational SQLite state. It is still a Phase 1 prototype rather than a release-ready product.
 
 ## What it proves
 
@@ -13,18 +13,23 @@ This is the Phase 1 lower-footprint Windows challenger for the RELAY per-user ho
 - clean/hard restart behavior
 - actual Node CLI ↔ Rust host and Rust CLI ↔ Node host interoperability
 - same-process embedded static dashboard feasibility
+- schema-version-1 SQLite project/result/job durability in WAL + `synchronous=FULL`
+- hard-kill persistence, `quick_check`, damaged-store `Degraded` startup, and blocked writes
+- future-schema rejection without downgrade
+- bidirectional Node ↔ Rust schema-1 database compatibility
+- `rusqlite` with defaults disabled and bundled SQLite as the selected operational-state binding
 
 ## What it intentionally does not prove yet
 
-- SQLite operational-state parity
-- result/checkpoint/migration durability
-- indexing/watch/reconciliation
-- evidence compression/blob storage
+- concurrent-reader/writer and long-reader WAL/checkpoint behavior
+- VACUUM/compaction and maintenance interruption
+- disk-full injection or backup/restore
+- future migration interruption beyond safe rejection of an unsupported future schema
+- indexing/watch/reconciliation port into Rust
+- evidence compression/blob storage port into Rust
 - background job scheduling
 - UEFN/adapters
-- production HTTP concurrency or desktop packaging
-
-Those stay out until the runtime challenger earns them.
+- production HTTP concurrency, installer/update, or desktop packaging
 
 ## Run
 
@@ -48,7 +53,7 @@ In another shell using the same `RELAY_STATE_DIR`:
 .\target\release\relay-rust-challenger.exe shutdown
 ```
 
-The neutral Node-vs-Rust comparison is owned by `../compare/spike7.mjs`; use that artifact rather than ad-hoc candidate-only timing when making runtime decisions.
+Neutral comparisons are owned outside this candidate subtree. Use `../compare/spike7.mjs` for host/IPC evidence and `../compare/spike8.mjs` for operational SQLite parity/dependency economics rather than ad-hoc candidate-only timing.
 
 ## Security boundary
 
@@ -58,6 +63,6 @@ The random application token remains required as defense in depth.
 
 ## Current interpretation
 
-Spike 7 promotes Rust to the preferred candidate for deeper parity because it materially improves host/dashboard footprint, startup/CLI latency, restart time, and explicit Windows IPC security on the measured fixture.
+D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation. Spike 8 preserved the schema-1 project/result/job durability contract in both directions with the Node reference and retained a 92.23% post-storage idle-RSS reduction on the measured fixture.
 
-That is not a final language lock. Spike 8 must test whether the advantage survives durable SQLite state and its dependency/build economics.
+The selection does not make every Rust subsystem final. Schema/IDL, maintenance/concurrency hardening, adapters, packaging/update, and the remaining Phase 1 foundations still require their own evidence.

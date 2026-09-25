@@ -8,15 +8,16 @@ Phase 0 is closed as the approved architecture/research baseline. Phase 1 must t
 
 Current prototype progress:
 
-- Spike 1 complete: per-user host + CLI + structured command round trip is proven on Windows. Node remains provisional because its idle RSS is material and explicit named-pipe DACL/cross-user denial is still unproven.
-- Spike 2 complete: project registry, durable result IDs, job checkpoints, schema migration metadata, integrity checks, hard-kill persistence, and degraded corrupted-store startup are proven with the provisional SQLite candidate.
+- Spike 1 complete: Node proved the first per-user host + CLI + structured Windows round trip; later runtime selection work supersedes Node as the intended shipping host.
+- Spike 2 complete: Node first proved the project/result/checkpoint SQLite durability contract that later runtimes must preserve.
 - Spike 3 complete: exact whole-blob dedupe, Zstandard cost curves, SQLite-BLOB versus metadata+file layout, log aggregation, telemetry downsampling, idle recompression, and lossless/reference image handling have benchmark evidence.
 - Spike 4 complete: Windows recursive notifications are proven as fast hints but not authoritative under bursts; reconciliation + changed-only parsing is the least-privilege baseline, and USN journal reading is deferred to an optional privileged-helper experiment because non-elevated reads were denied.
 - Spike 5 complete: real UEFN message-pump coexistence confirms foreground-safe deferral as the primary protection; soft Windows QoS remains available for work that must continue, hard CPU caps are rejected as a routine default, and 100 registered inactive projects remained effectively idle.
-- Spike 6 complete: dashboard command-contract parity is proven; a standalone proxy costs another resident runtime, so the provisional default is a dependency-free static/HTTP shell hosted inside `relayd`.
-- Spike 7 complete: the Rust runtime/IPC challenger materially beat the Node reference on host/dashboard RSS, startup, CLI launch, restart, and explicit Windows pipe security while remaining protocol-interoperable. Rust is now the preferred candidate for deeper parity, not the final runtime.
-- Current next spike: Spike 8 — Rust operational-state parity + dependency economics. Challenge Node's strongest remaining advantage by proving the Spike 2 SQLite contracts without immediately porting indexing/evidence/UEFN work.
-- Benchmark artifacts live under `spikes/phase1/results/`; provisional architecture consequences are recorded in D-146 through D-152.
+- Spike 6 complete: dashboard command-contract parity is proven; a standalone proxy costs another resident runtime, so the selected local shape is a dependency-free static/HTTP shell hosted inside `relayd`.
+- Spike 7 complete: Rust materially beat the Node reference on host/dashboard RSS, startup, CLI launch, restart, and explicit Windows pipe security while remaining protocol-interoperable.
+- Spike 8 complete: Rust reproduced the schema-1 SQLite durability/recovery contract, opened Node databases and produced databases Node could read, and retained a 92.23% post-storage idle-RSS reduction. D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation.
+- Current next spike: Spike 9 — schema/IDL + command-registry source of truth.
+- Benchmark artifacts live under `spikes/phase1/results/`; current Phase 1 stack consequences are recorded through D-153.
 
 ## Phase 1 goal
 
@@ -213,6 +214,23 @@ Measure:
 
 Do not port indexing, evidence compression, dashboard features, or UEFN adapters in Spike 8 unless a tiny change is strictly required to exercise the storage contract.
 
+### Spike 9 — Schema/IDL + command-registry source of truth
+
+With runtime, IPC, dashboard transport, and operational storage selected, prove one machine-readable source of truth can describe RELAY commands without duplicating contracts across Rust, CLI help, dashboard metadata, adapters, and AI skills.
+
+At minimum prove:
+
+- stable command/capability identifiers and per-command contract versions
+- argument/result/error schemas for the current shared command subset
+- one generated or validated command registry consumed by Rust
+- CLI/dashboard/adapter discovery metadata derived from the same source
+- additive/optional-field compatibility and explicit rejection of incompatible versions
+- reserved/deprecated identifiers are not silently reused
+- compact capability/schema discovery suitable for AI clients without loading the whole catalog
+- deterministic validation does not require an AI call
+
+Compare schema/IDL options on code-generation/validation complexity, binary/runtime cost, mixed-version behavior, human debuggability, and context/token overhead. Do not begin adapter product work until this contract boundary is proven.
+
 ## Evidence storage lifecycle target
 
 The storage goal is not merely "compress everything."
@@ -265,4 +283,4 @@ And Phase 1 must deliver:
 
 For a fresh ChatGPT/Codex conversation, use this request:
 
-> Take over DSI RELAY Phase 1. Work in `raiinman/DSI-RELAY`. Start with `AGENTS.md`, `docs/AGENTS.md`, and `docs/PHASE1_START_HERE.md`, then follow the read order there. Phase 0 is closed and must remain the architecture baseline unless a Phase 1 prototype provides evidence that a decision needs revision. Begin with Spike 1: local host + CLI + structured command round trip. Keep the implementation minimal and benchmark-driven; do not jump ahead into the full UEFN product.
+> Take over DSI RELAY Phase 1. Work in `raiinman/DSI-RELAY`. Start with `AGENTS.md`, `docs/AGENTS.md`, and `docs/PHASE1_START_HERE.md`, then follow the read order there. Phase 0 remains the architecture baseline. Spikes 1–8 are complete; D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation while Node remains a compatibility reference. Begin with Spike 9: schema/IDL + command-registry source of truth. Keep the implementation narrow and benchmark-driven; do not jump ahead into adapter product work or the full UEFN product.

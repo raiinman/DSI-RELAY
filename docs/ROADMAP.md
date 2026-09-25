@@ -86,14 +86,15 @@ Goal: choose the minimum durable stack based on prototypes, not preference.
 
 Completed prototype evidence:
 
-- Spike 1: per-user host + CLI + structured command round trip; Node/runtime and named-pipe security remain provisional.
-- Spike 2: SQLite project/result/checkpoint durability with hard-kill recovery and degraded damaged-store behavior.
+- Spike 1: Node first proved the per-user host + CLI + structured command round trip.
+- Spike 2: Node first proved SQLite project/result/checkpoint durability with hard-kill recovery and degraded damaged-store behavior.
 - Spike 3: Evidence Storage Lifecycle compression/deduplication and BLOB-vs-file benchmark.
 - Spike 4: Windows indexing benchmark; notifications are hints, reconciliation + changed-only parsing is the least-privilege baseline, and USN reading remains optional/privileged.
 - Spike 5: resource coexistence benchmark against a live UEFN editor; foreground-safe deferral is primary, soft Windows QoS remains optional for unavoidable background work, and hard CPU caps are rejected as a routine default.
 - Spike 6: dashboard shell parity/resource benchmark; static/HTTP presentation hosted by `relayd` is favored over a separate resident dashboard backend.
-- Spike 7: neutral Node-vs-Rust runtime/IPC comparison; Rust becomes the preferred candidate for deeper parity after materially improving host/dashboard footprint, startup/CLI latency, restart time, and explicit current-user pipe security while preserving protocol interoperability.
-- Current next work: Spike 8 — Rust operational-state parity + dependency economics. Node remains the working reference/fallback until the Rust candidate proves the durable SQLite contracts and their package/build cost.
+- Spike 7: neutral Node-vs-Rust runtime/IPC comparison; Rust materially improved footprint, startup/CLI latency, restart time, and explicit current-user pipe security while preserving protocol interoperability.
+- Spike 8: Rust reproduced the schema-1 SQLite durability/recovery contract, passed bidirectional database compatibility with Node, and retained a 92.23% post-storage idle-RSS reduction. D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation.
+- Current next work: Spike 9 — schema/IDL + command-registry source of truth.
 
 Research/prototype:
 

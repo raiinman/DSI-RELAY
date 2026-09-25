@@ -257,6 +257,8 @@ Evaluate:
 
 Maintenance should run during safe windows when possible and remain bounded by storage/resource policy.
 
+Phase 1 Spike 8 confirms the selected Rust + bundled-SQLite operational-state path preserves its runtime advantage after real durable state is loaded. After hard-kill recovery, Rust sampled 9,367,552 bytes RSS versus 120,500,224 bytes for the Node reference, with zero CPU delta over the five-second idle sample. Result write/read/`quick_check` p50 latency remained near the Node reference; Rust checkpoint updates were slower on this fixture (1.563 ms p50 versus 0.794 ms) but still low in absolute terms. The trade-off moves into build/package cost: the stripped Rust binary grew from 438,272 bytes before SQLite to 2,153,472 bytes with bundled SQLite, and a cached-crate clean release build measured about 32 seconds. Concurrency, WAL pressure, VACUUM, and interrupted maintenance remain separate acceptance gates.
+
 ## Evidence and screenshot storage
 
 Evidence can dominate disk use.

@@ -1,7 +1,8 @@
+use crate::storage::{RelayStorage, StorageError, StorageHealth};
 use crate::{CAPABILITIES, PROTOCOL_MAX, PROTOCOL_MIN, RELAY_VERSION, SCHEMA_VERSION};
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 #[derive(Clone)]
@@ -12,6 +13,8 @@ pub struct HostContext {
     pub kernel_acl_verified: bool,
     pub acl_owner_current_user: bool,
     pub acl_ace_count: u32,
+    pub storage: Option<Arc<Mutex<RelayStorage>>>,
+    pub storage_health: StorageHealth,
 }
 
 pub fn negotiate(client_min: u32, client_max: u32) -> Option<u32> {
@@ -75,6 +78,29 @@ fn failure(request_id: &str, code: &str, message: &str) -> Value {
     })
 }
 
+fn with_storage<F>(context: &HostContext, operation: F) -> Result<Value, StorageError>
+where
+    F: FnOnce(&RelayStorage) -> Result<Value, StorageError>,
+{
+    let storage = context.storage.as_ref().ok_or_else(|| {
+        StorageError::new(
+            "STORAGE_UNAVAILABLE",
+            "RELAY storage is unavailable; run relay doctor for details.",
+        )
+    })?;
+    let guard = storage.lock().map_err(|_| {
+        StorageError::new("STORAGE_UNAVAILABLE", "RELAY storage lock is unavailable.")
+    })?;
+    operation(&guard)
+}
+
+fn storage_result(request_id: &str, result: Result<Value, StorageError>) -> Value {
+    match result {
+        Ok(value) => success(request_id, value),
+        Err(error) => failure(request_id, error.code, &error.message),
+    }
+}
+
 pub fn dispatch_command(
     request_id: &str,
     command: &str,
@@ -86,7 +112,7 @@ pub fn dispatch_command(
             request_id,
             json!({
                 "process_health": "running",
-                "recovery_state": "Healthy",
+                "recovery_state": if context.storage_health.ok { "Healthy" } else { "Degraded" },
                 "pid": std::process::id(),
                 "version": RELAY_VERSION,
                 "runtime": "rust",
@@ -105,51 +131,110 @@ pub fn dispatch_command(
                     "scope": "current_user",
                     "auth_token": true
                 },
+                "storage": &context.storage_health,
                 "uptime_ms": context.started.elapsed().as_millis() as u64
             }),
         ),
-        "system.doctor" => success(
-            request_id,
-            json!({
-                "healthy": context.explicit_dacl && context.kernel_acl_verified,
-                "summary": if context.explicit_dacl && context.kernel_acl_verified {
-                    "Rust challenger host, kernel-verified current-user pipe DACL, token authentication, and protocol checks passed."
-                } else {
-                    "Rust challenger host is running, but its explicit pipe security verification did not pass."
-                },
-                "checks": [
-                    { "id": "host.process", "status": "pass", "detail": format!("PID {}", std::process::id()) },
-                    { "id": "ipc.named_pipe", "status": "pass", "detail": "Windows named-pipe round trip is active." },
-                    {
-                        "id": "ipc.explicit_dacl",
-                        "status": if context.kernel_acl_verified { "pass" } else { "fail" },
-                        "detail": if context.kernel_acl_verified {
-                            format!("Windows GetSecurityInfo verified a protected current-user-only DACL with {} ACE.", context.acl_ace_count)
-                        } else {
-                            "Windows did not verify the explicit current-user DACL on the created pipe.".to_string()
-                        }
+        "system.doctor" => {
+            let security_ok = context.explicit_dacl && context.kernel_acl_verified;
+            let storage_ok = context.storage_health.ok;
+            success(
+                request_id,
+                json!({
+                    "healthy": security_ok && storage_ok,
+                    "summary": if security_ok && storage_ok {
+                        "RELAY host, kernel-verified current-user pipe DACL, protocol, and durable storage checks passed."
+                    } else if !storage_ok {
+                        "RELAY host is reachable, but durable storage needs attention."
+                    } else {
+                        "RELAY host is running, but its explicit pipe security verification did not pass."
                     },
-                    { "id": "ipc.auth_token", "status": "pass", "detail": "A random per-start token is required in addition to the OS DACL." },
-                    { "id": "protocol.handshake", "status": "pass", "detail": format!("Protocol {}", PROTOCOL_MAX) },
-                    { "id": "storage.scope", "status": "warning", "detail": "Storage is intentionally not ported in the runtime challenger." }
-                ],
-                "next_action": Value::Null
-            }),
-        ),
+                    "checks": [
+                        { "id": "host.process", "status": "pass", "detail": format!("PID {}", std::process::id()) },
+                        { "id": "ipc.named_pipe", "status": "pass", "detail": "Windows named-pipe round trip is active." },
+                        {
+                            "id": "ipc.explicit_dacl",
+                            "status": if context.kernel_acl_verified { "pass" } else { "fail" },
+                            "detail": if context.kernel_acl_verified {
+                                format!("Windows GetSecurityInfo verified a protected current-user-only DACL with {} ACE.", context.acl_ace_count)
+                            } else {
+                                "Windows did not verify the explicit current-user DACL on the created pipe.".to_string()
+                            }
+                        },
+                        { "id": "ipc.auth_token", "status": "pass", "detail": "A random per-start token is required in addition to the OS DACL." },
+                        { "id": "protocol.handshake", "status": "pass", "detail": format!("Protocol {}", PROTOCOL_MAX) },
+                        {
+                            "id": "storage.integrity",
+                            "status": if storage_ok { "pass" } else { "fail" },
+                            "detail": if storage_ok {
+                                format!("SQLite quick_check: {}", context.storage_health.check)
+                            } else {
+                                context.storage_health.error.clone().unwrap_or_else(|| "Storage unavailable".to_string())
+                            }
+                        }
+                    ],
+                    "next_action": if storage_ok {
+                        Value::Null
+                    } else {
+                        Value::String("Protect the damaged store, inspect recovery options, and avoid writes until storage is repaired or restored.".to_string())
+                    }
+                }),
+            )
+        },
         "system.echo" => success(request_id, json!({ "echo": arguments })),
         "system.shutdown" => {
             context.shutdown.store(true, Ordering::SeqCst);
             success(request_id, json!({ "shutting_down": true }))
         }
-        "project.list" => failure(
+        "storage.integrity" => storage_result(
             request_id,
-            "COMMAND_NOT_IMPLEMENTED_IN_CHALLENGER",
-            "Project storage is intentionally not ported in the Rust runtime challenger.",
+            with_storage(context, |storage| {
+                Ok(serde_json::to_value(storage.integrity()?).map_err(|error| {
+                    StorageError::new("STORAGE_ERROR", format!("serialize storage health: {error}"))
+                })?)
+            }),
         ),
-        "result.get" => failure(
+        "project.register" => storage_result(
             request_id,
-            "COMMAND_NOT_IMPLEMENTED_IN_CHALLENGER",
-            "Result storage is intentionally not ported in the Rust runtime challenger.",
+            with_storage(context, |storage| storage.register_project(&arguments)),
+        ),
+        "project.list" => storage_result(
+            request_id,
+            with_storage(context, |storage| {
+                Ok(json!({ "projects": storage.list_projects()? }))
+            }),
+        ),
+        "result.put" => storage_result(
+            request_id,
+            with_storage(context, |storage| storage.put_result(&arguments)),
+        ),
+        "result.get" => storage_result(
+            request_id,
+            with_storage(context, |storage| {
+                let id = arguments
+                    .get("result_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                storage.get_result(id)?.ok_or_else(|| {
+                    StorageError::new("RESULT_NOT_FOUND", "Result not found")
+                })
+            }),
+        ),
+        "job.checkpoint" => storage_result(
+            request_id,
+            with_storage(context, |storage| storage.checkpoint_job(&arguments)),
+        ),
+        "job.get" => storage_result(
+            request_id,
+            with_storage(context, |storage| {
+                let id = arguments
+                    .get("job_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                storage.get_job(id)?.ok_or_else(|| {
+                    StorageError::new("JOB_NOT_FOUND", "Job not found")
+                })
+            }),
         ),
         _ => failure(
             request_id,
@@ -172,6 +257,8 @@ mod tests {
             kernel_acl_verified: true,
             acl_owner_current_user: true,
             acl_ace_count: 1,
+            storage: None,
+            storage_health: StorageHealth::unavailable("fixture storage unavailable"),
         }
     }
 
@@ -195,12 +282,9 @@ mod tests {
     }
 
     #[test]
-    fn unported_storage_stays_explicit() {
+    fn unavailable_storage_stays_explicit() {
         let response = dispatch_command("req", "project.list", json!({}), &context());
         assert_eq!(response["ok"], false);
-        assert_eq!(
-            response["error"]["code"],
-            "COMMAND_NOT_IMPLEMENTED_IN_CHALLENGER"
-        );
+        assert_eq!(response["error"]["code"], "STORAGE_UNAVAILABLE");
     }
 }

@@ -1,37 +1,38 @@
 # Purpose
 
-Own the Rust Phase 1 runtime/IPC challenger used to test whether a lower-footprint Windows host materially improves RELAY's runtime, IPC-security, startup, and dashboard-hosting trade-offs.
+Own the selected Rust Phase 1 local core foundation and its evidence-backed parity spikes. Spike 8 adds operational SQLite state, durability, recovery, and dependency economics while Node remains the compatibility/reference implementation.
 
 # Ownership
 
 - This file governs `spikes/phase1/rust/`.
 - `spikes/phase1/AGENTS.md` remains authoritative for Phase 1 evidence and stack-selection rules.
-- This challenger does not become production architecture merely by outperforming one Node benchmark.
+- D-153 selects this subtree as the Phase 1 local core foundation, but selection does not make it release-ready or waive the remaining Phase 1/release-hardening gates.
 
 # Local Contracts
 
-- Keep scope to host/runtime/IPC fundamentals until Rust earns deeper porting.
-- Required challenger surface: per-user host, structured handshake, `system.status`, `system.doctor`, `system.shutdown`, clean/hard restart, explicit Windows local-IPC access control, and optional embedded dashboard/static-shell feasibility.
+- Preserve the proven Spike 7 host/IPC contracts and Spike 8 operational-state contracts: project registry, durable result IDs, job checkpoints, migration metadata, SQLite integrity checks, degraded damaged-store startup, blocked writes while unavailable, and graceful/hard-kill persistence.
+- Further subsystem ports into Rust require their own owning Phase 1 spike or implementation milestone; do not pull indexing, evidence lifecycle, resource scheduling, adapters, or UEFN feature work into unrelated changes.
+- Keep SQLite operational metadata/compact results separate from heavyweight evidence; Spike 8 does not reopen the BLOB decision.
 - Use an explicit current-user Windows named-pipe security descriptor; do not rely on the default named-pipe DACL.
 - Keep the random application-level auth token as defense in depth even when the OS DACL is explicit.
-- Do not port SQLite, indexing, evidence lifecycle, or UEFN product features during this spike.
 - Generated binaries and Cargo target output stay out of Git.
-- Benchmark exact dependency/build cost, release binary size, startup, idle CPU/RAM, and p50/p95/p99 command latency.
-- Preserve structured machine output; human CLI text is not a machine contract.
+- Benchmark exact SQLite dependency/license/build cost, release binary-size growth, startup/idle CPU/RAM, durable read/write/checkpoint latency, WAL/database growth, integrity/recovery behavior, and hard-kill persistence.
+- Preserve structured machine output and schema compatibility; human CLI text is not a machine contract.
 
 # Work Guidance
 
 - Prefer a small synchronous implementation before introducing an async runtime.
 - Keep Windows API use narrow and document why each unsafe boundary exists.
-- Reuse the proven dashboard static assets rather than redesigning UI during a runtime bake-off.
+- Keep `rusqlite` default features disabled and bundled SQLite explicit unless a later benchmark deliberately reopens that dependency decision.
+- Reuse the proven dashboard static assets rather than redesigning UI during stack-selection work.
 - Treat build/dependency complexity as a measured cost alongside runtime performance.
 
 # Verification
 
 - Run `cargo test`.
 - Build `--release`.
-- Run the Windows Spike 7 benchmark against the current Node baseline.
-- Verify no `target/`, EXE, PDB, credentials, or personal paths are staged.
+- Run the neutral Windows comparison that owns the changed decision: Spike 7 for host/IPC or Spike 8 for operational storage.
+- Verify no `target/`, EXE, PDB, credentials, personal paths, or user SID values are staged.
 
 # Child DOX Index
 

@@ -18,6 +18,10 @@ D-153 selects this Rust implementation as the Phase 1 foundation for the RELAY p
 - future-schema rejection without downgrade
 - bidirectional Node ↔ Rust schema-1 database compatibility
 - `rusqlite` with defaults disabled and bundled SQLite as the selected operational-state binding
+- one embedded JSON command registry using a bounded JSON Schema 2020-12 profile
+- deterministic argument/result/error validation around the command dispatcher
+- optional per-command contract versions with fail-closed incompatible-version handling
+- registry-derived CLI catalog/help/describe, dashboard exposure, adapter/AI discovery, and command capability IDs
 
 ## What it intentionally does not prove yet
 
@@ -50,10 +54,13 @@ In another shell using the same `RELAY_STATE_DIR`:
 ```powershell
 .\target\release\relay-rust-challenger.exe status
 .\target\release\relay-rust-challenger.exe doctor
+.\target\release\relay-rust-challenger.exe commands
+.\target\release\relay-rust-challenger.exe describe project.register 1
+.\target\release\relay-rust-challenger.exe help
 .\target\release\relay-rust-challenger.exe shutdown
 ```
 
-Neutral comparisons are owned outside this candidate subtree. Use `../compare/spike7.mjs` for host/IPC evidence and `../compare/spike8.mjs` for operational SQLite parity/dependency economics rather than ad-hoc candidate-only timing.
+Neutral comparisons are owned outside this candidate subtree. Use `../compare/spike7.mjs` for host/IPC evidence, `../compare/spike8.mjs` for operational SQLite parity/dependency economics, and `../compare/spike9.mjs` for command-registry/IDL evidence rather than ad-hoc candidate-only timing.
 
 ## Security boundary
 
@@ -65,4 +72,6 @@ The random application token remains required as defense in depth.
 
 D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation. Spike 8 preserved the schema-1 project/result/job durability contract in both directions with the Node reference and retained a 92.23% post-storage idle-RSS reduction on the measured fixture.
 
-The selection does not make every Rust subsystem final. Schema/IDL, maintenance/concurrency hardening, adapters, packaging/update, and the remaining Phase 1 foundations still require their own evidence.
+D-154 selects `../contracts/commands.registry.json` plus the bounded JSON Schema 2020-12 validator as the semantic built-in command-contract source. The registry drives runtime validation and discovery metadata without adding another Rust dependency; breaking command changes require explicit command-version evolution rather than silent drift.
+
+The selection does not make every Rust subsystem final. Storage maintenance/concurrency hardening, adapter isolation, packaging/update, and the remaining Phase 1 foundations still require their own evidence.

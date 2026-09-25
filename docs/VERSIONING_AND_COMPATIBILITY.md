@@ -161,6 +161,20 @@ If RELAY adopts Protocol Buffers or another IDL:
 
 A schema change that is safe in one representation may be unsafe in another.
 
+Phase 1 D-154 selects JSON command contracts using a bounded JSON Schema 2020-12 profile. Each command carries its own integer contract version in the registry. Clients may omit the version and receive the latest currently registered contract, or pin a version when reproducibility/skew matters. Unsupported requested versions fail explicitly.
+
+For registry format 1:
+
+- adding an optional property is compatible when existing accepted payloads remain valid
+- adding a required property is breaking
+- changing the schema/type of an existing property is breaking unless a proven compatibility rule says otherwise
+- tightening previously allowed unknown/additional fields is breaking
+- removed command IDs remain deprecated/reserved and are not silently reused
+- registry-format evolution is distinct from individual command-version evolution
+- unsupported JSON Schema keywords fail registry validation rather than being ignored
+
+Mixed-version tests must include version omission, explicit supported/unsupported command versions, stale clients, and derived CLI/dashboard/adapter/AI metadata.
+
 ## Result and evidence longevity
 
 Stored results may outlive the code that produced them.
@@ -389,7 +403,6 @@ CI/release tests should include:
 - contract/stability taxonomy names
 - public API version format
 - local IPC serialization
-- schema format/IDL
 - support window lengths
 - preview/experimental policy
 - compatibility alias duration

@@ -149,3 +149,28 @@ Artifact: `2026-09-24-spike8-rust-storage-parity-windows.json`
 Current implication: D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation. Node remains a schema/protocol compatibility reference. Heavyweight evidence remains outside operational SQLite.
 
 See D-153 in `docs/DECISION_LOG.md`.
+
+## Spike 9 — Schema/IDL + command-registry source of truth
+
+Artifact: `2026-09-24-spike9-command-registry-windows.json`
+
+- selected source: plain JSON command registry using the JSON Schema 2020-12 dialect with a bounded RELAY validation profile
+- current registry: 13 versioned commands plus reserved/deprecated ID sets
+- Rust validates registry structure at startup, arguments before business logic, and successful results/error envelopes before return
+- CLI catalog/help/describe, dashboard exposure, adapter discovery, AI discovery, and command capability IDs derive from the same registry
+- existing clients that omit `command_version` still work and resolve the current command version; explicit unsupported versions fail `COMMAND_VERSION_INCOMPATIBLE`
+- registry/validation added 0 direct dependencies and 0 resolved Cargo packages over the Spike 8 core
+- release binary grew by 118,272 bytes to 2,271,744 bytes
+- `system.status` with validation: 0.275 ms p50
+- compact AI `registry.list`: 0.271 ms p50
+- `registry.describe project.register`: 0.220 ms p50
+- deterministic invalid-request rejection: 0.189 ms p50
+- five-second embedded-dashboard idle sample observed 0 CPU ms and 8,523,776 bytes RSS
+- full minified registry: 10,408 bytes; compact AI list: 1,971 bytes (18.94%); one project-register contract: 855 bytes (8.21%)
+- transparent 4-bytes/token heuristic: ~2,602 tokens full registry, ~493 compact AI list, ~214 one-command description
+- isolated full `jsonschema 0.57.0` no-default-feature cost probe: 80 resolved packages, 4,229,120-byte tiny-validator EXE, 72.5 s first optimized build
+- `protoc`, TypeSpec `tsp`, and CUE were not installed on the fixture and were not added as Phase 1 toolchain dependencies
+
+Current implication: D-154 selects the JSON registry + bounded JSON Schema 2020-12 profile as the semantic built-in command-contract source. Public catalog stability and extension contract packaging remain later work.
+
+See D-154 in `docs/DECISION_LOG.md`.

@@ -1,0 +1,235 @@
+{
+  "benchmark": "phase1-spike9-command-registry-windows",
+  "recorded_at": "2026-09-25T07:23:25.128Z",
+  "decision_informed": "Which Phase 1 schema/IDL and command-registry shape should become RELAY's semantic machine-contract source of truth.",
+  "hypothesis": "A plain JSON registry using a bounded JSON Schema 2020-12 subset can drive Rust validation and derived CLI/dashboard/adapter/AI discovery without another runtime dependency or compiler while keeping compatibility rules explicit.",
+  "runtime": {
+    "os": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "arch": "x64"
+    },
+    "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+    "cargo": "cargo 1.97.0 (c980f4866 2026-06-30)",
+    "cpu_model": "AMD Ryzen 7 5800X3D 8-Core Processor",
+    "logical_cpu_count": 16,
+    "total_memory_bytes": 51437408256
+  },
+  "selected_contract": {
+    "format": "JSON command registry",
+    "registry_format": 1,
+    "registry_id": "dsi.relay.commands",
+    "schema_dialect": "https://json-schema.org/draft/2020-12/schema",
+    "schema_profile": "bounded RELAY subset of JSON Schema 2020-12; unsupported keywords fail registry validation",
+    "command_count": 13,
+    "reserved_command_ids": [
+      "relay.internal.raw_shell",
+      "relay.internal.unvalidated_execute"
+    ],
+    "deprecated_command_ids": []
+  },
+  "measurements": {
+    "startup_to_state_ms": 219.954,
+    "status_with_registry_validation": {
+      "n": 300,
+      "min_ms": 0.22,
+      "p50_ms": 0.275,
+      "p95_ms": 0.403,
+      "p99_ms": 0.633,
+      "max_ms": 1.04,
+      "mean_ms": 0.297
+    },
+    "registry_list_ai": {
+      "n": 300,
+      "min_ms": 0.194,
+      "p50_ms": 0.271,
+      "p95_ms": 0.398,
+      "p99_ms": 0.87,
+      "max_ms": 1.021,
+      "mean_ms": 0.292
+    },
+    "registry_describe_project_register": {
+      "n": 300,
+      "min_ms": 0.176,
+      "p50_ms": 0.22,
+      "p95_ms": 0.306,
+      "p99_ms": 0.428,
+      "max_ms": 0.692,
+      "mean_ms": 0.233
+    },
+    "invalid_request_rejection": {
+      "n": 200,
+      "min_ms": 0.145,
+      "p50_ms": 0.189,
+      "p95_ms": 0.282,
+      "p99_ms": 0.446,
+      "max_ms": 0.997,
+      "mean_ms": 0.206
+    },
+    "idle_host_with_embedded_dashboard": {
+      "sample_ms": 5000,
+      "cpu_ms": 0,
+      "rss_bytes": 8523776,
+      "private_bytes": 1515520,
+      "rss_delta_bytes": 0,
+      "handle_count": 119,
+      "thread_count": 5
+    },
+    "context_bytes": {
+      "registry_pretty_bytes": 14563,
+      "registry_minified_bytes": 10408,
+      "ai_compact_list_bytes": 1971,
+      "adapter_compact_list_bytes": 2146,
+      "dashboard_compact_list_bytes": 1271,
+      "project_register_description_bytes": 855,
+      "cli_help_bytes": 977
+    },
+    "context_heuristic_tokens_at_4_bytes_per_token": {
+      "registry_pretty_heuristic_tokens": 3641,
+      "registry_minified_heuristic_tokens": 2602,
+      "ai_compact_list_heuristic_tokens": 493,
+      "adapter_compact_list_heuristic_tokens": 537,
+      "dashboard_compact_list_heuristic_tokens": 318,
+      "project_register_description_heuristic_tokens": 214,
+      "cli_help_heuristic_tokens": 245
+    },
+    "context_ratios": {
+      "ai_list_vs_full_minified": 0.189374,
+      "one_description_vs_full_minified": 0.082148
+    }
+  },
+  "build_economics": {
+    "spike8_storage_baseline": {
+      "direct_dependency_count": 5,
+      "resolved_package_count": 34,
+      "release_binary_bytes": 2153472,
+      "idle_rss_bytes": 9367552
+    },
+    "spike9_registry_enabled": {
+      "clean_release_build_ms": 35862.035,
+      "direct_dependency_count": 5,
+      "resolved_package_count": 34,
+      "release_binary_bytes": 2271744,
+      "idle_rss_bytes": 8523776
+    },
+    "deltas": {
+      "direct_dependencies": 0,
+      "resolved_packages": 0,
+      "release_binary_bytes": 118272,
+      "idle_rss_bytes": -843776
+    }
+  },
+  "alternative_costs_and_tools": {
+    "full_rust_jsonschema_engine_experiment": {
+      "crate": "jsonschema 0.57.0",
+      "default_features": false,
+      "resolved_packages": 80,
+      "tiny_validator_release_exe_bytes": 4229120,
+      "first_optimized_build_ms_on_fixture": 72535.661,
+      "note": "Auxiliary isolated cost probe; not added to RELAY dependencies."
+    },
+    "protobuf": {
+      "protoc_installed_on_fixture": false,
+      "compatibility_strength": "strong field-number and reserved-tag evolution discipline",
+      "fit_cost": "requires code generation/binary schema mapping for primarily JSON CLI/dashboard/AI surfaces"
+    },
+    "typespec": {
+      "tsp_installed_on_fixture": false,
+      "fit": "can model APIs and emit JSON Schema",
+      "cost": "adds a compiler/emitter toolchain that RELAY does not otherwise need"
+    },
+    "cue": {
+      "cue_installed_on_fixture": false,
+      "fit": "strong constraint and validation language",
+      "cost": "adds another language/toolchain for a small local JSON contract surface"
+    }
+  },
+  "derived_surfaces": {
+    "dashboard_state_command_ids": [
+      "project.list",
+      "registry.describe",
+      "registry.list",
+      "result.get",
+      "storage.integrity",
+      "system.doctor",
+      "system.status"
+    ],
+    "dashboard_registry_command_ids": [
+      "project.list",
+      "registry.describe",
+      "registry.list",
+      "result.get",
+      "storage.integrity",
+      "system.doctor",
+      "system.status"
+    ],
+    "cli_registry_command_ids": [
+      "job.checkpoint",
+      "job.get",
+      "project.list",
+      "project.register",
+      "registry.describe",
+      "registry.list",
+      "result.get",
+      "result.put",
+      "storage.integrity",
+      "system.doctor",
+      "system.echo",
+      "system.shutdown",
+      "system.status"
+    ],
+    "cli_local_command_ids": [
+      "job.checkpoint",
+      "job.get",
+      "project.list",
+      "project.register",
+      "registry.describe",
+      "registry.list",
+      "result.get",
+      "result.put",
+      "storage.integrity",
+      "system.doctor",
+      "system.echo",
+      "system.shutdown",
+      "system.status"
+    ],
+    "ai_command_count": 11,
+    "adapter_command_count": 12,
+    "cli_help_bytes": 977,
+    "project_register_cli_matches_host": true
+  },
+  "compatibility_evidence": {
+    "omitted_command_version_resolved_to": 1,
+    "explicit_unsupported_version_error": "COMMAND_VERSION_INCOMPATIBLE",
+    "legacy_node_client_ok": true,
+    "legacy_node_client_resolved_command_version": 1,
+    "registry_tests_exit_code": 0
+  },
+  "pass_fail": {
+    "embedded_registry_has_13_commands": true,
+    "registry_tests_pass": true,
+    "no_new_direct_runtime_dependencies": true,
+    "no_new_resolved_runtime_packages": true,
+    "legacy_version_omitting_client_still_works": true,
+    "incompatible_command_version_fails_closed": true,
+    "invalid_arguments_fail_before_business_logic": true,
+    "dashboard_command_set_is_registry_derived": true,
+    "cli_command_set_is_registry_derived": true,
+    "cli_description_matches_host_registry": true,
+    "dashboard_does_not_expose_shutdown": true,
+    "compact_ai_discovery_is_smaller_than_full_registry": true,
+    "one_command_description_is_smaller_than_full_registry": true,
+    "status_runtime_validation_p50_under_2ms": true,
+    "deterministic_invalid_rejection_p50_under_2ms": true
+  },
+  "limitations": [
+    "The selected validator intentionally implements only the JSON Schema 2020-12 keywords RELAY registry format 1 allows. Unsupported keywords fail registry validation instead of being silently ignored.",
+    "The registry contains the current 13-command Phase 1 contract surface; this selects the source-of-truth mechanism, not a frozen public command catalog.",
+    "Command-version omission currently resolves to the latest registered version. Public clients that need reproducibility may pin a version; breaking schema changes require a new command contract version.",
+    "Context token counts are a transparent 4 UTF-8 bytes/token heuristic because no tokenizer package is installed; they are not model-specific token counts.",
+    "The full jsonschema crate cost probe was an isolated auxiliary executable and included first-build/download effects; its package and binary footprint are more decision-relevant than exact build time.",
+    "TypeSpec, CUE, and protoc were not installed on the fixture, so they were assessed for contract/toolchain fit rather than implemented as full alternate RELAY prototypes.",
+    "The registry is embedded at build time in this Phase 1 prototype. Signed/external contract packs and extension registries remain later design work.",
+    "No adapter product behavior or UEFN commands were added in Spike 9."
+  ]
+}

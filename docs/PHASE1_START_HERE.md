@@ -16,8 +16,9 @@ Current prototype progress:
 - Spike 6 complete: dashboard command-contract parity is proven; a standalone proxy costs another resident runtime, so the selected local shape is a dependency-free static/HTTP shell hosted inside `relayd`.
 - Spike 7 complete: Rust materially beat the Node reference on host/dashboard RSS, startup, CLI launch, restart, and explicit Windows pipe security while remaining protocol-interoperable.
 - Spike 8 complete: Rust reproduced the schema-1 SQLite durability/recovery contract, opened Node databases and produced databases Node could read, and retained a 92.23% post-storage idle-RSS reduction. D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation.
-- Current next spike: Spike 9 — schema/IDL + command-registry source of truth.
-- Benchmark artifacts live under `spikes/phase1/results/`; current Phase 1 stack consequences are recorded through D-153.
+- Spike 9 complete: one JSON command registry using a bounded JSON Schema 2020-12 profile now drives deterministic Rust validation plus CLI, dashboard, adapter, AI, and capability discovery metadata without another runtime dependency. D-154 selects it as the Phase 1 semantic command-contract source.
+- Current next spike: Spike 10 — adapter worker isolation + manifest/broker foundation.
+- Benchmark artifacts live under `spikes/phase1/results/`; current Phase 1 stack consequences are recorded through D-154.
 
 ## Phase 1 goal
 
@@ -231,6 +232,24 @@ At minimum prove:
 
 Compare schema/IDL options on code-generation/validation complexity, binary/runtime cost, mixed-version behavior, human debuggability, and context/token overhead. Do not begin adapter product work until this contract boundary is proven.
 
+### Spike 10 — Adapter worker isolation + manifest/broker foundation
+
+With the command-contract boundary proven, test the generic adapter execution boundary before any real UEFN adapter product work.
+
+Prove with a synthetic adapter worker:
+
+- third-party adapter code runs out of process rather than inside RELAY Core
+- a versioned manifest declares adapter identity, protocol version, capabilities, required permissions, target/tool requirements, and provenance/trust metadata
+- the broker validates manifest and command/capability compatibility before launch
+- adapter stdout/stderr and structured messages remain untrusted data
+- worker crash/hang/invalid-message behavior cannot crash RELAY Core
+- timeout, resource-limit, restart/backoff, and quarantine behavior are explicit
+- adapter commands still resolve through the shared command registry rather than creating a second business-logic surface
+- inactive adapters add near-zero routine CPU and bounded resident memory
+- incompatible or over-permissioned manifests fail closed
+
+Do not implement UEFN features in Spike 10. Use a deterministic synthetic worker so the isolation/broker decision is measured independently of editor behavior.
+
 ## Evidence storage lifecycle target
 
 The storage goal is not merely "compress everything."
@@ -283,4 +302,4 @@ And Phase 1 must deliver:
 
 For a fresh ChatGPT/Codex conversation, use this request:
 
-> Take over DSI RELAY Phase 1. Work in `raiinman/DSI-RELAY`. Start with `AGENTS.md`, `docs/AGENTS.md`, and `docs/PHASE1_START_HERE.md`, then follow the read order there. Phase 0 remains the architecture baseline. Spikes 1–8 are complete; D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation while Node remains a compatibility reference. Begin with Spike 9: schema/IDL + command-registry source of truth. Keep the implementation narrow and benchmark-driven; do not jump ahead into adapter product work or the full UEFN product.
+> Take over DSI RELAY Phase 1. Work in `raiinman/DSI-RELAY`. Start with `AGENTS.md`, `docs/AGENTS.md`, and `docs/PHASE1_START_HERE.md`, then follow the read order there. Phase 0 remains the architecture baseline. Spikes 1–9 are complete; D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation and D-154 selects the JSON command registry + bounded JSON Schema 2020-12 profile as the semantic command-contract source. Begin with Spike 10: adapter worker isolation + manifest/broker foundation. Keep it synthetic, narrow, and benchmark-driven; do not jump ahead into UEFN product features.

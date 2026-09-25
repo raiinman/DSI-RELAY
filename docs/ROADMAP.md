@@ -94,7 +94,8 @@ Completed prototype evidence:
 - Spike 6: dashboard shell parity/resource benchmark; static/HTTP presentation hosted by `relayd` is favored over a separate resident dashboard backend.
 - Spike 7: neutral Node-vs-Rust runtime/IPC comparison; Rust materially improved footprint, startup/CLI latency, restart time, and explicit current-user pipe security while preserving protocol interoperability.
 - Spike 8: Rust reproduced the schema-1 SQLite durability/recovery contract, passed bidirectional database compatibility with Node, and retained a 92.23% post-storage idle-RSS reduction. D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation.
-- Current next work: Spike 9 — schema/IDL + command-registry source of truth.
+- Spike 9: one JSON command registry plus a bounded JSON Schema 2020-12 validation profile now drives Rust validation and derived CLI/dashboard/adapter/AI discovery metadata with no new runtime dependency. D-154 selects it as the semantic command-contract source.
+- Current next work: Spike 10 — adapter worker isolation + manifest/broker foundation using only synthetic workers.
 
 Research/prototype:
 

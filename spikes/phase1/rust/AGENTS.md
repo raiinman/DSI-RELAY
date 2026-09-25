@@ -18,6 +18,7 @@ Own the selected Rust Phase 1 local core foundation and its evidence-backed pari
 - Generated binaries and Cargo target output stay out of Git.
 - Benchmark exact SQLite dependency/license/build cost, release binary-size growth, startup/idle CPU/RAM, durable read/write/checkpoint latency, WAL/database growth, integrity/recovery behavior, and hard-kill persistence.
 - Preserve structured machine output and schema compatibility; human CLI text is not a machine contract.
+- Spike 9 command IDs, versions, summaries, effect/permission classes, surface visibility, and argument/result schemas come from `../contracts/commands.registry.json`; Rust may validate/derive from that source but must not maintain a competing metadata catalog.
 
 # Work Guidance
 

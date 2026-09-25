@@ -195,6 +195,24 @@ pub fn call(
     arguments: Value,
     timeout_ms: u32,
 ) -> Result<Value, String> {
+    call_versioned(
+        pipe_name,
+        auth_token,
+        command,
+        None,
+        arguments,
+        timeout_ms,
+    )
+}
+
+pub fn call_versioned(
+    pipe_name: &str,
+    auth_token: &str,
+    command: &str,
+    command_version: Option<u32>,
+    arguments: Value,
+    timeout_ms: u32,
+) -> Result<Value, String> {
     let handle = open_client(pipe_name, timeout_ms)?;
 
     let hello = serde_json::json!({
@@ -227,6 +245,7 @@ pub fn call(
         "request_id": request_id,
         "schema_version": crate::SCHEMA_VERSION,
         "command": command,
+        "command_version": command_version,
         "arguments": arguments
     });
     write_json(handle.raw(), &message)?;

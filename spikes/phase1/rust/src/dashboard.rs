@@ -1,4 +1,5 @@
 use crate::protocol::{dispatch_command, HostContext};
+use crate::registry;
 use crate::security::random_hex;
 use crate::state::DashboardState;
 use serde_json::{json, Value};
@@ -12,7 +13,6 @@ use std::time::Duration;
 const INDEX_TEMPLATE: &str = include_str!("../../node/dashboard/index.html");
 const APP_JS: &str = include_str!("../../node/dashboard/app.js");
 const STYLES_CSS: &str = include_str!("../../node/dashboard/styles.css");
-const COMMANDS: &[&str] = &["system.status", "system.doctor", "project.list", "result.get"];
 const MAX_REQUEST_BYTES: usize = 64 * 1024;
 
 pub struct DashboardServer {
@@ -187,7 +187,7 @@ fn handle_request(
                 "ok": true,
                 "component": "relay-rust-dashboard-transport",
                 "mode": "embedded-host",
-                "command_count": COMMANDS.len()
+                "command_count": registry::surface_command_ids("dashboard").len()
             }),
         ),
         ("POST", "/api/execute") => {
@@ -239,7 +239,7 @@ fn handle_request(
                     transport_error("BAD_REQUEST", "command is required."),
                 );
             };
-            if !COMMANDS.contains(&command) {
+            if !registry::is_surface_exposed(command, "dashboard") {
                 return json_response(
                     403,
                     "Forbidden",
@@ -260,8 +260,18 @@ fn handle_request(
                         context.started.elapsed().as_nanos()
                     )
                 });
+            let command_version = value
+                .get("command_version")
+                .and_then(Value::as_u64)
+                .map(|value| value as u32);
             let arguments = value.get("arguments").cloned().unwrap_or_else(|| json!({}));
-            let result = dispatch_command(&request_id, command, arguments, context);
+            let result = dispatch_command(
+                &request_id,
+                command,
+                command_version,
+                arguments,
+                context,
+            );
             json_response(200, "OK", result)
         }
         _ => json_response(
@@ -308,7 +318,7 @@ pub fn start(context: HostContext) -> Result<DashboardServer, String> {
     let state = DashboardState {
         mode: "embedded-host".to_string(),
         url,
-        commands: COMMANDS.iter().map(|value| (*value).to_string()).collect(),
+        commands: registry::surface_command_ids("dashboard"),
     };
 
     let thread_context = context.clone();

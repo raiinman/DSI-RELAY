@@ -1049,3 +1049,29 @@ Open storage gates remain concurrent-reader/writer behavior, long-reader WAL/che
 D-153 supersedes the runtime-choice portions of D-146 and D-152.
 
 Evidence: `spikes/phase1/results/2026-09-24-spike8-rust-storage-parity-windows.json`.
+
+## D-154 — One JSON command registry is RELAY's Phase 1 semantic contract source
+
+Status: Phase 1 selected
+
+Spike 9 selects a plain machine-readable JSON command registry using the JSON Schema 2020-12 dialect with a deliberately bounded RELAY validation profile. The registry is the semantic source for command IDs, per-command contract versions, concise purpose, argument/result schemas, declared errors, effect/permission/idempotency classes, and surface visibility.
+
+The selected Rust core embeds and validates the registry at startup. Unsupported registry-format versions, unsupported schema keywords, duplicate command/version pairs, and active reuse of reserved/deprecated command IDs fail closed. Arguments are validated before business logic; successful results and command error envelopes are validated before return. Deterministic validation requires no model call.
+
+The current Phase 1 registry contains 13 commands. CLI catalog/help/describe metadata, dashboard command exposure, adapter discovery metadata, AI discovery metadata, and command capability IDs are all derived from the same registry. The dashboard no longer owns a separate command allowlist.
+
+Command-version omission remains compatible with existing Spike 1–8 clients and currently resolves to the latest registered command version. A client may explicitly request a command contract version. Unsupported requested versions return `COMMAND_VERSION_INCOMPATIBLE`. Breaking command-shape changes require a new command contract version; additive optional fields may remain within a compatible version when the compatibility checker confirms older payloads remain accepted. Reserved/deprecated IDs may not be silently reused.
+
+On the Windows fixture, registry validation added no direct Cargo dependency and no resolved package to the Spike 8 Rust graph: 5 direct dependencies / 34 resolved packages remained unchanged. The release executable grew 118,272 bytes, from 2,153,472 to 2,271,744 bytes. With the embedded dashboard open, sampled idle RSS was 8,523,776 bytes and no CPU time was observed in the five-second idle sample.
+
+Measured p50 round trips were 0.275 ms for `system.status` with registry validation, 0.271 ms for compact AI `registry.list`, 0.220 ms for `registry.describe project.register`, and 0.189 ms for deterministic rejection of an invalid request.
+
+The minified full registry was 10,408 bytes. Compact AI discovery was 1,971 bytes (18.94% of the full registry), while one `project.register` description was 855 bytes (8.21%). Using the transparent benchmark heuristic of four UTF-8 bytes per token, those are approximately 2,602, 493, and 214 tokens respectively; these are not model-specific tokenizer counts.
+
+A general-purpose Rust `jsonschema` 0.57.0 cost probe with default features disabled resolved 80 packages, produced a 4,229,120-byte tiny validator executable, and took 72.5 seconds for the first optimized build on this fixture. RELAY therefore keeps its bounded validator instead of importing a general-purpose engine until real commands require unsupported JSON Schema features.
+
+TypeSpec, CUE, and Protocol Buffers remain valid technologies, but Phase 1 does not add their compiler/language/code-generation toolchains to the local core. RELAY's current CLI, dashboard, gateway, adapter-discovery, and AI-facing contracts are already JSON-shaped, so a debuggable JSON registry minimizes translation and packaging cost. This choice does not prohibit generated bindings or alternate transports later.
+
+The selected registry mechanism is not a freeze of the current 13-command catalog and is not a promise that every future extension contract must live in the built-in core registry. Signed/versioned extension contract packaging remains later work.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike9-command-registry-windows.json`.

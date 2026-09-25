@@ -1,6 +1,7 @@
 use relay_rust_challenger::dashboard;
 use relay_rust_challenger::pipe;
 use relay_rust_challenger::protocol::{dispatch_command, hello_response, HostContext};
+use relay_rust_challenger::registry;
 use relay_rust_challenger::security::{
     current_user_pipe_security, random_hex, verify_pipe_security,
 };
@@ -9,7 +10,7 @@ use relay_rust_challenger::state::{
     ProtocolRange,
 };
 use relay_rust_challenger::storage::{RelayStorage, StorageHealth};
-use relay_rust_challenger::{CAPABILITIES, PROTOCOL_MAX, PROTOCOL_MIN, RELAY_VERSION, SCHEMA_VERSION};
+use relay_rust_challenger::{capabilities, PROTOCOL_MAX, PROTOCOL_MIN, RELAY_VERSION, SCHEMA_VERSION};
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -49,6 +50,7 @@ fn unix_ms() -> u128 {
 }
 
 fn run_host(dashboard_enabled: bool) -> Result<(), String> {
+    registry::validate_embedded_registry().map_err(|error| error.to_string())?;
     let started = Instant::now();
     let security = current_user_pipe_security()?;
     let pipe_name = pipe_name(&security.sid);
@@ -117,7 +119,7 @@ fn run_host(dashboard_enabled: bool) -> Result<(), String> {
             min: PROTOCOL_MIN,
             max: PROTOCOL_MAX,
         },
-        capabilities: CAPABILITIES.iter().map(|value| (*value).to_string()).collect(),
+        capabilities: capabilities(),
         recovery_state: if storage_health.ok {
             "Healthy".to_string()
         } else {
@@ -204,11 +206,21 @@ fn run_host(dashboard_enabled: bool) -> Result<(), String> {
             .get("command")
             .and_then(Value::as_str)
             .unwrap_or("");
+        let command_version = message
+            .get("command_version")
+            .and_then(Value::as_u64)
+            .map(|value| value as u32);
         let arguments = message
             .get("arguments")
             .cloned()
             .unwrap_or_else(|| json!({}));
-        let response = dispatch_command(request_id, command, arguments, &context);
+        let response = dispatch_command(
+            request_id,
+            command,
+            command_version,
+            arguments,
+            &context,
+        );
         pipe::write_json(pipe_server.raw(), &response)?;
         pipe::disconnect(pipe_server.raw());
     }
@@ -246,6 +258,19 @@ fn run_cli(args: &[String]) -> Result<(), String> {
         "echo" => {
             let value = args.get(1).cloned().unwrap_or_default();
             print_machine(call_command("system.echo", json!({ "value": value }))?)
+        }
+        "commands" => print_machine(registry::compact_list(Some("cli"), None, 200)),
+        "describe" => {
+            let id = args.get(1).ok_or_else(|| "describe requires a command ID".to_string())?;
+            let version = args.get(2).and_then(|value| value.parse::<u32>().ok());
+            match registry::describe(id, version) {
+                Ok(value) => print_machine(value),
+                Err(error) => Err(format!("command description unavailable: {error:?}")),
+            }
+        }
+        "help" => {
+            println!("{}", registry::render_cli_catalog());
+            Ok(())
         }
         "version" => print_machine(json!({
             "version": RELAY_VERSION,

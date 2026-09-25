@@ -1,5 +1,6 @@
+use crate::registry::{self, ResolveError};
 use crate::storage::{RelayStorage, StorageError, StorageHealth};
-use crate::{CAPABILITIES, PROTOCOL_MAX, PROTOCOL_MIN, RELAY_VERSION, SCHEMA_VERSION};
+use crate::{capabilities, PROTOCOL_MAX, PROTOCOL_MIN, RELAY_VERSION, SCHEMA_VERSION};
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -52,7 +53,7 @@ pub fn hello_response(message: &Value, expected_token: &str) -> Value {
         "protocol": protocol,
         "schema_version": SCHEMA_VERSION,
         "server": { "name": "relayd-rust-challenger", "version": RELAY_VERSION },
-        "capabilities": CAPABILITIES
+        "capabilities": capabilities()
     })
 }
 
@@ -76,6 +77,13 @@ fn failure(request_id: &str, code: &str, message: &str) -> Value {
         "ok": false,
         "error": { "code": code, "message": message }
     })
+}
+
+fn with_command_version(mut response: Value, version: u32) -> Value {
+    if let Some(object) = response.as_object_mut() {
+        object.insert("command_version".to_string(), json!(version));
+    }
+    response
 }
 
 fn with_storage<F>(context: &HostContext, operation: F) -> Result<Value, StorageError>
@@ -104,10 +112,44 @@ fn storage_result(request_id: &str, result: Result<Value, StorageError>) -> Valu
 pub fn dispatch_command(
     request_id: &str,
     command: &str,
+    requested_version: Option<u32>,
     arguments: Value,
     context: &HostContext,
 ) -> Value {
-    match command {
+    let spec = match registry::resolve_command(command, requested_version) {
+        Ok(spec) => spec,
+        Err(ResolveError::UnknownCommand) => {
+            return failure(
+                request_id,
+                "COMMAND_UNKNOWN",
+                &format!("Unknown command: {command}"),
+            );
+        }
+        Err(ResolveError::VersionIncompatible { supported }) => {
+            return failure(
+                request_id,
+                "COMMAND_VERSION_INCOMPATIBLE",
+                &format!(
+                    "Command {command} does not support requested version {}; supported versions: {:?}",
+                    requested_version.unwrap_or(0),
+                    supported
+                ),
+            );
+        }
+    };
+
+    if let Err(error) = registry::validate_value(&spec.arguments_schema, &arguments) {
+        return with_command_version(
+            failure(
+                request_id,
+                "VALIDATION_FAILED",
+                &format!("{} {}", error.path, error.message),
+            ),
+            spec.version,
+        );
+    }
+
+    let response = match command {
         "system.status" => success(
             request_id,
             json!({
@@ -121,7 +163,7 @@ pub fn dispatch_command(
                     "max": PROTOCOL_MAX,
                     "negotiated": PROTOCOL_MAX
                 },
-                "capabilities": CAPABILITIES,
+                "capabilities": capabilities(),
                 "ipc_security": {
                     "transport": "windows_named_pipe",
                     "explicit_dacl": context.explicit_dacl,
@@ -236,12 +278,93 @@ pub fn dispatch_command(
                 })
             }),
         ),
+        "registry.list" => {
+            let surface = arguments.get("surface").and_then(Value::as_str);
+            let prefix = arguments.get("prefix").and_then(Value::as_str);
+            let limit = arguments
+                .get("limit")
+                .and_then(Value::as_u64)
+                .unwrap_or(50) as usize;
+            success(
+                request_id,
+                registry::compact_list(surface, prefix, limit),
+            )
+        }
+        "registry.describe" => {
+            let target = arguments
+                .get("command")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let version = arguments
+                .get("version")
+                .and_then(Value::as_u64)
+                .map(|value| value as u32);
+            match registry::describe(target, version) {
+                Ok(value) => success(request_id, value),
+                Err(ResolveError::UnknownCommand) => failure(
+                    request_id,
+                    "COMMAND_UNKNOWN",
+                    &format!("Unknown command: {target}"),
+                ),
+                Err(ResolveError::VersionIncompatible { supported }) => failure(
+                    request_id,
+                    "COMMAND_VERSION_INCOMPATIBLE",
+                    &format!(
+                        "Command {target} does not support requested version {}; supported versions: {:?}",
+                        version.unwrap_or(0),
+                        supported
+                    ),
+                ),
+            }
+        }
         _ => failure(
             request_id,
             "COMMAND_UNKNOWN",
             &format!("Unknown command: {command}"),
         ),
+    };
+
+    if response.get("ok").and_then(Value::as_bool) == Some(true) {
+        if let Some(result) = response.get("result") {
+            if let Err(error) = registry::validate_value(&spec.result_schema, result) {
+                return with_command_version(
+                    failure(
+                        request_id,
+                        "RESULT_SCHEMA_VIOLATION",
+                        &format!("{} {}", error.path, error.message),
+                    ),
+                    spec.version,
+                );
+            }
+        }
+    } else if let Some(error_value) = response.get("error") {
+        if let Err(error) =
+            registry::validate_value(&registry::registry().error_schema, error_value)
+        {
+            return with_command_version(
+                failure(
+                    request_id,
+                    "ERROR_SCHEMA_VIOLATION",
+                    &format!("{} {}", error.path, error.message),
+                ),
+                spec.version,
+            );
+        }
+        if let Some(code) = error_value.get("code").and_then(Value::as_str) {
+            if !registry::is_error_allowed(spec, code) {
+                return with_command_version(
+                    failure(
+                        request_id,
+                        "UNDECLARED_COMMAND_ERROR",
+                        &format!("Command {command}@{} returned undeclared error {code}", spec.version),
+                    ),
+                    spec.version,
+                );
+            }
+        }
     }
+
+    with_command_version(response, spec.version)
 }
 
 #[cfg(test)]
@@ -275,7 +398,7 @@ mod tests {
 
     #[test]
     fn status_reports_explicit_dacl() {
-        let response = dispatch_command("req", "system.status", json!({}), &context());
+        let response = dispatch_command("req", "system.status", None, json!({}), &context());
         assert_eq!(response["ok"], true);
         assert_eq!(response["result"]["runtime"], "rust");
         assert_eq!(response["result"]["ipc_security"]["explicit_dacl"], true);
@@ -283,8 +406,52 @@ mod tests {
 
     #[test]
     fn unavailable_storage_stays_explicit() {
-        let response = dispatch_command("req", "project.list", json!({}), &context());
+        let response = dispatch_command("req", "project.list", None, json!({}), &context());
         assert_eq!(response["ok"], false);
         assert_eq!(response["error"]["code"], "STORAGE_UNAVAILABLE");
+    }
+
+    #[test]
+    fn command_version_mismatch_fails_explicitly() {
+        let response = dispatch_command(
+            "req",
+            "system.status",
+            Some(999),
+            json!({}),
+            &context(),
+        );
+        assert_eq!(response["ok"], false);
+        assert_eq!(
+            response["error"]["code"],
+            "COMMAND_VERSION_INCOMPATIBLE"
+        );
+    }
+
+    #[test]
+    fn registry_validation_rejects_bad_arguments_before_business_logic() {
+        let response = dispatch_command(
+            "req",
+            "project.register",
+            Some(1),
+            json!({ "root_uri": "file:///fixture" }),
+            &context(),
+        );
+        assert_eq!(response["ok"], false);
+        assert_eq!(response["error"]["code"], "VALIDATION_FAILED");
+        assert_eq!(response["command_version"], 1);
+    }
+
+    #[test]
+    fn registry_discovery_is_available_without_storage() {
+        let response = dispatch_command(
+            "req",
+            "registry.list",
+            Some(1),
+            json!({ "surface": "ai", "prefix": "result." }),
+            &context(),
+        );
+        assert_eq!(response["ok"], true);
+        assert_eq!(response["command_version"], 1);
+        assert_eq!(response["result"]["commands"].as_array().unwrap().len(), 2);
     }
 }

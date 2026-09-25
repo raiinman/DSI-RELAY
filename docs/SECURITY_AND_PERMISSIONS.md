@@ -294,6 +294,8 @@ AI-facing remote/local execution should prefer validated command objects rather 
 
 The command registry defines allowed inputs and permissions.
 
+Phase 1 D-154 makes registry validation part of the execution boundary: the selected Rust core resolves the requested command/version, validates arguments before business logic, and validates successful results and error envelopes before returning them. Unsupported command versions, malformed payloads, undeclared command errors, and unsupported registry/schema features fail closed. This deterministic boundary does not depend on an AI/model judgment.
+
 ## Dashboard safety
 
 The dashboard should show:

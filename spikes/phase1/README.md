@@ -12,8 +12,9 @@ This subtree contains disposable-but-reproducible prototypes used to select RELA
 - Spike 6 — dashboard shell command parity, local HTTP security boundary, and standalone-vs-embedded process/resource economics
 - Spike 7 — neutral Node-vs-Rust runtime/IPC challenger, explicit Windows pipe DACL verification, cross-runtime protocol compatibility, restart/resource/build economics
 - Spike 8 — Rust operational SQLite parity, degraded/future-schema recovery, bidirectional Node/Rust database compatibility, and dependency/build economics
+- Spike 9 — single JSON command registry, bounded JSON Schema 2020-12 validation, command-version compatibility, and derived CLI/dashboard/adapter/AI discovery metadata
 
-D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation. Node remains a compatibility/reference implementation rather than the intended shipping daemon. See D-146 through D-153 in `docs/DECISION_LOG.md`.
+D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation. D-154 selects the JSON command registry + bounded JSON Schema 2020-12 profile as the semantic command-contract source. Node remains a compatibility/reference implementation rather than the intended shipping daemon. See D-146 through D-154 in `docs/DECISION_LOG.md`.
 
 ## Run
 
@@ -60,6 +61,7 @@ Neutral stack comparisons:
 cd ..\compare
 node spike7.mjs
 node spike8.mjs
+node spike9.mjs
 ```
 
 ## Known open gates
@@ -73,6 +75,7 @@ node spike8.mjs
 - GPU local-model coexistence remains open; Spike 5 proves defer policy and CPU background controls, not local-LLM VRAM scheduling.
 - Process-name creator detection is a spike mechanism; production scheduling should consume trusted adapter/project activity state rather than hard-code one application's executable name.
 - The dashboard is still read-only in Phase 1; write/approval authorization and client identity remain open.
-- Schema/IDL and the command-registry source of truth remain open; Spike 9 must prevent command contracts from drifting across Rust, CLI, dashboard, adapters, and AI skills.
+- D-154 selects the JSON command registry + bounded JSON Schema 2020-12 profile; signed/external extension contract packaging and the eventual public stability policy remain later work.
+- Adapter worker isolation/manifest/broker behavior remains open and is the next Phase 1 spike; no real UEFN adapter product work should precede that isolation proof.
 - Node remains a compatibility/reference implementation for schema-1 interoperability testing, not the intended shipping daemon.
 - Rust's Win32 boundary is larger and uses explicit `unsafe` code; keep that boundary narrow and regression-tested rather than spreading native calls across RELAY Core.

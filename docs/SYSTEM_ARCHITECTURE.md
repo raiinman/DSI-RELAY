@@ -170,6 +170,10 @@ The command registry should be the single metadata source for:
 
 Generated or derived surfaces can include CLI help, dashboard forms, skill references, API schemas, and MCP contracts.
 
+Phase 1 D-154 selects a plain JSON command registry using the JSON Schema 2020-12 dialect with a bounded RELAY validation profile. The selected Rust core embeds and validates the registry, rejects unsupported schema keywords/registry formats, validates arguments before execution and results/errors before return, and resolves an optional per-command contract version. CLI catalog/help/describe metadata, dashboard command visibility, adapter/AI discovery metadata, and command capability IDs derive from this one source.
+
+Compact discovery is two-stage: list concise command metadata first, then describe one command only when its full schema is needed. Reserved and deprecated IDs are retained in the registry and cannot be silently reused. Breaking command-shape changes require a new command contract version; compatible additive optional fields can remain within a version when compatibility checks prove older payloads remain accepted.
+
 The registry is the semantic source of truth, but presentation text may be surface-specific. Tool and command wording can affect model behavior, so CLI, skills, and MCP renderings must be tested rather than assumed equivalent.
 
 This avoids semantic drift without forcing identical prose on every interface.

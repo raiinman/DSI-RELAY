@@ -565,3 +565,48 @@ The first response to a common support problem should not be "open three logs an
 Solo users should not see custom-role, organization-policy, SSO/SCIM, contractor-offboarding, and audit-admin interfaces until a team/workspace context actually needs them.
 
 Future-capable data models do not require future-facing terminology in personal onboarding.
+
+
+## Performance and resource UX
+
+The dashboard should explain resource behavior without becoming a second Task Manager.
+
+Useful simple states:
+
+- Working normally
+- Background work paused while UEFN is active
+- Deep indexing queued until idle
+- Local AI paused due to GPU pressure
+- Storage maintenance scheduled
+- Resource pressure is limiting RELAY
+
+A Detailed/Advanced view may show:
+
+- active RELAY workers/jobs
+- CPU/RAM/disk usage
+- GPU/VRAM use where available
+- current resource mode
+- deferred work
+- project index/storage sizes
+
+Users should be able to pause/defer expensive background work.
+
+The normal personal experience should not require manual CPU/GPU percentage tuning.
+
+## Progressive readiness UX
+
+A project may be useful before every index is complete.
+
+Show capabilities honestly:
+
+~~~
+Project ready for:
+- basic audit
+- file inspection
+
+Still preparing:
+Deep code index
+42%
+~~~
+
+Do not block the whole dashboard behind optional indexing.

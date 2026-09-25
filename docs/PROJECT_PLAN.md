@@ -210,6 +210,10 @@ From the first implementation:
 - public distribution does not rely on unreviewed platform-term assumptions
 - dependency/companion/asset licensing and required notices are tracked before release
 - user-facing AI/copyright/privacy claims stay narrower than the evidence supports
+- stable machine contracts have explicit version/evolution policies
+- mixed-version clients/adapters fail safely rather than assuming lockstep upgrades
+- deprecated compatibility surfaces have migration and retirement plans
+- historical results/configuration remain interpretable or explicitly marked unsupported
 
 ## Open implementation decisions
 

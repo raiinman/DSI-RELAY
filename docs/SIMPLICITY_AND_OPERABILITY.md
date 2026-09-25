@@ -380,3 +380,22 @@ Default behavior:
 - use Review Required when the issue cannot be determined mechanically
 
 The golden path should not require users to answer legal questions about RELAY's own bundled dependencies; those are the distributor's responsibility.
+
+
+## Compatibility UX
+
+Versioning should protect users without turning every screen into a compatibility matrix.
+
+Normal views should say:
+
+- Update available
+- Adapter needs update
+- Project data migration required
+- This skill is outdated
+- This historical result has limited rendering
+
+Detailed/Advanced views can show exact versions/protocol ranges.
+
+Deprecation warnings should be actionable and deduplicated. Legacy commands/settings stay hidden unless the user is migrating or troubleshooting.
+
+Supporting old versions has a complexity cost; compatibility promises must remain bounded enough that the golden path stays simple.

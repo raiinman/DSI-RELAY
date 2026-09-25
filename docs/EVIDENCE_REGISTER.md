@@ -1352,3 +1352,149 @@ Confidence labels:
   - https://nvlpubs.nist.gov/nistpubs/SpecialPublications/800-171r3/NIST.SP.800-171r3.html
 - Finding: NIST emphasizes controlled baselines, interface control, review/approval/testing/documentation of changes, and retention/management of configuration baselines.
 - RELAY impact: public contract changes and migrations require controlled, tested baselines rather than ad hoc evolution.
+
+
+## Performance, resource contention, indexing, and energy evidence
+
+### Epic — UEFN system requirements
+
+- Type: first-party platform documentation
+- Confidence: High for current UEFN requirements
+- URL: https://dev.epicgames.com/documentation/fortnite/install-and-launch-fortnite-creative-and-unreal-editor-for-fortnite
+- Finding: current UEFN minimum requirements include 16 GB RAM and 4 GB VRAM; recommended requirements include 32 GB RAM or more, 8 GB or more VRAM, a DX12-compatible GPU, and NVMe storage.
+- RELAY impact: resource benchmarks must include materially different creator hardware classes and RELAY must coexist with an already resource-heavy editor.
+
+### Epic — UEFN Memory and Optimization / Memory Management / Memory Snapshot
+
+- Type: first-party platform documentation
+- Confidence: High
+- URLs:
+  - https://dev.epicgames.com/documentation/fortnite/memory-and-optimization-in-unreal-editor-for-fortnite
+  - https://dev.epicgames.com/documentation/fortnite/memory-management-in-unreal-editor-for-fortnite
+  - https://dev.epicgames.com/documentation/fortnite/memory-snapshot-in-unreal-editor-for-fortnite
+- Finding: Epic provides separate edit-time memory calculations, runtime profiling tools, streaming/HLOD guidance, and memory snapshots because creator/runtime memory and performance are distinct concerns.
+- RELAY impact: use native performance sources where available and do not let RELAY's own background work distort the creator/runtime resource envelope.
+
+### Microsoft — Process QoS / EcoQoS
+
+- Type: first-party Windows platform documentation
+- Confidence: High
+- URLs:
+  - https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-setprocessinformation
+  - https://learn.microsoft.com/en-us/windows/win32/procthread/quality-of-service
+- Finding: Windows allows applications to tag non-foreground work as EcoQoS to favor efficiency, lower power/heat, and more efficient cores; it is explicitly not intended for performance-critical foreground experiences.
+- RELAY impact: benchmark OS-native background QoS before inventing a custom scheduler.
+
+### Microsoft — Job Objects CPU/memory controls
+
+- Type: first-party Windows platform documentation
+- Confidence: High
+- URLs:
+  - https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_cpu_rate_control_information
+  - https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_extended_limit_information
+  - https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects
+- Finding: Job Objects can apply CPU-rate, memory, scheduling, process, and notification controls to groups of processes.
+- RELAY impact: adapter/model/background-worker resource controls can use existing OS primitives; hard caps still require benchmarked behavior.
+
+### Microsoft — Windows Search background backoff
+
+- Type: first-party Windows platform/support documentation
+- Confidence: High
+- URLs:
+  - https://learn.microsoft.com/en-us/troubleshoot/windows-client/shell-experience/windows-search-performance-issues
+  - https://learn.microsoft.com/en-us/windows/win32/search/indexing-prioritization-and-rowset-events
+- Finding: Windows Search reduces/suspends indexing during user/system activity and supports priority/backoff modes for indexing work.
+- RELAY impact: aggressive background indexing is not necessary; resource-aware backoff is a proven desktop design pattern.
+
+### Microsoft — NTFS USN change journal
+
+- Type: first-party Windows filesystem documentation
+- Confidence: High
+- URL: https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/fsutil-usn
+- Finding: Microsoft states the persistent USN journal is much more efficient for determining file modifications than repeatedly checking timestamps or registering for file notifications.
+- RELAY impact: evaluate journal-assisted incremental indexing together with reconciliation after continuity loss.
+
+### Nixie: Efficient, Transparent Temporal Multiplexing for Consumer GPUs
+
+- Year: 2026
+- Type: OSDI peer-reviewed
+- Confidence: High
+- URL: https://www.usenix.org/conference/osdi26/presentation/xu-yechen
+- Finding: consumer GPUs increasingly run multiple large ML/interactive workloads whose working sets can nearly fill GPU memory; concurrent sharing can cause severe memory thrashing. Nixie improved interactive code-completion latency by up to 3.8x versus the evaluated UVM baseline while reducing pinned-memory pressure.
+- RELAY impact: local model inference can materially interfere with an editor/creator workload sharing the same consumer GPU; local routing must consider VRAM/contention, not only API token price.
+
+### SERENO — Inference in the Shadows
+
+- Year: 2026
+- Type: OSDI peer-reviewed
+- Confidence: High for the studied mobile hardware
+- URL: https://www.usenix.org/conference/osdi26/presentation/xin
+- Finding: concurrent on-device LLM inference caused severe foreground jank on the tested smartphones due to memory-bandwidth contention; a foreground-aware yielding design substantially reduced jank.
+- RELAY impact: supports foreground-first scheduling as a general systems principle, but the mobile numeric results must not be copied directly into Windows desktop/UEFN claims.
+
+### Using Latency to Evaluate Interactive System Performance
+
+- Year: 1996
+- Type: OSDI peer-reviewed
+- Confidence: Historical/High
+- URL: https://www.usenix.org/conference/osdi-96/using-latency-evaluate-interactive-system-performance
+- Finding: throughput-centered benchmarks can miss important interactive performance effects; direct event-handling latency better captures user-visible responsiveness.
+- RELAY impact: resource acceptance includes p95/p99/tail interaction latency, not only throughput/average CPU.
+
+### TCP Nice: A Mechanism for Background Transfers
+
+- Year: 2002
+- Type: OSDI peer-reviewed
+- Confidence: Historical/High
+- URL: https://www.usenix.org/conference/osdi-02/tcp-nice-mechanism-background-transfers
+- Finding: aggressive background network work can harm foreground demand performance, while background-aware scheduling can exploit spare resources with lower interference.
+- RELAY impact: supports adaptive backoff for background indexing/sync/remote work rather than full-speed hidden activity.
+
+### SQLite — Write-Ahead Logging
+
+- Type: first-party database documentation
+- Confidence: High for SQLite behavior
+- URL: https://www.sqlite.org/wal.html
+- Finding: WAL growth can reduce read performance; checkpoint starvation can produce unbounded WAL growth; automatic checkpoints can make occasional commits much slower.
+- RELAY impact: if SQLite is selected, checkpoint/maintenance latency and long-reader behavior must be benchmarked under realistic RELAY concurrency.
+
+### SQLite — VACUUM / auto-vacuum / limits
+
+- Type: first-party database documentation
+- Confidence: High for SQLite behavior
+- URLs:
+  - https://www.sqlite.org/lang_vacuum.html
+  - https://sqlite.org/pragma.html
+  - https://www.sqlite.org/limits.html
+- Findings:
+  - VACUUM may require as much as about twice the database size in free disk space while rebuilding.
+  - auto-vacuum modes have fragmentation/maintenance trade-offs.
+  - SQLite exposes configurable limits to prevent excessive resource use even though theoretical database limits are enormous.
+- RELAY impact: application-level storage bounds and maintenance headroom matter more than theoretical database capacity.
+
+### Lawrence Berkeley National Laboratory — United States Data Center Energy Usage Report: 2025 Update
+
+- Year: 2026
+- Type: U.S. national-laboratory/government-supported report
+- Confidence: High for report methodology/scope
+- URL: https://datacenters.lbl.gov/publications/united-states-data-center-energy-2025
+- Finding: the report estimates U.S. data centers could account for 9.5–15.3% of U.S. electricity use by 2030 across scenarios, with AI servers a major driver.
+- RELAY impact: reinforces energy/resource efficiency as a real compute-system concern; it does not establish whether local or cloud inference is more efficient for RELAY desktop workloads.
+
+### DOE — Data Center Energy Efficiency
+
+- Year: 2025
+- Type: U.S. government operational guidance
+- Confidence: High
+- URL: https://www.energy.gov/cmei/femp/articles/data-center-energy-efficiency
+- Finding: DOE/FEMP treats energy management and efficiency as active operational concerns for compute infrastructure.
+- RELAY impact: energy can be included in performance/resource measurement where practical, while desktop-specific decisions remain benchmark-driven.
+
+### A survey of energy concerns for software engineering
+
+- Year: 2024
+- Type: Journal of Systems and Software peer-reviewed survey
+- Confidence: High
+- DOI: 10.1016/j.jss.2023.111944
+- Finding: software energy efficiency is an established engineering concern with trade-offs and remaining measurement/practice gaps.
+- RELAY impact: resource economics should include power/energy/thermal cost without treating one metric as the sole optimization target.

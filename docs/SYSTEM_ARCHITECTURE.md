@@ -638,3 +638,45 @@ Potential fields:
 - review status
 
 Technical validity and rights status are separate axes.
+
+
+## Contract registry
+
+In addition to command metadata, RELAY should maintain a durable inventory of public/internal contracts.
+
+Each contract can declare:
+
+- owner
+- stability class
+- contract/schema/protocol version
+- compatible version range
+- capability identifiers
+- deprecation state
+- migration/replacement
+- earliest removal/support rule
+- tests/compatibility matrix
+
+This inventory covers CLI machine output, IPC, gateway/API, adapter protocol, result schemas, project configuration, runtime instrumentation, and generated AI skill contracts.
+
+## Version and capability negotiation
+
+Peers should negotiate both protocol/version range and actual capabilities.
+
+Unsupported skew:
+
+- blocks writes by default
+- preserves safe status/diagnostic reads where practical
+- reports the required upgrade/downgrade/migration path
+- never silently coerces incompatible messages/state
+
+## Historical result interpretation
+
+Result rendering uses the schema/producer semantics recorded with the result.
+
+If a renderer cannot faithfully interpret an older result, RELAY reports partial/unsupported historical rendering rather than silently mapping old values to current semantics.
+
+## Compatibility aliases
+
+Aliases/shims are implemented outside the default command-discovery surface where practical.
+
+They remain discoverable to legacy clients/migration tools but do not add routine AI context cost to current clients.

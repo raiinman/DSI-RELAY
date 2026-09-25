@@ -1,6 +1,6 @@
 {
   "benchmark": "phase1-spike12-stable-windows-sandbox-matrix",
-  "recorded_at": "2026-09-25T10:27:36.023Z",
+  "recorded_at": "2026-09-25T11:01:16.814Z",
   "decision_informed": "Which release-appropriate Windows sandbox backend/tier should enforce D-156 strong adapter isolation without depending on the experimental processmodel export.",
   "hypothesis": "Documented LPAC AppContainer launch with temporary broker-owned ACL/Low-IL grants plus brokered egress can reproduce Spike 11's security guarantees at comparable cost, while unsupported or unmeasured Windows tiers fail closed.",
   "runtime": {
@@ -34,31 +34,31 @@
   "measurements": {
     "stable_lpac": {
       "prelaunch": {
-        "max_ms": 26.957600000000003,
-        "mean_ms": 17.791406666666663,
-        "min_ms": 16.1356,
+        "max_ms": 29.6862,
+        "mean_ms": 20.87521666666667,
+        "min_ms": 18.1256,
         "n": 30,
-        "p50_ms": 17.3357,
-        "p95_ms": 19.5245,
-        "p99_ms": 26.957600000000003
+        "p50_ms": 19.9411,
+        "p95_ms": 25.3277,
+        "p99_ms": 29.6862
       },
       "create_process": {
-        "max_ms": 35.2183,
-        "mean_ms": 5.989026666666667,
-        "min_ms": 4.6131,
+        "max_ms": 44.0084,
+        "mean_ms": 7.042166666666669,
+        "min_ms": 4.7928,
         "n": 30,
-        "p50_ms": 4.8951,
-        "p95_ms": 6.1466,
-        "p99_ms": 35.2183
+        "p50_ms": 5.517099999999999,
+        "p95_ms": 9.187199999999999,
+        "p99_ms": 44.0084
       },
       "full_restored_round_trip": {
-        "max_ms": 98.6456,
-        "mean_ms": 60.233466666666665,
-        "min_ms": 56.508,
+        "max_ms": 115.5811,
+        "mean_ms": 66.66948666666669,
+        "min_ms": 59.6718,
         "n": 30,
-        "p50_ms": 58.224900000000005,
-        "p95_ms": 62.981899999999996,
-        "p99_ms": 98.6456
+        "p50_ms": 63.2607,
+        "p95_ms": 86.259,
+        "p99_ms": 115.5811
       },
       "deny_result": {
         "allowed_read_ok": true,
@@ -89,7 +89,7 @@
         "network_connect_ok": false,
         "network_error_code": 10107,
         "parent_secret_visible": false,
-        "pid": 52124,
+        "pid": 3676,
         "read_only_write_ok": false,
         "user_profile_visible": false
       },
@@ -105,7 +105,7 @@
       "brokered_egress": {
         "allowed_by_policy": true,
         "connect_ok": true,
-        "elapsed_ms": 35.5131,
+        "elapsed_ms": 36.396100000000004,
         "error_code": null,
         "target": "1.1.1.1:443"
       },
@@ -114,22 +114,22 @@
     },
     "experimental_reference": {
       "launch": {
-        "max_ms": 60.4559,
-        "mean_ms": 30.064680000000003,
-        "min_ms": 26.6708,
+        "max_ms": 63.66239999999999,
+        "mean_ms": 33.741436666666665,
+        "min_ms": 29.7848,
         "n": 30,
-        "p50_ms": 28.8993,
-        "p95_ms": 32.8981,
-        "p99_ms": 60.4559
+        "p50_ms": 32.387699999999995,
+        "p95_ms": 37.5282,
+        "p99_ms": 63.66239999999999
       },
       "full_round_trip": {
-        "max_ms": 96.0627,
-        "mean_ms": 62.510096666666655,
-        "min_ms": 57.7637,
+        "max_ms": 109.85010000000001,
+        "mean_ms": 67.65863666666665,
+        "min_ms": 62.7853,
         "n": 30,
-        "p50_ms": 60.8857,
-        "p95_ms": 74.5758,
-        "p99_ms": 96.0627
+        "p50_ms": 65.297,
+        "p95_ms": 84.7332,
+        "p99_ms": 109.85010000000001
       },
       "deny_result": {
         "allowed_read_ok": true,
@@ -160,7 +160,7 @@
         "network_connect_ok": false,
         "network_error_code": 10013,
         "parent_secret_visible": false,
-        "pid": 59088,
+        "pid": 12200,
         "read_only_write_ok": false,
         "user_profile_visible": false
       },
@@ -170,8 +170,8 @@
         "process_memory_limit_bytes": 33554432
       }
     },
-    "stable_minus_experimental_p50_ms": -2.661,
-    "stable_vs_experimental_p50_ratio": 0.9563,
+    "stable_minus_experimental_p50_ms": -2.036,
+    "stable_vs_experimental_p50_ratio": 0.9688,
     "host_network_baseline": true
   },
   "build_and_complexity": {
@@ -190,7 +190,7 @@
       }
     },
     "spike12": {
-      "clean_release_all_bins_ms": 36289.571,
+      "clean_release_all_bins_ms": 40017.071,
       "direct_dependency_count": 6,
       "resolved_package_count": 37,
       "core_release_binary_bytes": 2271744,

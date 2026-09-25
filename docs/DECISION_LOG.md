@@ -1197,11 +1197,11 @@ Network access is brokered rather than granted directly to the worker. The stabl
 
 On the final 30-run Windows fixture:
 
-- stable LPAC prelaunch policy/ACL setup: 17.336 ms p50 / 19.525 ms p95
-- stable `CreateProcessW` AppContainer launch: 4.895 ms p50 / 6.147 ms p95
-- full stable sandbox round trip including temporary security restoration: 58.225 ms p50 / 62.982 ms p95
-- experimental Spike 11 reference round trip: 60.886 ms p50 / 74.576 ms p95
-- stable-vs-experimental p50 ratio: 0.9563; the documented stable path was slightly faster on this final run
+- stable LPAC prelaunch policy/ACL setup: 19.941 ms p50 / 25.328 ms p95
+- stable `CreateProcessW` AppContainer launch: 5.517 ms p50 / 9.187 ms p95
+- full stable sandbox round trip including temporary security restoration: 63.261 ms p50 / 86.259 ms p95
+- experimental Spike 11 reference round trip: 65.297 ms p50 / 84.733 ms p95
+- stable-vs-experimental p50 ratio: 0.9688; the documented stable path remained slightly faster at p50 on the final rerun
 
 The worker verified `TokenIsAppContainer=true`, could use the mailbox, could not write the read-only worker tree, could not read/write blocked filesystem paths, could not use direct TCP, did not inherit the synthetic parent secret or `USERPROFILE`, and could not create a child process. The outer Job Object again query-verified one active process, 32 MiB process-memory limit, and kill-on-close.
 
@@ -1209,7 +1209,7 @@ Temporary filesystem security changes are bounded to the broker-owned mailbox an
 
 The release selector uses matrix version 1 and enables strong untrusted launch only on Windows builds that have passed RELAY's full adversarial fixture. Build 26200 is the only physically qualified build in this spike. A simulated experimental-only host and a simulated unmeasured stable-API host both select `disabled`; a measured host still selects the stable backend even if the experimental API is absent.
 
-Spike 12 added no direct Cargo dependency, no resolved package, and no selected core-binary growth over Spike 11. A clean optimized all-binary build measured 36.290 seconds on cached crates. The stable probe executable measured 390,144 bytes; the synthetic sandbox worker measured 248,832 bytes. The stable backend/source selector added 1,686 selected source lines and 66 `unsafe` mentions, concentrated at the Windows ABI/security boundary.
+Spike 12 added no direct Cargo dependency, no resolved package, and no selected core-binary growth over Spike 11. A clean optimized all-binary build measured 40.017 seconds on cached crates. The stable probe executable measured 390,144 bytes; the synthetic sandbox worker measured 248,832 bytes. The stable backend/source selector added 1,686 selected source lines and 66 `unsafe` mentions, concentrated at the Windows ABI/security boundary.
 
 The experimental `Experimental_CreateProcessInSandbox` backend remains in the Phase 1 repository only as a measured reference. It is never a release fallback.
 

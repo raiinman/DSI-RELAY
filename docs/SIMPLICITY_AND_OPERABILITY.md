@@ -399,3 +399,18 @@ Detailed/Advanced views can show exact versions/protocol ranges.
 Deprecation warnings should be actionable and deduplicated. Legacy commands/settings stay hidden unless the user is migrating or troubleshooting.
 
 Supporting old versions has a complexity cost; compatibility promises must remain bounded enough that the golden path stays simple.
+
+
+## Performance simplicity
+
+Resource management should be automatic enough that normal users do not become schedulers.
+
+Prefer plain status such as:
+
+"Background work paused while UEFN is active."
+
+over requiring users to set worker CPU quotas or low-level scheduling values.
+
+Advanced overrides may exist for troubleshooting or expert workloads.
+
+Performance/resource modes should be policy states with sane defaults, not a new configuration explosion.

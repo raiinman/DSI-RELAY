@@ -56,8 +56,9 @@ AI clients / humans
 
 ## Documentation
 
-Start with docs/PROJECT_PLAN.md.
+Start with docs/PHASE1_START_HERE.md.
 
+- docs/PHASE1_START_HERE.md — active Phase 1 execution order and fresh-chat handoff
 - docs/INDEX.md — documentation map
 - docs/PRODUCT_VISION.md — product intent and boundaries
 - docs/SYSTEM_ARCHITECTURE.md — target technical architecture

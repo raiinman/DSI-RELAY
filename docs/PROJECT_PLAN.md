@@ -239,3 +239,22 @@ RELAY's value depends on trustworthy evidence, not just more telemetry.
 The product must preserve source/freshness/sampling/verification state for important evidence, track health of the observability path, benchmark instrumentation overhead, and distinguish measured facts from inferred causes.
 
 A low-cost system that confidently reasons from stale or incomplete telemetry fails the product goal.
+
+
+## Performance and resource economics
+
+RELAY's cost goal includes the creator's workstation, not only model/API usage.
+
+Product requirements include:
+
+- foreground creator workload priority
+- progressive project readiness before deep indexing completes
+- bounded idle CPU/RAM/disk/network cost
+- inactive-project quiescence
+- local-model routing that considers GPU/VRAM contention
+- tail-latency/interactive performance benchmarks
+- storage/index maintenance budgets
+- hardware-tier performance fixtures
+- long-run resource-aging tests
+
+A token-saving feature that materially degrades UEFN/creator responsiveness is a product regression.

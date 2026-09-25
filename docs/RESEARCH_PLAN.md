@@ -1218,3 +1218,127 @@ Examples:
 - "delete local history" -> storage lifecycle test
 
 User-facing claims ship only when the corresponding behavior has a maintained test/verification procedure.
+
+
+## Research track BE — Contract inventory and stability classes
+
+Inventory all externally observable RELAY contracts and classify them as internal, experimental, preview, or stable.
+
+For each contract record:
+
+- owner
+- consumers
+- schema/protocol
+- stability promise
+- versioning method
+- breaking-change definition
+- deprecation path
+- test matrix
+
+Test whether the classification is understandable to adapter authors, users, and maintainers.
+
+NIST SP 800-228-upd1, Microsoft API guidelines, and Kubernetes deprecation policy are primary practical baselines.
+
+## Research track BF — Semantic-versioning versus actual compatibility
+
+Build automated compatibility checks and compare their findings to release-number expectations.
+
+Test:
+
+- source/schema changes
+- behavior/side effects
+- permissions
+- error/exit codes
+- privacy/egress defaults
+- dependency/transitive dependency changes
+- rate/performance contracts
+
+Measure breaking changes that would be missed by version-number policy alone.
+
+Academic baselines include large Maven/Java/Go breaking-change studies.
+
+## Research track BG — Mixed-version and rolling-upgrade matrix
+
+Prototype mixed-version test environments for:
+
+- CLI <-> local host
+- dashboard <-> host
+- gateway <-> host
+- adapter worker <-> broker
+- adapter worker <-> companion component
+- generated skill <-> current CLI
+- restored older project data <-> current host
+
+Define supported skew and safe failure behavior.
+
+Kubernetes version-skew policy and Protocol Buffer rollout guidance are primary references.
+
+## Research track BH — Schema evolution
+
+Compare candidate IDLs/encodings on:
+
+- backward compatibility
+- forward compatibility
+- unknown-field behavior
+- field removal/reservation
+- enum evolution
+- JSON/text interoperability
+- generated code/tooling
+- compatibility-check tooling
+- stored historical data
+
+Explicitly test the same logical schema changes in every representation RELAY plans to support.
+
+## Research track BI — Deprecation and migration UX
+
+Test a realistic deprecation lifecycle:
+
+- contract marked deprecated
+- client/skill/adapter detects it
+- replacement available
+- automatic migration where possible
+- warning/reminder behavior
+- removal eligibility
+
+Measure:
+
+- migration success
+- user understanding
+- warning fatigue
+- stale-client detection
+- time to migrate
+- support burden
+
+Compare elapsed-time-only retirement with privacy-safe usage-aware retirement.
+
+## Research track BJ — Compatibility debt and feature flags
+
+Inventory shims, aliases, legacy schemas, and rollout flags.
+
+For each record:
+
+- owner
+- age
+- usage
+- test burden
+- AI-context/runtime overhead
+- removal condition
+- blocked cleanup/refactoring
+
+Use the 2026 Kubernetes/GitLab feature-toggle study as a baseline for long-lived flag risk.
+
+## Research track BK — Historical result and project-data longevity
+
+Create fixtures from old RELAY schemas/versions and open them with newer versions.
+
+Test:
+
+- faithful historical rendering
+- explicit partial/unsupported rendering
+- migration chains
+- raw evidence fallback
+- old command/rule semantics
+- adapter-version provenance
+- downgrade refusal on newer schema
+
+Success criterion: new software never fabricates a modern interpretation of an older result whose semantics changed.

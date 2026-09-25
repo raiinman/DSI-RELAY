@@ -90,7 +90,8 @@ Completed prototype evidence:
 - Spike 2: SQLite project/result/checkpoint durability with hard-kill recovery and degraded damaged-store behavior.
 - Spike 3: Evidence Storage Lifecycle compression/deduplication and BLOB-vs-file benchmark.
 - Spike 4: Windows indexing benchmark; notifications are hints, reconciliation + changed-only parsing is the least-privilege baseline, and USN reading remains optional/privileged.
-- Current next work: Spike 5 — Resource coexistence.
+- Spike 5: resource coexistence benchmark against a live UEFN editor; foreground-safe deferral is primary, soft Windows QoS remains optional for unavoidable background work, and hard CPU caps are rejected as a routine default.
+- Current next work: Spike 6 — Dashboard shell.
 
 Research/prototype:
 

@@ -12,8 +12,9 @@ Current prototype progress:
 - Spike 2 complete: project registry, durable result IDs, job checkpoints, schema migration metadata, integrity checks, hard-kill persistence, and degraded corrupted-store startup are proven with the provisional SQLite candidate.
 - Spike 3 complete: exact whole-blob dedupe, Zstandard cost curves, SQLite-BLOB versus metadata+file layout, log aggregation, telemetry downsampling, idle recompression, and lossless/reference image handling have benchmark evidence.
 - Spike 4 complete: Windows recursive notifications are proven as fast hints but not authoritative under bursts; reconciliation + changed-only parsing is the least-privilege baseline, and USN journal reading is deferred to an optional privileged-helper experiment because non-elevated reads were denied.
-- Current next spike: Spike 5 — Resource coexistence.
-- Benchmark artifacts live under `spikes/phase1/results/`; provisional architecture consequences are recorded in D-146 through D-149.
+- Spike 5 complete: real UEFN message-pump coexistence confirms foreground-safe deferral as the primary protection; soft Windows QoS remains available for work that must continue, hard CPU caps are rejected as a routine default, and 100 registered inactive projects remained effectively idle.
+- Current next spike: Spike 6 — Dashboard shell.
+- Benchmark artifacts live under `spikes/phase1/results/`; provisional architecture consequences are recorded in D-146 through D-150.
 
 ## Phase 1 goal
 

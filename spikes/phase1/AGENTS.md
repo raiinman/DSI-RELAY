@@ -35,4 +35,4 @@ Own Phase 1 stack-selection prototypes, benchmark fixtures, and measured evidenc
 
 # Child DOX Index
 
-- No child DOX files currently exist under `spikes/phase1/`; this file owns the full Phase 1 spike subtree.
+- `node/AGENTS.md` — owns the provisional Node.js runtime candidate, tests, benchmark harnesses, and platform-helper boundaries.

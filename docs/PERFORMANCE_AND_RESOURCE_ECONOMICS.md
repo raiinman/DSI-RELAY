@@ -83,6 +83,8 @@ Candidate controls include:
 
 Hard resource caps can themselves cause pathological latency or failures, so use notification/priority/backoff mechanisms unless hard caps are justified by testing.
 
+Phase 1 Spike 5 evidence currently favors deferral/backoff over permanent throttling. With a live UEFN editor on the high-end fixture, Normal-priority heavy background work did not materially move editor message-pump p95 even at full logical-CPU saturation. Below-Normal/EcoQoS remained valid soft signals but reduced background throughput without a measured p95 gain. A 25% Job Object hard cap cut background throughput by more than half and worsened p99 tail latency, so hard caps are not a routine foreground-safety default. These results do not replace the required minimum/recommended hardware and Fortnite play-session benchmarks.
+
 ## Workload modes
 
 Conceptual modes:

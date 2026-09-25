@@ -8,8 +8,9 @@ This subtree contains disposable-but-reproducible prototypes used to select RELA
 - Spike 2 — SQLite project registry, durable result IDs, job checkpoints, schema/integrity handling
 - Spike 3 — evidence deduplication, compression, storage-layout, aggregation/downsampling, and recompression economics
 - Spike 4 — Windows full-scan/reconciliation, recursive notifications, changed-only parsing, and USN privilege/continuity behavior
+- Spike 5 — live-UEFN resource coexistence, Windows priority/EcoQoS/Job Object controls, foreground-safe deferral, and inactive-project idle cost
 
-The current Node implementation is a candidate, not a locked runtime. See D-146 through D-149 in `docs/DECISION_LOG.md`.
+The current Node implementation is a candidate, not a locked runtime. See D-146 through D-150 in `docs/DECISION_LOG.md`.
 
 ## Run
 
@@ -21,6 +22,7 @@ node bench\spike1.mjs
 node bench\spike2.mjs
 node bench\spike3.mjs
 node bench\spike4.mjs
+node bench\spike5.mjs
 ```
 
 Start the prototype host:
@@ -48,3 +50,6 @@ Runtime state defaults to the signed-in user's local application-data area and i
 - Image-codec selection remains open; lossy reference derivatives are never exact evidence.
 - Recursive notifications are hints only; real UEFN fixtures and deliberate watcher-buffer overflow tests remain before public claims.
 - USN record reading is not available to the normal host on the current least-privilege fixture; an optional privileged helper needs a separate cost/security justification before implementation.
+- Resource coexistence still needs Fortnite play-session frame-time testing and minimum/recommended hardware fixtures.
+- GPU local-model coexistence remains open; Spike 5 proves defer policy and CPU background controls, not local-LLM VRAM scheduling.
+- Process-name creator detection is a spike mechanism; production scheduling should consume trusted adapter/project activity state rather than hard-code one application's executable name.

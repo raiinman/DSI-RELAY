@@ -57,3 +57,24 @@ Artifact: `2026-09-24-spike4-windows-indexing.json`
 Current implication: recursive notifications are fast dirty-path hints, changed-only parsing is strongly favored, reconciliation remains authoritative, and USN may only return as an optional narrowly privileged accelerator if a later benchmark justifies that complexity.
 
 See D-149 in `docs/DECISION_LOG.md`.
+
+## Spike 5 — Resource coexistence
+
+Artifact: `2026-09-24-spike5-resource-coexistence-windows.json`
+
+- real UEFN editor process/window measured; no editor mutation was performed
+- baseline UEFN message-pump latency: 5.011 ms median p95 across three runs
+- 12-thread Normal background work: 4.992 ms median p95 / 13,257 MiB/s median hashing throughput
+- Below-Normal: 4.934 ms median p95 / 11,256 MiB/s median throughput
+- Below-Normal + EcoQoS + low memory priority: 4.938 ms median p95 / 12,050 MiB/s median throughput
+- weight-based Job Object: 4.783 ms median p95 / 11,111 MiB/s median throughput
+- 25% Job hard cap: 4.885 ms median p95 / 6,389 MiB/s median throughput
+- full 16-thread saturation still kept Normal work near baseline at 4.932 ms p95 / 14,131 MiB/s
+- under saturation, EcoQoS reduced throughput to about 10.1–11.3 GiB/s without a meaningful p95 gain
+- under saturation, the 25% hard cap reduced throughput to about 6.1–6.3 GiB/s and worsened UEFN p99 to 12.8–15.1 ms versus about 5.1–5.4 ms for Normal
+- one inactive registered project and one hundred inactive projects both sampled 0 ms host CPU over three idle seconds; RSS differed by about 180 KB
+- foreground-safe policy deferred optional local-AI and deep-index work while UEFN was detected
+
+Current implication: defer optional heavy work first. Use soft Windows QoS/priority only for work that must continue under foreground activity. Do not use hard CPU caps as a routine foreground-safety default.
+
+See D-150 in `docs/DECISION_LOG.md`.

@@ -925,3 +925,30 @@ An intentional watcher outage followed by 70 changed paths was fully recovered b
 NTFS USN remains useful in principle but is not a normal-host dependency. Journal metadata was queryable in the signed-in user context, the journal advanced across offline mutations, continuity metadata remained valid, and Node file inode values matched NTFS USN file-reference IDs. However reading journal records returned Access Denied without elevation on the benchmark fixture. A future narrowly privileged helper may be benchmarked only if its recovery/latency benefit exceeds installer, security, compatibility, and operability cost. RELAY Core must remain correct without it.
 
 Evidence: `spikes/phase1/results/2026-09-24-spike4-windows-indexing.json`.
+
+## D-150 — Foreground-safe scheduling defers first; hard CPU caps are not a default
+
+Status: Phase 1 provisional
+
+Spike 5 measured RELAY-style CPU hashing/compression work while the real UEFN editor process and main window were active. RELAY does not raise or alter the creator application's priority; scheduling policy applies only to RELAY-owned work.
+
+The provisional resource policy is:
+
+1. detect an active creator workload and enter `foreground_safe`
+2. defer or do not start optional heavy work such as deep indexing, storage maintenance, inactive-project reconciliation, and local AI
+3. allow explicit bounded diagnostics or interactive RELAY commands when required
+4. when background work must continue, prefer soft OS intent signals such as Below-Normal priority / EcoQoS and cooperative backoff over hard CPU caps
+5. do not apply Job Object hard CPU caps as a routine foreground-safety mechanism
+6. keep inactive projects cold; registering projects must not create resident workers or periodic compute by itself
+
+On the high-end Windows fixture with UEFN open, baseline UEFN `WM_NULL` message-pump latency was about 5 ms p95. With 12 RELAY worker threads, Normal, Below-Normal, EcoQoS, weight-based Job Object, and a 25% hard cap all kept median p95 near baseline; therefore this fixture did not prove an editor-responsiveness benefit from always-on throttling.
+
+The throughput cost was material. Normal-priority background work measured about 13.3 GiB/s hashing throughput, while Below-Normal/EcoQoS/weight-based controls generally reduced throughput into the roughly 10.4–12.1 GiB/s range. The 25% hard cap reduced throughput to roughly 6.1–6.5 GiB/s without improving p95.
+
+A second full-CPU saturation run used all 16 logical CPUs. Normal-priority work still held UEFN p95 near the 4.955 ms saturation baseline while delivering about 14.1–14.3 GiB/s. EcoQoS reduced throughput to about 10.1–11.3 GiB/s with no meaningful p95 improvement. The 25% hard cap reduced throughput to about 6.1–6.3 GiB/s and produced much worse UEFN p99 tail latency (about 12.8–15.1 ms in the two runs versus about 5.1–5.4 ms for Normal). This rejects hard caps as the normal scheduling policy.
+
+Registered inactive projects remained effectively cold: one project and one hundred projects both sampled 0 ms host CPU over three idle seconds, with only about 180 KB RSS difference on the fixture. This supports persisted cold state rather than one resident service stack per project.
+
+EcoQoS, memory priority, Below-Normal priority, and Job Object controls were successfully applied and queried through Windows APIs. Memory-priority behavior under actual system memory pressure, Fortnite play-session frame time, GPU local-model contention, and minimum/recommended hardware remain open benchmark gates.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike5-resource-coexistence-windows.json`.

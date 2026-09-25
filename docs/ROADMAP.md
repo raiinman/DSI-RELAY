@@ -56,6 +56,10 @@ Exit criteria:
 - file-change tracking has a documented reconciliation path
 - local model execution is benchmarked rather than assumed cheaper
 - the Windows background host model is compatible with interactive tool integrations
+- stable/preview/experimental contracts have explicit compatibility/deprecation promises
+- mixed-version behavior is defined for CLI/host/gateway/adapters/companions
+- schema evolution rules and historical-result interpretation are documented
+- compatibility shims/feature flags have retirement criteria
 - adapter architecture is out-of-process by default and has a conceptual capability manifest, provenance model, and quarantine behavior
 - remote processing is gated by explicit project/destination data policy
 - credentials remain outside model-visible context
@@ -80,6 +84,9 @@ Research/prototype:
 - dashboard framework
 - progressive-depth/personal-first UX prototype
 - command/schema library
+- schema/IDL and compatibility-check tooling
+- protocol/capability negotiation model
+- rolling-upgrade/version-skew test harness
 - packaging/service installation
 - logging/diagnostics
 - local privilege/sandbox model

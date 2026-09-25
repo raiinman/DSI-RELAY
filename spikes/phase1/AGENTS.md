@@ -35,4 +35,6 @@ Own Phase 1 stack-selection prototypes, benchmark fixtures, and measured evidenc
 
 # Child DOX Index
 
+- `compare/AGENTS.md` — owns neutral cross-runtime comparison harnesses and shared candidate measurements.
 - `node/AGENTS.md` — owns the provisional Node.js runtime candidate, tests, benchmark harnesses, and platform-helper boundaries.
+- `rust/AGENTS.md` — owns the lower-footprint Rust runtime/IPC challenger and its Windows host-security benchmark boundary.

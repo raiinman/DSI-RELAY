@@ -102,3 +102,26 @@ Artifact: `2026-09-24-spike6-dashboard-shell-windows.json`
 Current implication: serve the personal dashboard's thin static/HTTP surface from the existing per-user `relayd` process. Do not create another resident dashboard backend solely for UI packaging.
 
 See D-151 in `docs/DECISION_LOG.md`.
+
+## Spike 7 — Runtime + IPC challenger
+
+Artifact: `2026-09-24-spike7-runtime-ipc-challenger-windows.json`
+
+- neutral Node-vs-Rust comparison harness: `spikes/phase1/compare/spike7.mjs`
+- Node idle host RSS: 119,095,296 bytes; Rust: 6,529,024 bytes (94.52% lower)
+- repeated startup p50: Node 91.340 ms; Rust 29.991 ms
+- direct authenticated `system.status` p50: Node 0.284 ms; Rust 0.265 ms
+- full CLI-process `status` p50: Node 141.296 ms; Rust 21.476 ms
+- hard-kill replacement state: Node 81.895 ms; Rust 27.251 ms; both recovered
+- embedded dashboard RSS: Node 127,373,312 bytes; Rust 7,036,928 bytes
+- embedded dashboard status p50: Node 0.748 ms; Rust 0.555 ms
+- actual Node CLI → Rust host and Rust CLI → Node host interoperability passed
+- wrong-token and incompatible-protocol tests failed closed on both candidates
+- Rust kernel verification proved a protected current-user-only pipe DACL with one full-control ACE
+- Rust release binary: 438,272 bytes; 3 direct crates / 14 resolved Cargo packages
+- clean optimized Rust build on cached crates: 12.728 s
+- selected source-path cost: Node 556 lines / 0 unsafe mentions; Rust 1,420 lines / 21 unsafe mentions
+
+Current implication: Rust is the preferred candidate for deeper parity, not the final runtime. Node remains the working reference/fallback until Rust proves the durable SQLite/result/checkpoint/migration contracts without erasing its footprint and operability advantage.
+
+See D-152 in `docs/DECISION_LOG.md`.

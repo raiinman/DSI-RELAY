@@ -92,7 +92,8 @@ Completed prototype evidence:
 - Spike 4: Windows indexing benchmark; notifications are hints, reconciliation + changed-only parsing is the least-privilege baseline, and USN reading remains optional/privileged.
 - Spike 5: resource coexistence benchmark against a live UEFN editor; foreground-safe deferral is primary, soft Windows QoS remains optional for unavoidable background work, and hard CPU caps are rejected as a routine default.
 - Spike 6: dashboard shell parity/resource benchmark; static/HTTP presentation hosted by `relayd` is favored over a separate resident dashboard backend.
-- Current next work: Spike 7 — Runtime + IPC challenger, because Node and named-pipe security/footprint remain provisional.
+- Spike 7: neutral Node-vs-Rust runtime/IPC comparison; Rust becomes the preferred candidate for deeper parity after materially improving host/dashboard footprint, startup/CLI latency, restart time, and explicit current-user pipe security while preserving protocol interoperability.
+- Current next work: Spike 8 — Rust operational-state parity + dependency economics. Node remains the working reference/fallback until the Rust candidate proves the durable SQLite contracts and their package/build cost.
 
 Research/prototype:
 

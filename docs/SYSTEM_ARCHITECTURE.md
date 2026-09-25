@@ -81,6 +81,8 @@ Responsibilities:
 
 The daemon must remain useful with no dashboard open and no AI connected.
 
+Phase 1 Spike 7 currently favors Rust as the next runtime/IPC candidate to carry into deeper parity work. The narrow Rust challenger materially reduced host footprint/startup and proved a kernel-verified current-user-only Windows named-pipe DACL while remaining interoperable with the Node protocol implementation. This is not yet a final language lock: Node remains the working reference until Rust proves persistent operational-state, migration/integrity, dependency, and recovery parity.
+
 ### relay CLI
 
 Canonical headless public interface.

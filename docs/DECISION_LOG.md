@@ -979,3 +979,30 @@ Therefore the default personal dashboard direction is static/local web presentat
 Open gates remain for write/approval authorization, client identity, live update transport, accessibility/usability testing, browser threat modeling, packaging, and public update integrity.
 
 Evidence: `spikes/phase1/results/2026-09-24-spike6-dashboard-shell-windows.json`.
+
+## D-152 — Rust becomes the preferred Phase 1 runtime/IPC candidate for deeper parity
+
+Status: Phase 1 provisional
+
+Spike 7 changes the preferred runtime/IPC candidate from Node to Rust for the next parity work. It does not yet make Rust the final implementation language or approve a rewrite of every proven subsystem.
+
+A neutral head-to-head harness used the same Windows workstation, named-pipe protocol requests, restart fault, process metrics, CLI launches, and embedded-dashboard workload for both candidates. The Rust challenger deliberately implemented only the host/runtime/IPC surface; SQLite, indexing, evidence storage, background jobs, and adapters remain unported until Rust earns them.
+
+On the final comparison:
+
+- Node idle host RSS was 119,095,296 bytes; Rust was 6,529,024 bytes, a 94.52% reduction.
+- Node repeated startup was 91.340 ms p50; Rust was 29.991 ms p50.
+- Direct authenticated `system.status` was 0.284 ms p50 on Node and 0.265 ms on Rust.
+- A full CLI-process status call was 141.296 ms p50 on Node and 21.476 ms on Rust.
+- After hard kill, replacement state became ready in 81.895 ms on Node and 27.251 ms on Rust; both returned healthy status afterward.
+- With the same embedded dashboard assets, Node sampled 127,373,312 bytes RSS and Rust 7,036,928 bytes. Dashboard status was 0.748 ms p50 on Node and 0.555 ms on Rust.
+- The actual Node CLI successfully called the Rust host, and the actual Rust CLI successfully called the Node host, proving protocol-level interoperability for the shared command subset.
+- Wrong auth tokens and incompatible protocol ranges failed closed on both candidates.
+
+Rust also closes the unresolved local-IPC access-control gate. The challenger creates the Windows named pipe with a protected current-user-only DACL and retains the per-start random application token as defense in depth. After creation it calls Windows `GetSecurityInfo` on the actual pipe handle and refuses startup unless the kernel-returned descriptor is owned by the current user, has a protected DACL, and contains exactly one full-control ACE for that user. The final benchmark reported this verification as passed. Node/libuv's pipe ACL remains unverified rather than being classified as insecure.
+
+The trade-off is real. The selected Node host path measured 556 source lines and no unsafe boundary, while the Rust challenger measured 1,420 source lines and 21 `unsafe` mentions concentrated around Win32 interoperability. Rust required three direct Cargo dependencies / 14 resolved packages, a roughly 12.7-second clean optimized build, and a 438,272-byte stripped release executable. Node requires no compile step and no npm runtime packages, although the Node executable on the fixture was about 92.8 MB.
+
+Therefore Rust is promoted only to **preferred candidate for deeper parity**. Node remains the working reference/fallback until Rust proves that its footprint/security advantage survives the operational-state requirements that Node currently satisfies through built-in SQLite. The next gate is durable SQLite state, migration/integrity behavior, dependency/package economics, and hard-kill durability—not a broad port of indexing/evidence/UEFN features.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike7-runtime-ipc-challenger-windows.json`.

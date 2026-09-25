@@ -256,6 +256,8 @@ The local runtime should follow least-privilege design.
 - version local protocols and reject incompatible peers safely
 - test cross-user behavior and recovery after local host restarts
 
+Phase 1 Spike 7 proved the preferred Windows IPC direction with the Rust challenger: create the named pipe with a protected DACL scoped to the current user, verify the created kernel object's descriptor, and still require the random per-start application token as defense in depth. End-to-end testing from a second Windows user session remains an open release gate.
+
 ## Software update integrity
 
 Public update delivery is part of RELAY's trusted software path.

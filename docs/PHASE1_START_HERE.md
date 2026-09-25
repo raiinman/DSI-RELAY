@@ -14,8 +14,9 @@ Current prototype progress:
 - Spike 4 complete: Windows recursive notifications are proven as fast hints but not authoritative under bursts; reconciliation + changed-only parsing is the least-privilege baseline, and USN journal reading is deferred to an optional privileged-helper experiment because non-elevated reads were denied.
 - Spike 5 complete: real UEFN message-pump coexistence confirms foreground-safe deferral as the primary protection; soft Windows QoS remains available for work that must continue, hard CPU caps are rejected as a routine default, and 100 registered inactive projects remained effectively idle.
 - Spike 6 complete: dashboard command-contract parity is proven; a standalone proxy costs another resident runtime, so the provisional default is a dependency-free static/HTTP shell hosted inside `relayd`.
-- Current next spike: Spike 7 — Runtime + IPC challenger. Compare the provisional Node host against a lower-footprint Windows candidate before locking implementation language/runtime or IPC.
-- Benchmark artifacts live under `spikes/phase1/results/`; provisional architecture consequences are recorded in D-146 through D-151.
+- Spike 7 complete: the Rust runtime/IPC challenger materially beat the Node reference on host/dashboard RSS, startup, CLI launch, restart, and explicit Windows pipe security while remaining protocol-interoperable. Rust is now the preferred candidate for deeper parity, not the final runtime.
+- Current next spike: Spike 8 — Rust operational-state parity + dependency economics. Challenge Node's strongest remaining advantage by proving the Spike 2 SQLite contracts without immediately porting indexing/evidence/UEFN work.
+- Benchmark artifacts live under `spikes/phase1/results/`; provisional architecture consequences are recorded in D-146 through D-152.
 
 ## Phase 1 goal
 
@@ -182,6 +183,35 @@ Compare a lower-footprint Windows candidate, beginning with Rust because the tar
 - crash/recovery and mixed-version implications
 
 Do not port all storage/index/evidence work merely to create a language bake-off. The challenger must first beat or materially improve the host/IPC resource-security trade-off before deeper porting is justified.
+
+### Spike 8 — Rust operational-state parity + dependency economics
+
+Rust earned deeper parity work in Spike 7. Challenge the operational-state layer next, not the entire product.
+
+Prove the Rust candidate can preserve the Spike 2 contracts:
+
+- project registry
+- durable result IDs
+- job/checkpoint records
+- schema migration metadata
+- SQLite integrity / `quick_check`
+- degraded startup on deliberately damaged storage
+- blocked writes while storage is unavailable
+- graceful and hard-kill restart persistence
+- compatibility/migration implications for the existing prototype schema
+
+Measure:
+
+- SQLite dependency/package strategy and license/build implications
+- release binary-size growth
+- clean/incremental build cost
+- host idle RSS after storage is loaded
+- durable write/read/checkpoint latency
+- startup/recovery cost
+- database/WAL growth
+- crash behavior and integrity checks
+
+Do not port indexing, evidence compression, dashboard features, or UEFN adapters in Spike 8 unless a tiny change is strictly required to exercise the storage contract.
 
 ## Evidence storage lifecycle target
 

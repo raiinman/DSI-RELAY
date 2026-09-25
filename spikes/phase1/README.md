@@ -10,8 +10,9 @@ This subtree contains disposable-but-reproducible prototypes used to select RELA
 - Spike 4 — Windows full-scan/reconciliation, recursive notifications, changed-only parsing, and USN privilege/continuity behavior
 - Spike 5 — live-UEFN resource coexistence, Windows priority/EcoQoS/Job Object controls, foreground-safe deferral, and inactive-project idle cost
 - Spike 6 — dashboard shell command parity, local HTTP security boundary, and standalone-vs-embedded process/resource economics
+- Spike 7 — neutral Node-vs-Rust runtime/IPC challenger, explicit Windows pipe DACL verification, cross-runtime protocol compatibility, restart/resource/build economics
 
-The current Node implementation is a candidate, not a locked runtime. See D-146 through D-151 in `docs/DECISION_LOG.md`.
+Rust is now the preferred Phase 1 candidate for deeper runtime/storage parity, but the runtime is not final. Node remains the working reference/fallback until Rust proves the durable operational-state contracts. See D-146 through D-152 in `docs/DECISION_LOG.md`.
 
 ## Run
 
@@ -43,10 +44,24 @@ Machine execution uses one JSON request on stdin:
 
 Runtime state defaults to the signed-in user's local application-data area and is not stored in this repository.
 
+Rust challenger:
+
+```powershell
+cd ..\rust
+cargo test
+cargo build --release
+.\target\release\relay-rust-challenger.exe host --dashboard
+```
+
+Neutral runtime comparison:
+
+```powershell
+cd ..\compare
+node spike7.mjs
+```
+
 ## Known open gates
 
-- Node idle memory is too high to lock the final daemon runtime without comparison.
-- Named-pipe authentication exists, but explicit Windows DACL/cross-user denial remains unproven.
 - SQLite is only provisional for operational metadata/compact results; heavyweight evidence stays out of it by default.
 - Evidence compression defaults need real UEFN traces and foreground-interference testing.
 - Image-codec selection remains open; lossy reference derivatives are never exact evidence.
@@ -56,4 +71,6 @@ Runtime state defaults to the signed-in user's local application-data area and i
 - GPU local-model coexistence remains open; Spike 5 proves defer policy and CPU background controls, not local-LLM VRAM scheduling.
 - Process-name creator detection is a spike mechanism; production scheduling should consume trusted adapter/project activity state rather than hard-code one application's executable name.
 - The dashboard is still read-only in Phase 1; write/approval authorization and client identity remain open.
-- Node remains too memory-heavy to lock the final host runtime; Spike 7 must compare a lower-footprint Windows candidate before Phase 1 can close.
+- Rust materially beat Node's narrow host/IPC footprint and security gate in Spike 7, but still needs durable SQLite operational-state parity before the runtime can be locked.
+- Node remains the working reference/fallback for the proven SQLite/result/checkpoint path until Spike 8 resolves Rust dependency, migration, integrity, recovery, and post-storage RSS costs.
+- Rust's Win32 boundary is larger and uses explicit `unsafe` code; keep that boundary narrow and regression-tested rather than spreading native calls across RELAY Core.

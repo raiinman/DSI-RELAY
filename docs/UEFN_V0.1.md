@@ -333,3 +333,24 @@ UEFN projects may mix:
 - generated/AI-assisted content
 
 RELAY should preserve the provenance/license distinction and avoid representing project inclusion as proof of ownership.
+
+
+## RELAY performance coexistence
+
+The UEFN adapter must be tested as a co-resident workload, not in isolation.
+
+v0.1 performance tests should include:
+
+- UEFN idle/editing with RELAY idle
+- UEFN while incremental indexing runs
+- play session while RELAY telemetry/probes run
+- UEFN/Fortnite while optional local AI is active
+- fixed-camera capture/visual regression burst
+- deep audit deferred/resumed around active editing
+
+RELAY should prefer Epic-native performance/memory tools for project diagnostics while separately measuring RELAY's own CPU/RAM/GPU/I/O overhead.
+
+Add to v0.1 acceptance:
+
+- RELAY meets the defined foreground/idle resource budget on at least the minimum-class and recommended-class UEFN fixtures used for Phase 1 benchmarks
+- optional local AI can be deferred/paused when it harms UEFN/Fortnite responsiveness

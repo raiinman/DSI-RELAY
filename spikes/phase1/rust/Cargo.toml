@@ -12,6 +12,7 @@ sha2 = { version = "0.11.0", default-features = false }
 flatbuffers = { version = "25.12.19", default-features = false, features = ["std"] }
 windows-sys = { version = "0.61.2", features = [
   "Win32_Foundation",
+  "Win32_Networking_WinSock",
   "Win32_Security",
   "Win32_Security_Authorization",
   "Win32_Security_Cryptography",
@@ -22,6 +23,7 @@ windows-sys = { version = "0.61.2", features = [
   "Win32_System_LibraryLoader",
   "Win32_System_Memory",
   "Win32_System_Pipes",
+  "Win32_System_SystemServices",
   "Win32_System_Threading"
 ] }
 

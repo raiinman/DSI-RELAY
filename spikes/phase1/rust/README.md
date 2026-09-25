@@ -24,7 +24,9 @@ D-153 selects this Rust implementation as the Phase 1 foundation for the RELAY p
 - registry-derived CLI catalog/help/describe, dashboard exposure, adapter/AI discovery, and command capability IDs
 - synthetic on-demand out-of-process adapter broker/worker foundation with manifest validation, SHA-256 artifact verification, provenance, timeout/backoff/quarantine, and registry-bound commands
 - query-verified Windows Job Object worker containment: kill-on-close, active-process limit 1, and synthetic process-memory cap
-- synthetic strong Windows adapter isolation through AppContainer/process sandbox semantics: explicit read/write and read-only paths, default-deny network, explicit egress grant, minimized environment, no inherited handles, and outer Job Object limits
+- synthetic strong Windows adapter isolation through AppContainer/process sandbox semantics
+- selected stable Windows release candidate using documented AppContainer/LPAC launch APIs, one broker-owned read/write mailbox, read-only worker/project grants, brokered network egress, minimized environment, Win32k mitigation, and outer Job Object limits
+- backend matrix version 1 that fails closed on experimental-only or unmeasured Windows builds
 
 ## What it intentionally does not prove yet
 
@@ -36,8 +38,8 @@ D-153 selects this Rust implementation as the Phase 1 foundation for the RELAY p
 - evidence compression/blob storage port into Rust
 - background job scheduling
 - real UEFN/Blender/Krita adapters
-- stable/release Windows sandbox backend and OS-tier fallback matrix; Spike 11 proves the security semantics through an experimental processmodel backend but does not release-lock that API
-- real-adapter compatibility inside the selected strong sandbox, including target-tool IPC/companion requirements
+- qualification of additional Windows builds beyond the measured build 26200
+- real-adapter compatibility inside the selected stable strong sandbox, including target-tool IPC/companion requirements
 - production HTTP concurrency, installer/update, or desktop packaging
 
 ## Run
@@ -65,7 +67,7 @@ In another shell using the same `RELAY_STATE_DIR`:
 .\target\release\relay-rust-challenger.exe shutdown
 ```
 
-Neutral comparisons are owned outside this candidate subtree. Use `../compare/spike7.mjs` for host/IPC evidence, `../compare/spike8.mjs` for operational SQLite parity/dependency economics, `../compare/spike9.mjs` for command-registry/IDL evidence, `../compare/spike10.mjs` for adapter broker/Job Object evidence, and `../compare/spike11.mjs` for strong Windows sandbox/egress evidence rather than ad-hoc candidate-only timing.
+Neutral comparisons are owned outside this candidate subtree. Use `../compare/spike7.mjs` for host/IPC evidence, `../compare/spike8.mjs` for operational SQLite parity/dependency economics, `../compare/spike9.mjs` for command-registry/IDL evidence, `../compare/spike10.mjs` for adapter broker/Job Object evidence, `../compare/spike11.mjs` for strong sandbox semantics, and `../compare/spike12.mjs` for the stable Windows sandbox/backend matrix rather than ad-hoc candidate-only timing.
 
 ## Security boundary
 
@@ -81,6 +83,8 @@ D-154 selects `../contracts/commands.registry.json` plus the bounded JSON Schema
 
 D-155 selects the synthetic adapter broker/manifest foundation, including on-demand workers and Job Object lifecycle/resource containment.
 
-D-156 selects the strong isolation semantics for untrusted workers: AppContainer/process sandboxing, explicit filesystem grants, default-deny network with broker-controlled explicit egress, minimized environment, and the outer Job Object limits. The current measured `Experimental_CreateProcessInSandbox` implementation is a Phase 1 backend only; Spike 12 must prove a stable release/fallback backend matrix.
+D-156 selects the strong isolation semantics for untrusted workers: AppContainer/process sandboxing, explicit filesystem grants, default-deny network, minimized environment, and the outer Job Object limits.
 
-The selection does not make every Rust subsystem final. Storage maintenance/concurrency hardening, stable sandbox packaging/fallback, real-adapter compatibility, packaging/update, and the remaining Phase 1 foundations still require their own evidence.
+D-157 selects the documented AppContainer/LPAC launch path as the Windows release candidate on qualified builds. The stable worker receives one broker-owned read/write mailbox, direct worker network capability grants are disabled in favor of brokered allowlisted egress, temporary security changes are restored after exit, and experimental/unmeasured backends fail closed rather than launching unrestricted.
+
+The selection does not make every Rust subsystem final. Storage maintenance/concurrency hardening, additional Windows-build qualification, real-adapter compatibility, packaging/update, and the remaining Phase 1 foundations still require their own evidence.

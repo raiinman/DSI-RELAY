@@ -1174,3 +1174,47 @@ The current direct backend is **not** selected as RELAY's permanent public Windo
 No UEFN, Fortnite, Blender, Krita, or other real adapter behavior was implemented in Spike 11.
 
 Evidence: `spikes/phase1/results/2026-09-25-spike11-windows-adapter-sandbox.json`.
+
+
+## D-157 — Stable LPAC AppContainer + brokered egress is the Windows release-candidate sandbox on qualified builds
+
+Status: Phase 1 selected Windows sandbox backend; OS-build matrix conservative
+
+Spike 12 replaces the experimental Spike 11 processmodel backend in RELAY's intended release path with Microsoft's documented desktop AppContainer launch path:
+
+- `CreateAppContainerProfile` / AppContainer SID identity
+- `SECURITY_CAPABILITIES` through `STARTUPINFOEX`
+- `CreateProcessW` with extended startup attributes
+- Low Privilege AppContainer behavior with All Application Packages opt-out
+- Win32k system-call disable mitigation
+- the existing D-155 outer Job Object limits
+
+The strong isolation semantics from D-156 remain unchanged: filesystem outside grants is denied, direct worker network is denied, inherited environment is minimized, child-process creation remains bounded, and unsupported isolation never falls back to an unrestricted worker.
+
+The stable release policy is deliberately narrower than the exploratory Spike 11 backend. An untrusted worker receives exactly one direct read/write path: a broker-owned ephemeral mailbox. Project/user writes must return through trusted broker commands. Worker/project paths may be read-only.
+
+Network access is brokered rather than granted directly to the worker. The stable backend rejects direct capability requests before launch and exposes egress only through a trusted target allowlist.
+
+On the final 30-run Windows fixture:
+
+- stable LPAC prelaunch policy/ACL setup: 17.336 ms p50 / 19.525 ms p95
+- stable `CreateProcessW` AppContainer launch: 4.895 ms p50 / 6.147 ms p95
+- full stable sandbox round trip including temporary security restoration: 58.225 ms p50 / 62.982 ms p95
+- experimental Spike 11 reference round trip: 60.886 ms p50 / 74.576 ms p95
+- stable-vs-experimental p50 ratio: 0.9563; the documented stable path was slightly faster on this final run
+
+The worker verified `TokenIsAppContainer=true`, could use the mailbox, could not write the read-only worker tree, could not read/write blocked filesystem paths, could not use direct TCP, did not inherit the synthetic parent secret or `USERPROFILE`, and could not create a child process. The outer Job Object again query-verified one active process, 32 MiB process-memory limit, and kill-on-close.
+
+Temporary filesystem security changes are bounded to the broker-owned mailbox and read-only worker tree. Integration tests and the benchmark verify that the DACL is restored, the temporary Low-Integrity label is removed after exit, and the worker-tree descriptor is restored exactly. The mailbox is ephemeral and deleted by the broker fixture.
+
+The release selector uses matrix version 1 and enables strong untrusted launch only on Windows builds that have passed RELAY's full adversarial fixture. Build 26200 is the only physically qualified build in this spike. A simulated experimental-only host and a simulated unmeasured stable-API host both select `disabled`; a measured host still selects the stable backend even if the experimental API is absent.
+
+Spike 12 added no direct Cargo dependency, no resolved package, and no selected core-binary growth over Spike 11. A clean optimized all-binary build measured 36.290 seconds on cached crates. The stable probe executable measured 390,144 bytes; the synthetic sandbox worker measured 248,832 bytes. The stable backend/source selector added 1,686 selected source lines and 66 `unsafe` mentions, concentrated at the Windows ABI/security boundary.
+
+The experimental `Experimental_CreateProcessInSandbox` backend remains in the Phase 1 repository only as a measured reference. It is never a release fallback.
+
+Microsoft documents the stable AppContainer APIs back to Windows 8 desktop apps, but documentation availability is not treated as RELAY qualification. Additional Windows builds must run the same adversarial suite before entering the release allowlist. Real UEFN/Blender/Krita adapter compatibility inside this boundary also remains unproven.
+
+No UEFN, Fortnite, Blender, Krita, or other real adapter product behavior was implemented in Spike 12.
+
+Evidence: `spikes/phase1/results/2026-09-25-spike12-stable-windows-sandbox-matrix.json`.

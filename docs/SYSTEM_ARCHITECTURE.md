@@ -348,9 +348,11 @@ Phase 1 D-155 selects the initial broker/worker foundation: validated adapters l
 
 On Windows, the first containment layer uses Job Objects with kill-on-close, one active process, and a bounded process-memory limit. This is lifecycle/resource containment only.
 
-Phase 1 D-156 adds the selected strong isolation semantics for untrusted workers: AppContainer/process sandbox execution, explicit read/write and read-only filesystem grants, default-deny network, broker-allowlisted OS capabilities, minimized explicit environment, no inherited handles, Win32k disablement for the synthetic worker, and the outer Job Object limits. RELAY Core remains outside that restricted worker boundary. The synthetic proof uses a broker-owned filesystem mailbox because the measured sandbox API rejects inherited handles; final adapter transport remains separately versioned.
+Phase 1 D-156 adds the selected strong isolation semantics for untrusted workers: AppContainer/process sandbox execution, explicit filesystem grants, default-deny worker network, minimized explicit environment, Win32k disablement for the synthetic worker, and the outer Job Object limits. RELAY Core remains outside that restricted worker boundary.
 
-The current measured backend dynamically loads Microsoft's experimental `Experimental_CreateProcessInSandbox` API. D-156 selects the isolation policy, not that experimental export as a permanent public dependency. Unsupported strong-isolation backends must disable untrusted-adapter launch rather than falling back to an unrestricted D-155 worker.
+D-157 selects Microsoft's documented AppContainer/LPAC process-launch path as the intended Windows release backend on qualified builds. The untrusted worker receives exactly one direct read/write path: a broker-owned ephemeral mailbox. Project/user writes remain broker-mediated; read-only paths can be granted as needed. Direct worker network capabilities are disabled and network access is provided through brokered allowlisted egress.
+
+The Spike 11 experimental `Experimental_CreateProcessInSandbox` backend remains a benchmark/reference implementation only. Backend matrix version 1 enables strong untrusted launch only on Windows builds that have passed the adversarial fixture; unsupported or unmeasured builds disable that launch rather than falling back to an unrestricted D-155 worker.
 
 Inactive installed adapters keep only validated manifest metadata; workers are not kept resident until needed.
 

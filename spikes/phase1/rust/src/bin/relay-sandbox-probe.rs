@@ -1,9 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::ptr::{null, null_mut};
-use std::time::Duration;
+use windows_sys::Win32::Networking::WinSock::{
+    closesocket, connect, htons, socket, WSACleanup, WSAGetLastError, WSAStartup,
+    AF_INET, INVALID_SOCKET, IPPROTO_TCP, SOCKADDR, SOCKADDR_IN, SOCK_STREAM,
+    SOCKET_ERROR, WSADATA,
+};
 use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, HANDLE};
 use windows_sys::Win32::Security::{
     GetTokenInformation, TokenCapabilities, TokenIsAppContainer, TOKEN_QUERY,
@@ -144,8 +147,65 @@ fn try_child_process() -> (bool, u32) {
 
 fn write_response(mailbox: &Path, response: &ProbeResponse) {
     let path = mailbox.join("response.json");
-    let bytes = serde_json::to_vec_pretty(response).expect("serialize response");
-    fs::write(path, bytes).expect("write response");
+    let bytes = serde_json::to_vec_pretty(response).unwrap_or_else(|_| {
+        std::process::exit(209);
+    });
+    if fs::write(path, bytes).is_err() {
+        std::process::exit(210);
+    }
+}
+
+fn probe_network(target: &str) -> (bool, Option<i32>) {
+    let Some((host, port_text)) = target.rsplit_once(':') else {
+        return (false, None);
+    };
+    let octets: Vec<u8> = host
+        .split('.')
+        .filter_map(|part| part.parse::<u8>().ok())
+        .collect();
+    let Ok(port) = port_text.parse::<u16>() else {
+        return (false, None);
+    };
+    if octets.len() != 4 {
+        return (false, None);
+    }
+
+    unsafe {
+        let mut data = WSADATA::default();
+        let startup = WSAStartup(0x0202, &mut data);
+        if startup != 0 {
+            return (false, Some(startup));
+        }
+
+        let sock = socket(AF_INET as i32, SOCK_STREAM, IPPROTO_TCP);
+        if sock == INVALID_SOCKET {
+            let error = WSAGetLastError();
+            WSACleanup();
+            return (false, Some(error));
+        }
+
+        let mut address = SOCKADDR_IN::default();
+        address.sin_family = AF_INET;
+        address.sin_port = htons(port);
+        address.sin_addr.S_un.S_un_b.s_b1 = octets[0];
+        address.sin_addr.S_un.S_un_b.s_b2 = octets[1];
+        address.sin_addr.S_un.S_un_b.s_b3 = octets[2];
+        address.sin_addr.S_un.S_un_b.s_b4 = octets[3];
+
+        let connected = connect(
+            sock,
+            &address as *const SOCKADDR_IN as *const SOCKADDR,
+            std::mem::size_of::<SOCKADDR_IN>() as i32,
+        );
+        let result = if connected == SOCKET_ERROR {
+            (false, Some(WSAGetLastError()))
+        } else {
+            (true, None)
+        };
+        closesocket(sock);
+        WSACleanup();
+        result
+    }
 }
 
 
@@ -157,6 +217,10 @@ fn main() {
     let Some(mailbox) = args.get(1).map(PathBuf::from) else {
         std::process::exit(2);
     };
+    let panic_path = mailbox.join("panic.txt");
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = fs::write(&panic_path, info.to_string());
+    }));
 
     let request: ProbeRequest = match fs::read(mailbox.join("request.json"))
         .ok()
@@ -172,16 +236,8 @@ fn main() {
     let blocked_read_ok = fs::read_to_string(&request.blocked_secret).is_ok();
     let blocked_write_ok = fs::write(&request.blocked_write, b"escape").is_ok();
 
-    let (network_connect_ok, network_error_code) = match request
-        .network_target
-        .parse::<SocketAddr>()
-    {
-        Ok(address) => match TcpStream::connect_timeout(&address, Duration::from_millis(500)) {
-            Ok(_) => (true, None),
-            Err(error) => (false, error.raw_os_error()),
-        },
-        Err(_) => (false, None),
-    };
+    let (network_connect_ok, network_error_code) =
+        probe_network(&request.network_target);
 
     let parent_secret_visible = std::env::var("RELAY_SPIKE11_PARENT_SECRET").is_ok();
     let user_profile_visible = std::env::var("USERPROFILE").is_ok();

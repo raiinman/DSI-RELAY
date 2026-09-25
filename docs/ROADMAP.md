@@ -97,7 +97,8 @@ Completed prototype evidence:
 - Spike 9: one JSON command registry plus a bounded JSON Schema 2020-12 validation profile now drives Rust validation and derived CLI/dashboard/adapter/AI discovery metadata with no new runtime dependency. D-154 selects it as the semantic command-contract source.
 - Spike 10: synthetic out-of-process adapter broker/manifest benchmark; D-155 selects command-registry-bound on-demand workers with artifact/provenance checks, timeout/backoff/quarantine, and Windows Job Object lifecycle/resource containment while explicitly rejecting the claim that Job Objects are a complete security sandbox.
 - Spike 11: synthetic adversarial Windows sandbox benchmark; D-156 selects AppContainer/process isolation semantics with explicit filesystem grants, default-deny egress, broker-allowlisted capabilities, minimized environment, and outer Job Object limits. The measured experimental processmodel backend remains provisional rather than a release API commitment.
-- Current next work: Spike 12 — stable Windows sandbox backend + OS-tier fallback matrix using the same adversarial fixture.
+- Spike 12: stable documented AppContainer/LPAC benchmark; D-157 selects mailbox-only direct writes, brokered egress, measured-build allowlisting, and fail-closed unsupported tiers while keeping the experimental backend reference-only.
+- Current next work: Spike 13 — packaging/update approach, including non-admin per-user install, signed component integrity, staged activation, failed-update recovery, and rollback/data-schema separation.
 
 Research/prototype:
 

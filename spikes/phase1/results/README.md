@@ -229,3 +229,30 @@ Artifact: `2026-09-25-spike11-windows-adapter-sandbox.json`
 Current implication: D-156 selects the strong AppContainer/process-sandbox security semantics for untrusted adapters, but the experimental processmodel backend remains provisional. Spike 12 must reproduce the same guarantees through a stable Windows process-container/fallback matrix before public open third-party adapters.
 
 See D-156 in `docs/DECISION_LOG.md`.
+
+
+## Spike 12 — Stable Windows sandbox backend + OS-tier matrix
+
+Artifact: `2026-09-25-spike12-stable-windows-sandbox-matrix.json`
+
+- selected release candidate on qualified builds: documented AppContainer/LPAC launch through `CreateAppContainerProfile` + `SECURITY_CAPABILITIES` / `STARTUPINFOEX` + `CreateProcessW`
+- backend matrix version 1; measured Windows build 26200 selects `stable_lpac_brokered_egress`
+- experimental-only and unmeasured stable-API hosts select `disabled`; there is no unrestricted fallback
+- untrusted worker gets exactly one direct read/write grant: a broker-owned ephemeral mailbox
+- worker/project paths may be read-only; project/user writes are broker-mediated
+- direct worker network capabilities are rejected; egress is brokered through an explicit target allowlist
+- AppContainer token verified; blocked filesystem read/write, direct TCP, inherited parent secret, `USERPROFILE`, and child-process creation all remained denied
+- outer Job Object still query-verifies one process, 32 MiB memory limit, and kill-on-close
+- temporary mailbox DACL is restored, temporary Low-Integrity label is removed, and the worker-tree descriptor is restored exactly after exit
+- stable prelaunch setup: 17.336 ms p50 / 19.525 ms p95
+- stable AppContainer `CreateProcessW` launch: 4.895 ms p50 / 6.147 ms p95
+- full stable restored round trip: 58.225 ms p50 / 62.982 ms p95
+- experimental Spike 11 reference: 60.886 ms p50 / 74.576 ms p95
+- stable path was 0.9563× the experimental p50 on the final run
+- no new direct dependency, resolved package, or selected core-binary growth versus Spike 11
+- clean optimized all-binary build: 36.290 s; stable probe 390,144 bytes; synthetic worker 248,832 bytes
+- only build 26200 is physically qualified so far; additional Windows builds require the same adversarial suite before entering the release allowlist
+
+Current implication: D-157 selects stable AppContainer/LPAC + brokered egress for strongly isolated untrusted Windows adapters on qualified builds. The experimental processmodel backend is benchmark/reference-only.
+
+See D-157 in `docs/DECISION_LOG.md`.

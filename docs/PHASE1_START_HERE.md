@@ -19,8 +19,9 @@ Current prototype progress:
 - Spike 9 complete: one JSON command registry using a bounded JSON Schema 2020-12 profile now drives deterministic Rust validation plus CLI, dashboard, adapter, AI, and capability discovery metadata without another runtime dependency. D-154 selects it as the Phase 1 semantic command-contract source.
 - Spike 10 complete: D-155 selects an on-demand out-of-process adapter broker/manifest foundation with command-registry binding, artifact/provenance checks, timeout/backoff/quarantine, and query-verified Windows Job Object lifecycle/resource containment. Job Objects are explicitly not treated as the security sandbox.
 - Spike 11 complete: D-156 selects the strong adapter-isolation semantics—AppContainer/process sandbox, explicit filesystem grants, default-deny egress, broker capability allowlist, minimized environment, and outer Job Object limits. Microsoft's experimental CreateProcessInSandbox backend proved those semantics on the measured host but is not release-locked.
-- Current next spike: Spike 12 — stable Windows sandbox backend + OS-tier fallback matrix. Prove the same adversarial guarantees through a release-appropriate process-container path and fail closed where the strong boundary is unavailable.
-- Benchmark artifacts live under `spikes/phase1/results/`; current Phase 1 stack consequences are recorded through D-156.
+- Spike 12 complete: D-157 selects Microsoft's documented AppContainer/LPAC + brokered-egress path as the release-candidate Windows sandbox on qualified builds. The experimental backend is reference-only, unmeasured/unsupported builds fail closed, and the worker receives exactly one direct write grant: an ephemeral broker mailbox.
+- Current next spike: Spike 13 — packaging/update approach. Prove the Windows install/update/rollback model without weakening per-user hosting, signed-component integrity, schema recovery, or adapter provenance.
+- Benchmark artifacts live under `spikes/phase1/results/`; current Phase 1 stack consequences are recorded through D-157.
 
 ## Phase 1 goal
 
@@ -287,6 +288,27 @@ At minimum prove:
 
 Evaluate Microsoft's stable process-container/MXC path and legacy AppContainer fallback rather than freezing an experimental export into RELAY's public architecture. Keep this synthetic and do not implement UEFN product behavior.
 
+### Spike 13 — Packaging/update approach
+
+With the per-user Rust core, durable state, dashboard transport, command registry, and adapter isolation foundation selected, choose the Windows install/update model.
+
+At minimum prove:
+
+- non-admin per-user install is possible for the default personal path
+- install/start/uninstall does not require a Session 0 service
+- executable/component integrity and publisher/signature metadata are verifiable
+- updates are staged and validated before activation
+- binary rollback is separate from SQLite/data migration recovery
+- an interrupted/failed update cannot silently replace the working version
+- downgrade/rollback refuses incompatible newer data safely
+- adapters/components retain their own version/digest/provenance inventory across updates
+- update metadata/source/channel is explicit and inspectable
+- offline/manual install and automated update behavior are both defined
+- install/update/uninstall leaves user project data untouched
+- package size, install/update latency, privilege prompts, cleanup, and dependency cost are measured
+
+Compare native Windows packaging/update choices before selecting one. Keep the spike synthetic and do not turn it into the final installer UX.
+
 ## Evidence storage lifecycle target
 
 The storage goal is not merely "compress everything."
@@ -339,4 +361,4 @@ And Phase 1 must deliver:
 
 For a fresh ChatGPT/Codex conversation, use this request:
 
-> Take over DSI RELAY Phase 1. Work in `raiinman/DSI-RELAY`. Start with `AGENTS.md`, `docs/AGENTS.md`, and `docs/PHASE1_START_HERE.md`, then follow the read order there. Phase 0 remains the architecture baseline. Spikes 1–11 are complete; D-153 selects Rust + bundled SQLite as the local core, D-154 selects the JSON command registry contract source, D-155 selects the out-of-process manifest/broker + Job Object containment foundation, and D-156 selects the strong adapter-isolation semantics while keeping the experimental Windows sandbox backend provisional. Begin with Spike 12: stable Windows sandbox backend + OS-tier fallback matrix. Keep it synthetic, narrow, and benchmark-driven; do not jump ahead into UEFN product features.
+> Take over DSI RELAY Phase 1. Work in `raiinman/DSI-RELAY`. Start with `AGENTS.md`, `docs/AGENTS.md`, and `docs/PHASE1_START_HERE.md`, then follow the read order there. Phase 0 remains the architecture baseline. Spikes 1–12 are complete; D-153 selects Rust + bundled SQLite as the local core, D-154 selects the JSON command registry contract source, D-155 selects the out-of-process manifest/broker + Job Object containment foundation, D-156 selects the strong adapter-isolation semantics, and D-157 selects the stable AppContainer/LPAC + brokered-egress Windows sandbox on qualified builds while unmeasured hosts fail closed. Begin with Spike 13: packaging/update approach. Keep it synthetic, narrow, and benchmark-driven; do not jump ahead into UEFN product features.

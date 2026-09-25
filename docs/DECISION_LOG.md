@@ -741,3 +741,118 @@ Internal, experimental, preview, and stable surfaces carry different compatibili
 Status: Approved
 
 Deprecated/legacy commands, schemas, and skill descriptions remain available only to clients/migrations that need them and do not inflate ordinary AI context or dashboard complexity.
+
+
+## D-127 — Foreground creator workloads outrank optional RELAY work
+
+Status: Approved
+
+Active UEFN/Fortnite/Blender/Krita interaction has priority over deep indexing, maintenance, high-detail telemetry, and optional local AI/model workloads.
+
+## D-128 — Background work must adapt to contention
+
+Status: Approved direction
+
+RELAY background jobs should use OS-supported QoS/priority/backoff mechanisms where useful and yield when foreground resource pressure rises.
+
+## D-129 — Useful readiness is progressive
+
+Status: Approved
+
+A project can become useful before deep/content/semantic indexing completes. Basic local audit and status should not wait on optional expensive indexing stages.
+
+## D-130 — Windows indexing should evaluate USN-assisted incrementality
+
+Status: Approved direction
+
+On NTFS, RELAY should evaluate USN journal/change-feed acceleration combined with baseline/reconciliation scans instead of repeated full-tree polling.
+
+## D-131 — Inactive projects have an idle resource budget
+
+Status: Approved
+
+Adding projects must not permanently add full resident workers, loaded models, semantic indexes, or heavy polling. Idle cost per project is measured.
+
+## D-132 — Local AI routing includes GPU/VRAM contention
+
+Status: Approved
+
+Local inference decisions consider active creator workload, GPU/VRAM/memory pressure, and foreground responsiveness. Saving remote tokens does not justify materially degrading the editor/play session.
+
+## D-133 — Interactive tail latency is a performance contract
+
+Status: Approved
+
+Performance acceptance includes user-visible p95/p99/tail latency and foreground responsiveness, not only average throughput or average CPU.
+
+## D-134 — Database/index maintenance has a resource budget
+
+Status: Approved direction
+
+Checkpoint, compaction, vacuum, migration, and related maintenance are benchmarked for latency, disk amplification, concurrency, and interruption/recovery impact and are deferred around active work where practical.
+
+## D-135 — Product storage limits are below technology maxima
+
+Status: Approved
+
+RELAY uses project/global quotas and supported-size limits appropriate to public hardware instead of relying on theoretical database/filesystem maximums.
+
+## D-136 — Large evidence uses tiered storage
+
+Status: Approved direction
+
+Screenshots, profiler captures, telemetry dumps, and other large binaries are retained according to policy using metadata references, compression/deduplication, and file/object-style local storage where that benchmarks better than database BLOBs.
+
+## D-137 — OS-native resource controls are evaluated first
+
+Status: Approved direction
+
+Windows EcoQoS, Job Objects, process/thread priority, and memory-priority mechanisms should be benchmarked before RELAY builds custom resource scheduling.
+
+## D-138 — Resource modes are primarily automatic policy
+
+Status: Approved direction
+
+Foreground-safe, balanced, idle/batch, and diagnostic resource modes may exist internally, but normal users should not need to tune low-level scheduler controls.
+
+## D-139 — Hardware-tier benchmarks are mandatory
+
+Status: Approved
+
+Performance is tested against versioned minimum-class, recommended-class, and high-end creator fixtures rather than one developer workstation.
+
+## D-140 — Resource-intensive jobs declare scheduling characteristics
+
+Status: Approved direction
+
+Jobs can declare foreground/background priority, expected CPU/RAM/GPU/I/O intensity, urgency, interruptibility, and active-project association so the scheduler can defer lower-value work safely.
+
+## D-141 — Performance telemetry is tiered
+
+Status: Approved
+
+Normal mode uses low-overhead resource summaries; high-resolution counters/tracing are temporary diagnostic/benchmark tools and are not retained indefinitely by default.
+
+## D-142 — Energy is measured but not overgeneralized
+
+Status: Approved
+
+Power/battery/thermal impact may be part of RELAY benchmarks, but national data-center totals or unrelated hardware studies are not used to declare local or cloud inference universally more efficient.
+
+## D-143 — Local resource regression can fail a release
+
+Status: Approved
+
+AI-token savings do not excuse startup, idle-memory, storage, foreground-latency, or maintenance regressions beyond the supported resource budget.
+
+## D-144 — Long-run performance aging is tested
+
+Status: Approved direction
+
+Soak tests track database/index growth, evidence retention, memory leaks, stale workers/watchers, maintenance frequency, and performance after long project histories.
+
+## D-145 — Performance cost is part of the same cost mission as AI usage
+
+Status: Approved
+
+RELAY's cost model includes local CPU/GPU/RAM/disk/network/power and human-visible latency. "Cheaper AI" is not success if the local workstation pays a larger resource cost.

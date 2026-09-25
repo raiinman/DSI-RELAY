@@ -2,10 +2,11 @@
 
 ## Start here
 
-1. PROJECT_PLAN.md — consolidated plan and current delivery target.
-2. PRODUCT_VISION.md — what RELAY is, who it serves, and what it must not become.
-3. SYSTEM_ARCHITECTURE.md — technical boundaries and data flow.
-4. ROADMAP.md — implementation order and milestone exit criteria.
+1. PHASE1_START_HERE.md — active Phase 1 execution order and fresh-chat handoff.
+2. PROJECT_PLAN.md — consolidated plan and current delivery target.
+3. PRODUCT_VISION.md — what RELAY is, who it serves, and what it must not become.
+4. SYSTEM_ARCHITECTURE.md — technical boundaries and data flow.
+5. ROADMAP.md — implementation order and milestone exit criteria.
 
 ## Core design
 
@@ -24,7 +25,7 @@
 
 ## Research and governance
 
-- PHASE0_ADVERSARIAL_REVIEW.md — current red-team review of RELAY's assumptions and the conditions required to re-close Phase 0.
+- PHASE0_ADVERSARIAL_REVIEW.md — closed Phase 0 adversarial architecture baseline and evidence-derived constraints.
 - EVIDENCE_REGISTER.md — evidence register with academic, government, historical human-factors, and first-party platform sources.
 - RESEARCH_PLAN.md — academic/technical research, benchmarks, and unresolved hypotheses.
 - DECISION_LOG.md — concise record of approved architectural decisions.

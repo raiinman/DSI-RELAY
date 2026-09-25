@@ -1198,3 +1198,157 @@ Confidence labels:
   - https://www.nist.gov/itl/executive-order-14028-improving-nations-cybersecurity/software-supply-chain-security-guidance-22
 - Finding: software producers/acquirers benefit from machine-readable component inventories, provenance, open-source controls, and continuously maintained supply-chain information.
 - RELAY impact: public artifacts need reproducible dependency/component/license inventories, while legal license obligations remain a distinct layer from vulnerability data.
+
+
+## Versioning, compatibility, schema evolution, and deprecation evidence
+
+### NIST SP 800-228-upd1 — Guidelines for API Protection for Cloud-Native Systems
+
+- Year: 2025 update
+- Type: U.S. government API security guidance
+- Confidence: High
+- URL: https://tsapps.nist.gov/publication/get_pdf.cfm?pub_id=961660
+- Finding: NIST recommends API inventories, well-defined specifications/IDLs, schema validation, and explicit strategies for API versioning, deprecation, and sunsetting with secure migration paths.
+- RELAY impact: versioning/deprecation is a lifecycle/security concern, not just a release-number convention.
+
+### CISA Cloud Security Technical Reference Architecture
+
+- Type: U.S. government cloud/security architecture guidance
+- Confidence: High
+- URL: https://www.cisa.gov/sites/default/files/publications/Cloud%20Security%20Technical%20Reference%20Architecture.pdf
+- Finding: recommends API versioning to manage changes over time and providing tenants sufficient time to transition between versions.
+- RELAY impact: public remote/API compatibility needs explicit transition windows rather than surprise replacement.
+
+### Microsoft REST/API Guidelines
+
+- Type: mature first-party API design guidance
+- Confidence: High for Microsoft practice
+- URLs:
+  - https://github.com/microsoft/api-guidelines
+  - https://github.com/microsoft/api-guidelines/blob/vNext/azure/VersioningGuidelines.md
+  - https://github.com/microsoft/api-guidelines/blob/vNext/graph/articles/deprecation.md
+- Findings:
+  - explicit versioning is required in the historical general guidelines
+  - breaking changes include behavior/error/permission/performance changes, not only shape changes
+  - Azure guidance strongly avoids changing existing API-version behavior
+  - Graph deprecation guidance records deprecation date, description, and removal date
+- RELAY impact: breaking-change review must cover runtime semantics and deprecation metadata/migration, not only schemas.
+
+### RFC 9745 — Deprecation HTTP Response Header Field and RFC 8594 — Sunset
+
+- Years: 2025 / 2019
+- Type: IETF standards
+- Confidence: High
+- URLs:
+  - https://www.rfc-editor.org/rfc/rfc9745.html
+  - https://www.rfc-editor.org/rfc/rfc8594.html
+- Finding: standardizes machine/human-visible signaling for deprecated HTTP resources and optional future sunset dates.
+- RELAY impact: remote/API surfaces can expose structured deprecation metadata instead of relying only on release notes.
+
+### Kubernetes API Deprecation Policy
+
+- Type: major open-source platform compatibility policy
+- Confidence: High for Kubernetes practice
+- URL: https://kubernetes.io/docs/reference/deprecation-policy/
+- Findings:
+  - API removal requires version progression
+  - behavior/significant shape is protected within an API version
+  - API objects should round-trip between supported versions without information loss where specified
+  - alpha/beta/stable tracks carry different promises
+- RELAY impact: supports stability classes, versioned removal, and round-trip/migration testing.
+
+### Kubernetes Version Skew Policy
+
+- Type: major open-source platform operations policy
+- Confidence: High for Kubernetes practice
+- URL: https://kubernetes.io/releases/version-skew-policy/
+- Finding: Kubernetes explicitly defines which component versions may coexist and the supported upgrade order.
+- RELAY impact: local host, CLI, gateway, adapters, dashboard, and companions need explicit mixed-version support rather than lockstep assumptions.
+
+### Protocol Buffers — Best Practices and schema evolution
+
+- Type: first-party serialization documentation
+- Confidence: High
+- URLs:
+  - https://protobuf.dev/best-practices/dos-donts/
+  - https://protobuf.dev/programming-guides/proto3/
+  - https://protobuf.dev/programming-guides/json/
+- Findings:
+  - clients/servers are never guaranteed to update simultaneously
+  - retired field numbers should be reserved and not reused
+  - changing certain field types/oneof structures is unsafe
+  - ProtoJSON has materially weaker/different schema-evolution guarantees than binary wire format because unknown fields/names are handled differently
+- RELAY impact: schema-evolution rules depend on the actual encoding; retired identifiers and unknown-field semantics matter.
+
+### An extended study of syntactic breaking changes in the wild
+
+- Year: 2024
+- Type: Empirical Software Engineering peer-reviewed
+- Confidence: High
+- URL: https://link.springer.com/article/10.1007/s10664-024-10563-4
+- Finding: across the studied Maven dependencies, 11.58% of automated updates produced client-affecting breaking changes and almost half of those occurred during non-major updates; transitive dependencies were a significant source.
+- RELAY impact: Semantic Versioning cannot substitute for actual compatibility testing, including transitive dependency effects.
+
+### A Large-Scale Empirical Study on Semantic Versioning in Golang Ecosystem
+
+- Year: 2023
+- Type: research preprint / large empirical study
+- Confidence: Medium-High
+- Source: arXiv 2309.02894
+- Finding: 86.3% of studied upgrades complied with SemVer, but 28.6% of no-major upgrades introduced breaking changes and about one-third of downstream clients could be affected by breaking changes.
+- RELAY impact: version-number policy is useful but not reliable enough for automated trust.
+
+### How Java APIs break — An empirical study
+
+- Year: 2015
+- Type: Information and Software Technology peer-reviewed
+- Confidence: High
+- DOI: 10.1016/j.infsof.2015.02.014
+- Finding: incompatible API changes were common and the study notes manually assigned/versioned compatibility schemes are error-prone because subtle changes and client/provider interpretations differ.
+- RELAY impact: automated compatibility checks and explicit contract definitions are necessary.
+
+### Semantic versioning and impact of breaking changes in the Maven repository
+
+- Year: 2017
+- Type: Journal of Systems and Software peer-reviewed
+- Confidence: High
+- DOI: 10.1016/j.jss.2016.04.008
+- Finding: around one third of studied releases introduced at least one breaking change and deprecation tags were applied inconsistently.
+- RELAY impact: deprecation/version labels alone do not guarantee safe client evolution.
+
+### On the reaction to deprecation of clients of popular Java APIs and the JDK
+
+- Year: 2018
+- Type: Empirical Software Engineering peer-reviewed
+- Confidence: High
+- URL: https://link.springer.com/article/10.1007/s10664-017-9554-9
+- Finding: studies client reaction to deprecated APIs and reviews prior evidence that breaking changes/deprecations appear across minor and major releases and clients can lag API evolution.
+- RELAY impact: deprecated contracts need usage awareness, migration tooling, and sufficient support windows.
+
+### Reducing the Impact of Breaking Changes to Web Service Clients During Web API Evolution
+
+- Year: 2023
+- Type: IEEE/ACM MOBILESoft peer-reviewed
+- Confidence: High
+- DOI: 10.1109/MOBILSoft59058.2023.00008
+- Finding: migration tooling identified 1,132 breaking changes across 13 web-service version increments; some changes could be automated while hundreds required developer-authored migration guidance.
+- RELAY impact: important breaking releases need machine-assisted migration plus explicit manual steps for irreducible changes.
+
+### Feature Toggle Dynamics in Large-Scale Systems: Prevalence, Growth, Lifespan, and Benchmarking
+
+- Year: 2026
+- Type: recent preprint
+- Confidence: Medium
+- Source: arXiv 2604.15872
+- Finding: analysis of more than 4,000 toggle events in Kubernetes/GitLab found removals lagged additions and some toggles became effectively permanent; the studied Kubernetes toggles had a long median lifespan.
+- RELAY impact: compatibility/rollout flags need owners, review/removal criteria, and must not become an undocumented permanent API layer.
+
+### NIST software/configuration management guidance
+
+- Type: U.S. government configuration-management guidance
+- Confidence: High for general change-control principles
+- URLs:
+  - https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication500-161.pdf
+  - https://nvlpubs.nist.gov/nistpubs/SpecialPublications/800-171r3/NIST.SP.800-171r3.html
+- Finding: NIST emphasizes controlled baselines, interface control, review/approval/testing/documentation of changes, and retention/management of configuration baselines.
+- RELAY impact: public contract changes and migrations require controlled, tested baselines rather than ad hoc evolution.

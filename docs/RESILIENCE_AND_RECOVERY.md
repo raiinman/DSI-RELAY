@@ -375,3 +375,21 @@ Requirements:
 - diagnostic/read-only recovery may be allowed when write compatibility is unavailable
 
 Compatibility and recovery policies must agree; recovery is not a back door around version rules.
+
+
+## Resource exhaustion recovery
+
+Resource pressure is a recoverable/degraded condition.
+
+RELAY should define behavior for:
+
+- memory pressure
+- GPU/VRAM pressure
+- disk-full/low-space
+- excessive queue backlog
+- CPU saturation
+- local model OOM/failure
+
+Recovery should prefer pausing/degrading optional work before risking project writes or corrupting durable state.
+
+After pressure clears, deferred jobs revalidate project state before continuing when required.

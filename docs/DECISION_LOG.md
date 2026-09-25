@@ -1269,3 +1269,9 @@ Evidence: `spikes/phase1/results/2026-09-25-spike13-packaging-update-windows.jso
 Status: Phase 1 selected logging/diagnostic foundation
 
 Spike 14 selects bounded structured JSONL for the default local diagnostic record. SQLite remains the operational-state store, not the default raw-log store. ETW remains an optional temporary Windows deep-trace path.
+
+Selected normal-mode behavior is bounded rotating JSONL with a 16-event sync window plus explicit flush/shutdown sync, partial-tail recovery, completeness/sampling metadata, temporary bounded detail mode, independent diagnostics health, and aggregate-only support summaries by default.
+
+Final Spike 14 measurements: JSONL sustained 3,984.77 events/s at 0.0211 ms p50 write latency; its 16-event sync measured 3.5707 ms p50. Syncing every event fell to 267.24 events/s. SQLite sustained 27,725.64 events/s, but the matched retention path required 91.1948 ms of prune/checkpoint/VACUUM maintenance and retained more bytes. JSONL used 4,710,400 bytes idle RSS versus SQLite's 5,738,496 bytes. ETW retained zero bytes without a consumer, and the non-elevated durable session attempt was access denied. Rust verification reported 54 passing tests with no new resolved Cargo package.
+
+Evidence: `spikes/phase1/results/2026-09-25-spike14-diagnostics-foundation-windows.json`.

@@ -477,3 +477,29 @@ Therefore:
 - advanced policy/configuration is retrieved only when relevant
 - command discovery remains task scoped
 - generated help/context should prefer the supported golden path
+
+
+## Compatibility cost
+
+Backward compatibility consumes resources.
+
+Track where practical:
+
+- legacy command/tool schemas kept alive
+- compatibility aliases/shims
+- old migration code
+- extra test matrix
+- adapter/support version count
+- additional AI context caused by legacy surfaces
+- storage required for old schema/history
+- user/support time spent on migrations
+
+Compatibility is valuable, but "support forever" is not free.
+
+Default AI context should expose only the current task-relevant contract surface. Legacy commands and schema details are loaded only for migrations or old clients that need them.
+
+## Versioned context artifacts
+
+Cached context packages, summaries, and generated skills should include enough producing-version/schema metadata to detect stale interpretation after a RELAY upgrade.
+
+A cache hit is not valuable when the underlying contract semantics changed.

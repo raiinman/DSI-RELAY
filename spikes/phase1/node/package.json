@@ -13,6 +13,7 @@
     "bench:spike2": "node bench/spike2.mjs",
     "bench:spike3": "node bench/spike3.mjs",
     "bench:spike4": "node bench/spike4.mjs",
-    "bench:spike5": "node bench/spike5.mjs"
+    "bench:spike5": "node bench/spike5.mjs",
+    "bench:spike6": "node bench/spike6.mjs"
   }
 }

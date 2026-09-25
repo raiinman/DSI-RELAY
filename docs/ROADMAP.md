@@ -91,7 +91,8 @@ Completed prototype evidence:
 - Spike 3: Evidence Storage Lifecycle compression/deduplication and BLOB-vs-file benchmark.
 - Spike 4: Windows indexing benchmark; notifications are hints, reconciliation + changed-only parsing is the least-privilege baseline, and USN reading remains optional/privileged.
 - Spike 5: resource coexistence benchmark against a live UEFN editor; foreground-safe deferral is primary, soft Windows QoS remains optional for unavoidable background work, and hard CPU caps are rejected as a routine default.
-- Current next work: Spike 6 — Dashboard shell.
+- Spike 6: dashboard shell parity/resource benchmark; static/HTTP presentation hosted by `relayd` is favored over a separate resident dashboard backend.
+- Current next work: Spike 7 — Runtime + IPC challenger, because Node and named-pipe security/footprint remain provisional.
 
 Research/prototype:
 

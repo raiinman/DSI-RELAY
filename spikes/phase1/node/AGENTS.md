@@ -33,4 +33,5 @@ Own the provisional Node.js Phase 1 runtime candidate, including host/CLI protot
 
 # Child DOX Index
 
+- `dashboard/AGENTS.md` — owns the minimal presentation-only Phase 1 dashboard shell assets and their command-boundary rules.
 - `windows/AGENTS.md` — owns Windows-native Phase 1 interoperability helpers and their safety/build rules.

@@ -9,8 +9,9 @@ This subtree contains disposable-but-reproducible prototypes used to select RELA
 - Spike 3 — evidence deduplication, compression, storage-layout, aggregation/downsampling, and recompression economics
 - Spike 4 — Windows full-scan/reconciliation, recursive notifications, changed-only parsing, and USN privilege/continuity behavior
 - Spike 5 — live-UEFN resource coexistence, Windows priority/EcoQoS/Job Object controls, foreground-safe deferral, and inactive-project idle cost
+- Spike 6 — dashboard shell command parity, local HTTP security boundary, and standalone-vs-embedded process/resource economics
 
-The current Node implementation is a candidate, not a locked runtime. See D-146 through D-150 in `docs/DECISION_LOG.md`.
+The current Node implementation is a candidate, not a locked runtime. See D-146 through D-151 in `docs/DECISION_LOG.md`.
 
 ## Run
 
@@ -23,6 +24,7 @@ node bench\spike2.mjs
 node bench\spike3.mjs
 node bench\spike4.mjs
 node bench\spike5.mjs
+node bench\spike6.mjs
 ```
 
 Start the prototype host:
@@ -53,3 +55,5 @@ Runtime state defaults to the signed-in user's local application-data area and i
 - Resource coexistence still needs Fortnite play-session frame-time testing and minimum/recommended hardware fixtures.
 - GPU local-model coexistence remains open; Spike 5 proves defer policy and CPU background controls, not local-LLM VRAM scheduling.
 - Process-name creator detection is a spike mechanism; production scheduling should consume trusted adapter/project activity state rather than hard-code one application's executable name.
+- The dashboard is still read-only in Phase 1; write/approval authorization and client identity remain open.
+- Node remains too memory-heavy to lock the final host runtime; Spike 7 must compare a lower-footprint Windows candidate before Phase 1 can close.

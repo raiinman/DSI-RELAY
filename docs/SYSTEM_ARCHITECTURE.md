@@ -114,6 +114,10 @@ It owns presentation, filtering, live status, approvals, history exploration, di
 
 No RELAY capability may exist only in the dashboard.
 
+Phase 1 Spike 6 currently favors serving the local dashboard's static/HTTP surface from the existing per-user `relayd` process rather than starting another resident dashboard backend. The embedded adapter and CLI/named-pipe path share the same structured command dispatch/envelope semantics. Browser code remains presentation-only and may expose a deliberately scoped command subset appropriate to its current authorization model.
+
+A future desktop wrapper may package or navigate the dashboard, but it must not create a second implementation of RELAY Core merely for UI convenience.
+
 ### Skills
 
 Small, versioned instruction packages for AI clients with local command access.

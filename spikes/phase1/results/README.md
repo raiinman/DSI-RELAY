@@ -78,3 +78,27 @@ Artifact: `2026-09-24-spike5-resource-coexistence-windows.json`
 Current implication: defer optional heavy work first. Use soft Windows QoS/priority only for work that must continue under foreground activity. Do not use hard CPU caps as a routine foreground-safety default.
 
 See D-150 in `docs/DECISION_LOG.md`.
+
+## Spike 6 — Dashboard shell
+
+Artifact: `2026-09-24-spike6-dashboard-shell-windows.json`
+
+- static shell assets: 9,515 bytes total
+- declared runtime dependencies: 0
+- host-only idle RSS: 121,917,440 bytes
+- standalone host + dashboard proxy idle RSS: 255,938,560 bytes
+- standalone proxy overhead versus host-only: +134,021,120 bytes RSS
+- embedded dashboard host idle RSS: 132,100,096 bytes
+- embedded overhead versus host-only: +10,182,656 bytes RSS
+- all shapes sampled 0 ms CPU over the post-cooldown five-second idle window
+- direct named-pipe `system.status`: 0.321 ms p50
+- standalone dashboard HTTP `system.status`: 1.404 ms p50
+- embedded dashboard HTTP `system.status`: 0.457 ms p50
+- embedded static root request: 0.325 ms p50
+- host-only startup-to-state: 98.304 ms; embedded dashboard startup-to-state: 131.596 ms
+- standalone and embedded paths were parity-tested against the same structured command semantics
+- degraded storage state, result errors, host-unavailable state, token rejection, blocked side-effect commands, and cross-origin preflight were tested
+
+Current implication: serve the personal dashboard's thin static/HTTP surface from the existing per-user `relayd` process. Do not create another resident dashboard backend solely for UI packaging.
+
+See D-151 in `docs/DECISION_LOG.md`.

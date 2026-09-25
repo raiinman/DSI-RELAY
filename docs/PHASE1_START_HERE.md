@@ -13,8 +13,9 @@ Current prototype progress:
 - Spike 3 complete: exact whole-blob dedupe, Zstandard cost curves, SQLite-BLOB versus metadata+file layout, log aggregation, telemetry downsampling, idle recompression, and lossless/reference image handling have benchmark evidence.
 - Spike 4 complete: Windows recursive notifications are proven as fast hints but not authoritative under bursts; reconciliation + changed-only parsing is the least-privilege baseline, and USN journal reading is deferred to an optional privileged-helper experiment because non-elevated reads were denied.
 - Spike 5 complete: real UEFN message-pump coexistence confirms foreground-safe deferral as the primary protection; soft Windows QoS remains available for work that must continue, hard CPU caps are rejected as a routine default, and 100 registered inactive projects remained effectively idle.
-- Current next spike: Spike 6 — Dashboard shell.
-- Benchmark artifacts live under `spikes/phase1/results/`; provisional architecture consequences are recorded in D-146 through D-150.
+- Spike 6 complete: dashboard command-contract parity is proven; a standalone proxy costs another resident runtime, so the provisional default is a dependency-free static/HTTP shell hosted inside `relayd`.
+- Current next spike: Spike 7 — Runtime + IPC challenger. Compare the provisional Node host against a lower-footprint Windows candidate before locking implementation language/runtime or IPC.
+- Benchmark artifacts live under `spikes/phase1/results/`; provisional architecture consequences are recorded in D-146 through D-151.
 
 ## Phase 1 goal
 
@@ -161,6 +162,26 @@ Evaluate:
 Only after the command/storage contracts are usable.
 
 Dashboard must invoke the same underlying command system as CLI.
+
+### Spike 7 — Runtime + IPC challenger
+
+The provisional Node host remains too memory-heavy to become final by default.
+
+Compare a lower-footprint Windows candidate, beginning with Rust because the target fixture already has a current Rust toolchain, against the same narrow contracts:
+
+- per-user process startup/restart
+- structured request/response
+- version/capability negotiation
+- explicit Windows local-IPC access control
+- `status` / `doctor`
+- embedded static/HTTP dashboard feasibility
+- cold/warm startup
+- idle CPU/RAM
+- command p50/p95/p99 latency
+- binary/package size and build/dependency complexity
+- crash/recovery and mixed-version implications
+
+Do not port all storage/index/evidence work merely to create a language bake-off. The challenger must first beat or materially improve the host/IPC resource-security trade-off before deeper porting is justified.
 
 ## Evidence storage lifecycle target
 

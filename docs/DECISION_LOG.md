@@ -952,3 +952,30 @@ Registered inactive projects remained effectively cold: one project and one hund
 EcoQoS, memory priority, Below-Normal priority, and Job Object controls were successfully applied and queried through Windows APIs. Memory-priority behavior under actual system memory pressure, Fortnite play-session frame time, GPU local-model contention, and minimum/recommended hardware remain open benchmark gates.
 
 Evidence: `spikes/phase1/results/2026-09-24-spike5-resource-coexistence-windows.json`.
+
+## D-151 — Dashboard is a thin static/HTTP surface hosted by relayd
+
+Status: Phase 1 provisional
+
+Spike 6 rejects a separate resident dashboard backend/process for the default personal installation.
+
+The dashboard remains a client/presentation surface over RELAY's one command system:
+
+- named-pipe clients and the embedded HTTP adapter use the same structured `dispatchCommand` envelope builder
+- dashboard browser code owns rendering only; it does not access SQLite/project files or implement health/project/result business rules
+- the Phase 1 shell exposes a read-only command subset: `system.status`, `system.doctor`, `project.list`, and `result.get`
+- dashboard-only side-effect execution is not created; `system.shutdown` and other non-exposed commands are rejected by the adapter
+- Core degraded/error state passes through unchanged; the dashboard does not reinterpret a damaged store as healthy
+- the local HTTP listener binds to loopback and uses a per-start random same-origin dashboard token plus restrictive security headers/CSP; this is an implementation boundary, not a completed public browser threat model
+
+On the high-end Windows fixture, the static dashboard assets totaled 9,515 bytes and added zero runtime package dependencies.
+
+A host-only process sampled 125,329,408 bytes RSS. Running a standalone dashboard proxy plus host sampled 260,890,624 bytes RSS, or 135,561,216 bytes above the host-only run. Hosting the same dashboard HTTP/static surface inside `relayd` sampled 131,760,128 bytes RSS, only 6,430,720 bytes above host-only in this run. All three shapes sampled 0 ms CPU during their five-second post-cooldown idle windows.
+
+Latency also favored the embedded shape. Direct named-pipe `system.status` was 0.295 ms p50 in the host-only run. The standalone dashboard proxy measured 1.356 ms p50 because it adds HTTP plus another named-pipe hop. The embedded HTTP path measured 0.378 ms p50 while still dispatching through the same command semantics.
+
+Therefore the default personal dashboard direction is static/local web presentation served by the existing per-user host rather than another resident dashboard daemon. A future desktop wrapper may host or navigate this surface, but it must not introduce a second command/business-logic backend merely for UI packaging.
+
+Open gates remain for write/approval authorization, client identity, live update transport, accessibility/usability testing, browser threat modeling, packaging, and public update integrity.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike6-dashboard-shell-windows.json`.

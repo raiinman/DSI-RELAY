@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="relay-dashboard-token" content="__RELAY_DASHBOARD_TOKEN__">
+  <title>RELAY Dashboard</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">DSI RELAY / PHASE 1 SHELL</p>
+      <h1>RELAY Dashboard</h1>
+    </div>
+    <button id="refresh" type="button">Refresh</button>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="status-heading">
+      <div>
+        <p class="eyebrow">Simple</p>
+        <h2 id="status-heading">Is RELAY working?</h2>
+        <p id="status-summary" class="answer">Checking RELAY…</p>
+      </div>
+      <div id="status-badge" class="badge">Checking</div>
+    </section>
+
+    <section class="grid" aria-label="RELAY overview">
+      <article class="panel">
+        <h2>Health</h2>
+        <p id="doctor-summary">Checking health…</p>
+        <ul id="doctor-checks" class="checks"></ul>
+      </article>
+
+      <article class="panel">
+        <h2>Projects</h2>
+        <p class="muted">Projects RELAY already knows about.</p>
+        <div id="projects" class="stack">Loading…</div>
+      </article>
+
+      <article class="panel">
+        <h2>Find a result</h2>
+        <form id="result-form">
+          <label for="result-id">Result ID</label>
+          <div class="row">
+            <input id="result-id" name="result_id" autocomplete="off" placeholder="RES-…" required>
+            <button type="submit">Open</button>
+          </div>
+        </form>
+        <pre id="result-output" class="result" hidden></pre>
+      </article>
+    </section>
+
+    <details class="advanced">
+      <summary>Advanced / raw</summary>
+      <p class="muted">Exact structured responses from the same command system used by the CLI.</p>
+      <pre id="raw-output"></pre>
+    </details>
+  </main>
+
+  <footer>
+    <span>Read-only Phase 1 shell</span>
+    <span id="transport">Local dashboard transport</span>
+  </footer>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>

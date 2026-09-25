@@ -39,4 +39,5 @@ Own Phase 1 stack-selection prototypes, benchmark fixtures, and measured evidenc
 - `compare/AGENTS.md` — owns neutral cross-runtime comparison harnesses and shared candidate measurements.
 - `contracts/AGENTS.md` — owns Phase 1 machine-readable command/schema registry sources and cross-surface contract rules.
 - `node/AGENTS.md` — owns the provisional Node.js runtime candidate, tests, benchmark harnesses, and platform-helper boundaries.
+- `packaging/AGENTS.md` — owns synthetic Windows packaging/update candidates and Spike 13 install/update/rollback fixtures.
 - `rust/AGENTS.md` — owns the selected Rust local core foundation and its earned parity work.

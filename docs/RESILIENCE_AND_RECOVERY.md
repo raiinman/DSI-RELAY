@@ -284,6 +284,8 @@ Update testing must cover:
 - downgrade with newer data
 - adapter/plugin version mismatch after rollback
 
+Phase 1 D-158 proves binary update state remains separate from durable SQLite state. A valid v2 bundle could be fully staged while v1 stayed active; only the small atomic activation pointer changed the live binary version. A simulated newer storage schema blocked rollback to v1 with `UPDATE_STORAGE_SCHEMA_INCOMPATIBLE` while v2 remained active. Binary uninstall also left the external durable-data fixture untouched.
+
 ## Recovery playbooks
 
 Public releases should include machine-readable and human-readable recovery playbooks for at least:

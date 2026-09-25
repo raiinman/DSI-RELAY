@@ -271,6 +271,10 @@ Before unattended updates are enabled:
 - keep update-specific privileged components narrowly scoped
 - include update and dependency integrity in release testing
 
+Phase 1 D-158 selects verify → stage → atomic activation for the default personal Windows path. Release metadata and every component digest are validated before staging; a tampered signed-bundle fixture failed before extraction and left the prior version active. Activation/rollback also performs durable-storage compatibility checks rather than treating a signed older binary as automatically safe.
+
+The Spike 13 test certificate/trust stores are fixture-only and are removed after the test. Production direct delivery must use a deliberate publisher-key/trust bootstrap and must never install a synthetic root certificate merely to make updates succeed.
+
 ## Remote gateway
 
 The remote path should be optional for local workflows.

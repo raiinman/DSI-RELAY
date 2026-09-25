@@ -89,6 +89,8 @@ Default public installer behavior:
 
 This minimizes license, update, trademark, size, and security obligations.
 
+Phase 1 D-158 selects a signed per-user side-by-side bundle as the default personal/direct Windows distribution shape. The release manifest inventories each shipped RELAY-owned component by version, source, digest, and provenance. MSIX/App Installer remains an optional Store/managed channel when a trusted signing path is available. The synthetic Spike 13 certificate is not a production trust mechanism and must never be shipped or installed as a product root.
+
 ## Unreal Engine / UEFN companion code
 
 Current Unreal Engine licensing terms identify GPL and certain share-alike licenses as non-compatible when they would impose those terms on Epic Licensed Technology. Engine Tools also have specific distribution restrictions.

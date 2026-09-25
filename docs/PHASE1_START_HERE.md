@@ -20,8 +20,9 @@ Current prototype progress:
 - Spike 10 complete: D-155 selects an on-demand out-of-process adapter broker/manifest foundation with command-registry binding, artifact/provenance checks, timeout/backoff/quarantine, and query-verified Windows Job Object lifecycle/resource containment. Job Objects are explicitly not treated as the security sandbox.
 - Spike 11 complete: D-156 selects the strong adapter-isolation semantics—AppContainer/process sandbox, explicit filesystem grants, default-deny egress, broker capability allowlist, minimized environment, and outer Job Object limits. Microsoft's experimental CreateProcessInSandbox backend proved those semantics on the measured host but is not release-locked.
 - Spike 12 complete: D-157 selects Microsoft's documented AppContainer/LPAC + brokered-egress path as the release-candidate Windows sandbox on qualified builds. The experimental backend is reference-only, unmeasured/unsupported builds fail closed, and the worker receives exactly one direct write grant: an ephemeral broker mailbox.
-- Current next spike: Spike 13 — packaging/update approach. Prove the Windows install/update/rollback model without weakening per-user hosting, signed-component integrity, schema recovery, or adapter provenance.
-- Benchmark artifacts live under `spikes/phase1/results/`; current Phase 1 stack consequences are recorded through D-157.
+- Spike 13 complete: D-158 selects signed per-user side-by-side bundles with verify → stage → atomic activation → schema-aware rollback as the default personal/direct Windows packaging model. MSIX/App Installer remains an optional Windows-managed/Store channel once a trusted signing path exists.
+- Current next spike: Spike 14 — logging/diagnostic foundation. This is the remaining Phase 1 stack-selection gate before a Phase 1 closure review.
+- Benchmark artifacts live under `spikes/phase1/results/`; current Phase 1 stack consequences are recorded through D-158.
 
 ## Phase 1 goal
 
@@ -309,6 +310,26 @@ At minimum prove:
 
 Compare native Windows packaging/update choices before selecting one. Keep the spike synthetic and do not turn it into the final installer UX.
 
+### Spike 14 — Logging/diagnostic foundation
+
+With the local core, storage, contracts, sandbox, and packaging path selected, choose the minimum diagnostic/observability stack before closing Phase 1.
+
+At minimum prove:
+
+- one structured event/log envelope with stable IDs, time, severity, component, project/job/result references, correlation/causality fields, and provenance/trust metadata
+- external/tool-provided log metadata remains untrusted data and cannot change policy or collection scope
+- normal mode has bounded low-overhead logging; high-detail diagnostic mode is explicit, temporary, and resource-limited
+- rotation/retention/aggregation preserve declared completeness/sampling metadata rather than implying full truth
+- crash/restart does not corrupt or silently lose the durable diagnostic tail beyond the documented buffer/window
+- `relay doctor` can summarize host/storage/adapter/sandbox/update health without requiring raw logs
+- support-bundle export has deterministic redaction and does not include credentials, private project data, or unrestricted raw history by default
+- instrumentation overhead is measured for idle CPU/RAM, event throughput, disk bytes/event, flush latency, rotation, and diagnostic-mode amplification
+- logging failures have their own health state and cannot make product state look healthier than the evidence supports
+
+Compare simple append-only structured files, SQLite-backed diagnostic metadata, and Windows-native event/tracing hooks only where they materially improve recovery or troubleshooting. Do not build the full telemetry product or remote analytics pipeline in Phase 1.
+
+After Spike 14, perform a Phase 1 closure review against every completion gate before moving to Phase 2.
+
 ## Evidence storage lifecycle target
 
 The storage goal is not merely "compress everything."
@@ -361,4 +382,4 @@ And Phase 1 must deliver:
 
 For a fresh ChatGPT/Codex conversation, use this request:
 
-> Take over DSI RELAY Phase 1. Work in `raiinman/DSI-RELAY`. Start with `AGENTS.md`, `docs/AGENTS.md`, and `docs/PHASE1_START_HERE.md`, then follow the read order there. Phase 0 remains the architecture baseline. Spikes 1–12 are complete; D-153 selects Rust + bundled SQLite as the local core, D-154 selects the JSON command registry contract source, D-155 selects the out-of-process manifest/broker + Job Object containment foundation, D-156 selects the strong adapter-isolation semantics, and D-157 selects the stable AppContainer/LPAC + brokered-egress Windows sandbox on qualified builds while unmeasured hosts fail closed. Begin with Spike 13: packaging/update approach. Keep it synthetic, narrow, and benchmark-driven; do not jump ahead into UEFN product features.
+> Take over DSI RELAY Phase 1. Work in `raiinman/DSI-RELAY`. Start with `AGENTS.md`, `docs/AGENTS.md`, and `docs/PHASE1_START_HERE.md`, then follow the read order there. Phase 0 remains the architecture baseline. Spikes 1–13 are complete; D-153 selects Rust + bundled SQLite as the local core, D-154 selects the JSON command registry contract source, D-155 selects the out-of-process manifest/broker + Job Object containment foundation, D-156 selects the strong adapter-isolation semantics, D-157 selects stable AppContainer/LPAC + brokered egress on qualified Windows builds, and D-158 selects signed per-user side-by-side packaging/update as the default personal/direct path while retaining MSIX/App Installer as an optional trusted-signing/Store channel. Begin with Spike 14: logging/diagnostic foundation, then perform a Phase 1 closure review. Keep the spike synthetic, narrow, and benchmark-driven; do not jump ahead into UEFN product features.

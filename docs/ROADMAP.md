@@ -98,7 +98,8 @@ Completed prototype evidence:
 - Spike 10: synthetic out-of-process adapter broker/manifest benchmark; D-155 selects command-registry-bound on-demand workers with artifact/provenance checks, timeout/backoff/quarantine, and Windows Job Object lifecycle/resource containment while explicitly rejecting the claim that Job Objects are a complete security sandbox.
 - Spike 11: synthetic adversarial Windows sandbox benchmark; D-156 selects AppContainer/process isolation semantics with explicit filesystem grants, default-deny egress, broker-allowlisted capabilities, minimized environment, and outer Job Object limits. The measured experimental processmodel backend remains provisional rather than a release API commitment.
 - Spike 12: stable documented AppContainer/LPAC benchmark; D-157 selects mailbox-only direct writes, brokered egress, measured-build allowlisting, and fail-closed unsupported tiers while keeping the experimental backend reference-only.
-- Current next work: Spike 13 — packaging/update approach, including non-admin per-user install, signed component integrity, staged activation, failed-update recovery, and rollback/data-schema separation.
+- Spike 13: packaging/update benchmark; D-158 selects signed per-user side-by-side bundles with verify → stage → atomic activation → schema-aware rollback as the default personal/direct Windows path, while retaining MSIX/App Installer as an optional trusted-signing/Store channel.
+- Current next work: Spike 14 — logging/diagnostic foundation, followed by a Phase 1 closure review against every completion gate.
 
 Research/prototype:
 

@@ -1218,3 +1218,47 @@ Microsoft documents the stable AppContainer APIs back to Windows 8 desktop apps,
 No UEFN, Fortnite, Blender, Krita, or other real adapter product behavior was implemented in Spike 12.
 
 Evidence: `spikes/phase1/results/2026-09-25-spike12-stable-windows-sandbox-matrix.json`.
+
+## D-158 — Signed side-by-side bundles are the default personal Windows install/update path
+
+Status: Phase 1 selected packaging/update model; MSIX retained as optional managed channel
+
+Spike 13 compares signed MSIX + App Installer against a RELAY-owned per-user side-by-side updater using the same synthetic Rust core + adapter payload.
+
+The default personal/direct-download path is the signed side-by-side model:
+
+- versioned binaries live under a per-user install root
+- updates arrive as ZIP payloads with a detached CMS signature over the bundle SHA-256 digest
+- the updater verifies signer identity, signed digest, release metadata, and every component hash before staging
+- staging never changes the active version
+- activation changes one fsync'd `current.json` pointer only after compatibility checks
+- rollback activates a previously verified version only after storage-schema preflight
+- uninstall removes binaries/version state but leaves separately owned durable RELAY/project data untouched
+- no Session 0 service is required
+
+On the non-elevated Windows fixture, the side-by-side path physically completed install, tamper rejection, staged update, activation, incompatible rollback rejection, compatible rollback, uninstall, and durable-data survival.
+Measured side-by-side results:
+
+- v2 ZIP payload: 1,317,397 bytes plus 1,239-byte CMS signature for a 2,486,784-byte raw two-component payload
+- v2 build/sign/verify: 1.169 seconds
+- v1 install + verification + activation: 412.206 ms
+- v2 stage/verification without activation: 402.001 ms
+- atomic v2 activation: 3.392 ms
+- compatible rollback to v1: 4.493 ms
+- uninstall binaries/version state: 4.305 ms
+- the prototype updater is 245 source lines / 7,297 bytes
+
+Tampering the ZIP caused `UPDATE_SIGNATURE_INVALID` before extraction and left v1 active. Staging valid v2 left v1 active until the explicit activation step. Simulated storage schema 2 caused v1 rollback to fail `UPDATE_STORAGE_SCHEMA_INCOMPATIBLE` while v2 remained active.
+
+Both active-version records retained channel/source, maximum storage schema, and the core/adapter version + SHA-256 + provenance inventory. The external marker and SQLite fixture survived both update candidates' uninstall paths.
+MSIX/App Installer remains an optional Windows-managed/Store channel rather than the default direct-download path. The fixture produced valid signed v1/v2 MSIX packages, rejected a tampered signature, verified both packaged component inventories, and generated an upgrade-only App Installer definition with on-launch/background checks.
+
+The v2 MSIX measured 1,349,288 bytes, about 2.3% larger than the side-by-side ZIP + CMS signature. Build/sign/verify measured 1.264 seconds on the final fixture.
+
+The non-admin fixture could not physically register the self-signed MSIX: AppX returned `0x80073CF0` with certificate trust error `0x800B0109`, even after temporary current-user trust. That is recorded as a distribution/trust dependency, not papered over with elevation. Public MSIX distribution requires a certificate Windows already trusts or Store/managed signing.
+
+The Phase 1 Node side-by-side updater is evidence code, not the shipping updater. Production must implement the selected model in the shipping stack, define the publisher-key/trust bootstrap without installing a test root, use HTTPS for automated delivery, and keep rollback/data-schema checks separate.
+
+No UEFN, Fortnite, Blender, Krita, or real adapter payload was packaged.
+
+Evidence: `spikes/phase1/results/2026-09-25-spike13-packaging-update-windows.json`.

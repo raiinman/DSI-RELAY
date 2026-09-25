@@ -256,3 +256,31 @@ Artifact: `2026-09-25-spike12-stable-windows-sandbox-matrix.json`
 Current implication: D-157 selects stable AppContainer/LPAC + brokered egress for strongly isolated untrusted Windows adapters on qualified builds. The experimental processmodel backend is benchmark/reference-only.
 
 See D-157 in `docs/DECISION_LOG.md`.
+
+## Spike 13 — Packaging/update approach
+
+Artifact: `2026-09-25-spike13-packaging-update-windows.json`
+
+- selected default personal/direct Windows path: signed per-user side-by-side versions with verify → stage → atomic activation → schema-aware rollback
+- optional Windows-managed channel: MSIX + App Installer when a trusted signing/Store path is available
+- benchmark ran non-elevated in user session 1 with zero RELAY services before/after
+- raw synthetic two-component payload: 2,486,784 bytes
+- side-by-side v2 ZIP: 1,317,397 bytes + 1,239-byte CMS signature
+- side-by-side v2 build/sign/verify: 1,168.660 ms
+- v1 install/verify/activate: 412.970 ms; v2 stage: 387.298 ms; v2 activation: 6.510 ms
+- compatible rollback to v1: 4.873 ms; uninstall: 4.383 ms
+- tampered ZIP failed `UPDATE_SIGNATURE_INVALID` before extraction and v1 remained active
+- staging v2 did not change the active version until activation
+- simulated newer storage schema blocked v1 rollback with `UPDATE_STORAGE_SCHEMA_INCOMPATIBLE` while v2 stayed active
+- active metadata retained channel/source plus core+adapter version, SHA-256, and provenance
+- uninstall removed binaries/version state while the external marker + SQLite fixture survived
+- custom updater evidence code: 245 lines / 7,297 bytes
+- MSIX v2: 1,349,288 bytes; build/sign/verify: 1,263.638 ms
+- signed MSIX tamper verification failed closed and unpacked core/adapter hashes matched the release inventory
+- generated App Installer metadata defines HTTPS distribution, on-launch/background update checks, and disables automatic downgrade
+- non-admin AppX registration of the self-signed fixture was blocked by `0x80073CF0` / certificate trust `0x800B0109`; no elevation was used to paper over that production trust dependency
+- no package, test certificate, or RELAY service remained after cleanup
+
+Current implication: D-158 selects the signed side-by-side updater model for the default personal/direct path. MSIX/App Installer remains useful for Store or managed/trusted-signing distribution, but its lifecycle was not claimed as physically proven on this self-signed non-admin fixture.
+
+See D-158 in `docs/DECISION_LOG.md`.

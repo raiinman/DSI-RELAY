@@ -360,3 +360,18 @@ After crash/restart:
 - dropped/unknown event windows should be recorded
 - recovery cannot rely only on the same failed monitor that missed the original problem
 - normal health status waits for the required observability path to become trustworthy again
+
+
+## Version skew during recovery
+
+Recovery can involve components or data from different versions.
+
+Requirements:
+
+- recovery records the versions of host, adapters, companions, and storage schema involved
+- recovery tools refuse to interpret unsupported future schema as older compatible data
+- restored old state is migrated through supported paths before normal operation
+- a rollback of binaries does not bypass version-skew/data-compatibility checks
+- diagnostic/read-only recovery may be allowed when write compatibility is unavailable
+
+Compatibility and recovery policies must agree; recovery is not a back door around version rules.

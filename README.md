@@ -6,7 +6,7 @@ The product exists to make AI-assisted development cheaper, more reliable, and e
 
 ## Status
 
-Phase 0 planning is reopened for adversarial evidence review. Implementation has not started yet.
+Phase 0 is complete. Phase 1 technical spike and stack selection is active; implementation begins with minimal benchmark-driven prototypes.
 
 ## Core product rules
 

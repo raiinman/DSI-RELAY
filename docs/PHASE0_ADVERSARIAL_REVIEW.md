@@ -2605,3 +2605,375 @@ Phase 0 now also requires:
 78. material platform/license terms are tracked as versioned external dependencies
 79. automated compliance checks avoid legal-certification language
 80. RELAY Core/SDK/companion license choice remains open until integration boundaries are prototyped
+
+
+## Attack 113 — Semantic Versioning is a promise, not a compatibility oracle
+
+### Evidence
+
+Large empirical studies across Maven, Java, and Go ecosystems consistently find that breaking changes occur outside major releases. A 2024 extended Maven study found 11.58% of tested dependency updates caused client-affecting breaking changes and almost half of those occurred in non-major updates. A large Go study found 28.6% of no-major upgrades introduced breaking changes.
+
+### Verdict
+
+KEEP VERSION NUMBERS, REJECT VERSION-NUMBER-ONLY TRUST.
+
+### Required changes
+
+- SemVer may communicate RELAY release policy
+- automated compatibility tests determine actual compatibility
+- capability/schema negotiation beats assumptions derived from a version string
+- release tooling detects breaking contract changes before publication
+- third-party adapter versions are not considered safe solely because their SemVer suggests compatibility
+
+## Attack 114 — Breaking changes are behavioral, not just syntactic
+
+### Evidence
+
+Microsoft's API guidelines explicitly count changes in behavior, error contracts, permissions, pagination, rate limits, latency, and concurrency among changes that may break clients. API-evolution research also shows client breakage arises from maintenance/feature behavior, not only renames.
+
+### Verdict
+
+EXPAND RELAY'S DEFINITION OF BREAKING CHANGE.
+
+### Required changes
+
+Compatibility review includes:
+
+- command behavior/side effects
+- error/exit semantics
+- permissions
+- idempotency/retry semantics
+- privacy/egress defaults
+- ordering/pagination
+- performance/rate/concurrency guarantees relied on by clients
+- structured schemas and names
+
+A source-compatible change can still be operationally breaking.
+
+## Attack 115 — Clients will not all update together
+
+### Evidence
+
+Protocol Buffer best practices explicitly warn that clients and servers are never updated at exactly the same time and may be rolled back. Kubernetes maintains a formal version-skew policy because real systems operate with mixed component versions.
+
+### Verdict
+
+REJECT LOCKSTEP UPGRADE ASSUMPTIONS.
+
+### Required changes
+
+Every durable RELAY interface defines:
+
+- supported version skew
+- negotiation/handshake behavior
+- safe read-only fallback
+- fail-closed write behavior when incompatible
+- rolling upgrade order
+- rollback limitations
+
+Dashboard, CLI, local host, gateway, adapters, and companion plugins must be tested in mixed-version states.
+
+## Attack 116 — Serialization choice changes what "compatible" means
+
+### Evidence
+
+Protocol Buffers documentation explicitly differentiates binary wire safety from ProtoJSON safety. Unknown fields, field names, enum representation, and field-number reuse can produce very different compatibility behavior across encodings.
+
+### Verdict
+
+NEW SCHEMA-EVOLUTION RULESET.
+
+### Required changes
+
+- choose serialization/IDL only after defining the compatibility requirements
+- test each supported encoding separately
+- never reuse schema identifiers where the format warns against it
+- reserve deleted identifiers when supported
+- define unknown-field behavior
+- additive fields do not automatically mean all old JSON clients are safe
+- persisted data and IPC schemas have separate compatibility tests if representations differ
+
+## Attack 117 — Saved results can outlive their interpretation code
+
+### Problem
+
+RELAY intentionally stores durable result IDs, transactions, evidence, and history. A result created years earlier may be opened by code whose rules, adapter semantics, or data schema have changed.
+
+### Verdict
+
+NEW HISTORICAL-SEMANTICS REQUIREMENT.
+
+### Required changes
+
+Durable results retain:
+
+- producing RELAY version
+- result schema version
+- command/rule/adapter version
+- project/session revision
+- relevant raw evidence reference/version
+
+New code must not silently reinterpret old fields according to new semantics. When faithful rendering is impossible, RELAY says so.
+
+## Attack 118 — Deprecation tags alone do not move users
+
+### Evidence
+
+Empirical API-deprecation research found clients often lag in reacting to deprecated APIs, while older semantic-versioning studies found deprecation tags were inconsistently applied. Microsoft and Kubernetes both impose explicit deprecation/support policies instead of assuming users migrate immediately.
+
+### Verdict
+
+MODIFY DEPRECATION LIFECYCLE.
+
+### Required changes
+
+Deprecation includes:
+
+- explicit status
+- replacement/migration path
+- earliest removal date/support rule
+- owner
+- compatibility impact
+- usage signal where privacy-safe
+- generated warnings/docs/skills
+
+Elapsed time alone does not prove safe removal when known clients still depend on the contract.
+
+## Attack 119 — API migration needs tooling, not only prose
+
+### Evidence
+
+A 2023 MOBILESoft study generated migration guides across 13 web-service version increments and identified 1,132 breaking changes; some changes remained unsolvable automatically and required developer-authored migration guidance.
+
+### Verdict
+
+NEW MIGRATION-ASSISTANCE REQUIREMENT.
+
+### Required changes
+
+For important public breaking changes RELAY should provide, where practical:
+
+- compatibility scanner
+- config/data migration
+- command/flag rewrite hints
+- regenerated AI skills/wrappers
+- adapter manifest migration guidance
+- machine-readable deprecation/replacement metadata
+- explicit manual steps for changes that cannot be automated
+
+"See changelog" is insufficient for major workflow migrations.
+
+## Attack 120 — Compatibility shims can fossilize the architecture
+
+### Problem
+
+Keeping every old command, schema, flag, and behavior forever makes the core larger, harder to secure, harder to test, and more expensive for AI clients to understand.
+
+### Verdict
+
+NEW COMPATIBILITY-DEBT BUDGET.
+
+### Required changes
+
+Every shim/alias needs:
+
+- owner
+- supported versions
+- tests
+- usage/compatibility signal
+- removal condition
+- review date
+
+Old compatibility commands do not remain in default AI capability context merely because they still exist.
+
+## Attack 121 — Feature flags accumulate into long-term state
+
+### Evidence
+
+A 2026 longitudinal study of more than 4,000 feature-toggle events in Kubernetes and GitLab found removals lagged additions and some flags became effectively permanent, with Kubernetes flags having a median lifespan of 734 days in the studied data.
+
+### Verdict
+
+MODIFY FEATURE-FLAG GOVERNANCE.
+
+### Required changes
+
+Flags used for compatibility/rollout need:
+
+- owner
+- introduction release
+- purpose/default
+- rollout state
+- compatibility implications
+- removal condition
+- review/expiry target
+
+Feature flags cannot become an undocumented permanent versioning system.
+
+## Attack 122 — Human-readable CLI output is a dangerous machine API
+
+### Problem
+
+Agents and shell scripts will be tempted to parse pretty CLI text because it is easy. Tiny wording improvements then become accidental breaking changes.
+
+### Verdict
+
+SEPARATE HUMAN AND MACHINE CONTRACTS.
+
+### Required changes
+
+- human output is not a stable parse contract
+- structured output has explicit schema/contract version
+- scripts/skills use structured mode
+- exit codes have stable documented categories
+- presentation can evolve without silently breaking automation
+- deprecated fields/commands provide structured migration metadata
+
+## Attack 123 — Version sniffing is weaker than capability negotiation
+
+### Problem
+
+Two peers can have the same nominal version but different build flags, adapters, host capabilities, experimental features, or external-tool versions.
+
+### Verdict
+
+USE VERSION + CAPABILITY NEGOTIATION.
+
+### Required changes
+
+Handshake/state includes both:
+
+- version/protocol range
+- actual capabilities
+
+Clients ask what is available rather than maintaining giant hard-coded version tables where negotiation is possible.
+
+## Attack 124 — Stable schema identifiers are permanent historical baggage
+
+### Evidence
+
+Protocol Buffers warns strongly against reusing field/tag numbers because serialized historical data or older code may still exist. Kubernetes similarly prioritizes API round-tripping and versioned removal.
+
+### Verdict
+
+RESERVE RETIRED IDENTIFIERS.
+
+### Required changes
+
+For schema technologies with stable numeric/name identifiers:
+
+- do not recycle retired IDs
+- reserve removed IDs/names when supported
+- keep migration/schema history sufficient to interpret older state
+- design ID spaces expecting long product lifetimes
+
+Saving a few identifier numbers is not worth silent corruption.
+
+## Attack 125 — Security fixes may need to break compatibility
+
+### Problem
+
+An unsafe behavior can become a public contract. Preserving it forever can conflict with RELAY's security/privacy guarantees.
+
+### Verdict
+
+ALLOW EXPLICIT EMERGENCY BREAKS.
+
+### Required changes
+
+Define a security-breaking-change process covering:
+
+- severity/decision authority
+- affected versions
+- mitigation
+- replacement/migration
+- communication
+- rollback limits
+- support window exceptions
+
+Do not hide a behavior break inside a patch release without clearly communicating the client impact.
+
+## Attack 126 — Infinite support promises are another form of technical debt
+
+### Evidence
+
+Mature systems such as Kubernetes maintain explicit support/version-skew/deprecation windows rather than supporting every historical component forever. Microsoft API guidance likewise requires version/deprecation planning and support status for previous versions.
+
+### Verdict
+
+NEW SUPPORT-LIFECYCLE REQUIREMENT.
+
+### Required changes
+
+Before RELAY reaches stable public releases, define:
+
+- supported release lines
+- security-fix policy
+- protocol/SDK support window
+- data-migration source window
+- CLI/API deprecation policy
+- adapter/skill compatibility support
+
+Support policy must reflect resources RELAY can actually sustain.
+
+## Attack 127 — Experimental surfaces need weaker promises than stable ones
+
+### Problem
+
+If every preview adapter/command immediately receives full backward-compatibility guarantees, RELAY will freeze immature designs and repeat the premature-abstraction problem.
+
+### Verdict
+
+NEW STABILITY-CLASS MODEL.
+
+### Required changes
+
+Classify interfaces such as:
+
+- internal
+- experimental
+- preview
+- stable
+
+Each class has explicit change/deprecation promises.
+
+Experimental does not mean unversioned or unsafe; it means the compatibility promise is intentionally narrower.
+
+## Attack 128 — Compatibility itself can bloat AI context and diagnostics
+
+### Problem
+
+Legacy commands, schemas, aliases, and adapter versions can reintroduce the context/tool bloat RELAY was designed to avoid.
+
+### Verdict
+
+KEEP LEGACY SUPPORT OFF THE DEFAULT PATH.
+
+### Required changes
+
+- capability discovery returns current/relevant commands by default
+- legacy aliases are invoked only for clients that need them
+- deprecated skill/docs are not always loaded
+- dashboard hides retired/legacy contracts unless troubleshooting/migrating
+- compatibility overhead is measured in token/runtime/maintenance cost
+
+## Phase 0 versioning/compatibility closure requirements
+
+Phase 0 now also requires:
+
+81. stable contracts have explicit owners and stability classes
+82. actual compatibility is tested rather than inferred from SemVer
+83. breaking-change definitions include behavior, errors, permissions, privacy, and relevant performance contracts
+84. mixed-version/version-skew behavior is defined
+85. structured schemas have documented forward/backward evolution rules
+86. durable historical results retain enough version/provenance metadata to interpret safely
+87. deprecation includes migration metadata and a bounded support/removal process
+88. public breaking changes have practical migration assistance where feasible
+89. compatibility shims and feature flags have owners/removal criteria
+90. human CLI presentation is not the machine-readable automation contract
+91. version and capability negotiation are both supported where appropriate
+92. retired schema identifiers are not reused when the chosen format makes reuse unsafe
+93. emergency security-breaking-change policy exists
+94. stable public release support windows are bounded and documented
+95. experimental/preview/stable surfaces have different compatibility promises
+96. legacy compatibility surfaces stay out of normal AI/user context unless needed

@@ -2977,3 +2977,430 @@ Phase 0 now also requires:
 94. stable public release support windows are bounded and documented
 95. experimental/preview/stable surfaces have different compatibility promises
 96. legacy compatibility surfaces stay out of normal AI/user context unless needed
+
+
+## Attack 129 — Cheap AI can still produce an expensive workstation
+
+### Evidence
+
+UEFN's current recommended PC profile calls for 32 GB RAM or more, 8 GB or more VRAM, a DX12 GPU, and NVMe storage. RELAY will coexist with an already resource-intensive editor and potentially a Fortnite play session.
+
+OSDI 2026 consumer-GPU work (Nixie) specifically targets the problem of large ML working sets coexisting on consumer GPUs and reports severe memory-sharing inefficiencies under competing applications. Mobile OSDI 2026 work (SERENO) independently shows background LLM inference can materially degrade a foreground interactive workload under memory-bandwidth contention; the exact mobile measurements do not directly transfer to desktop UEFN, but the interference mechanism is relevant.
+
+### Verdict
+
+NEW FOREGROUND-RESOURCE CONTRACT.
+
+### Required changes
+
+- foreground creator workload wins over optional RELAY/background AI work
+- local inference is not started merely because it saves API tokens
+- active UEFN/Fortnite/Blender/Krita resource pressure influences scheduling
+- performance impact is measured in user-facing latency/frame time as well as model throughput
+- local/cloud/hybrid routing includes foreground-interference cost
+
+## Attack 130 — Hidden background work is still foreground interference
+
+### Evidence
+
+Windows Search deliberately backs off indexing when the user is active or the machine is busy. Windows EcoQoS is explicitly intended for work that is not part of the foreground user experience and trades peak performance for power/thermal efficiency. Classic operating-systems research on interactive performance and background work reaches the same broad conclusion: best-effort work should yield to latency-sensitive activity.
+
+### Verdict
+
+NEW BACKGROUND-BACKOFF REQUIREMENT.
+
+### Required changes
+
+Background RELAY work should:
+
+- use OS-supported low-priority/QoS mechanisms where useful
+- slow/pause under foreground contention
+- resume when headroom returns
+- expose why it is deferred
+- avoid competing with play sessions for peak resources
+
+"Runs in the background" is not an acceptable performance strategy by itself.
+
+## Attack 131 — Full indexing before first value is a product regression
+
+### Evidence
+
+Windows itself separates indexing completeness from user availability and throttles indexing during active use. UEFN creators already pay substantial editor startup/project costs; adding another mandatory deep-index barrier would directly contradict RELAY's golden-path goal.
+
+### Verdict
+
+NEW PROGRESSIVE-READINESS REQUIREMENT.
+
+### Required changes
+
+Startup/project load should expose stages:
+
+- RELAY host ready
+- project metadata ready
+- basic deterministic audit ready
+- deep/content index ready
+- optional semantic/vector index ready
+
+Normal first use should not wait for optional deep/semantic indexing.
+
+## Attack 132 — Polling entire project trees wastes I/O
+
+### Evidence
+
+Microsoft states that the NTFS USN change journal is much more efficient for determining file modifications than repeatedly checking timestamps or registering for file notifications. Earlier RELAY attacks already established that journals/watchers are not authoritative forever because continuity can be lost.
+
+### Verdict
+
+COMBINE JOURNAL-ASSISTED INCREMENTAL WORK WITH RECONCILIATION.
+
+### Required changes
+
+- establish a baseline/reconciliation scan
+- use the cheapest trustworthy change feed available
+- evaluate NTFS USN journal support on Windows
+- target only changed/relevant content
+- fall back to reconciliation after continuity gaps
+- avoid repeated full-tree polling as the default
+
+## Attack 133 — Every added project cannot become another resident service stack
+
+### Problem
+
+Multi-project support can quietly multiply watchers, parsers, semantic indexes, adapter workers, telemetry, and maintenance work even when only one project is active.
+
+### Verdict
+
+NEW NEAR-ZERO-IDLE-PROJECT REQUIREMENT.
+
+### Required changes
+
+Inactive projects should prefer:
+
+- persisted cold state
+- lightweight change tracking
+- no active adapter worker unless needed
+- no loaded local model/vector index unless queried
+- deferred deep reconciliation
+- bounded memory/CPU footprint
+
+Measure idle cost per added project.
+
+## Attack 134 — Local model VRAM can be more expensive than remote tokens
+
+### Evidence
+
+Nixie (OSDI 2026) observes that consumer ML model working sets can nearly fill GPU memory and that concurrent applications can cause memory thrashing and CPU-pinned-memory pressure. This is directly relevant to a creator PC sharing one consumer GPU among UEFN, Fortnite, Blender/Krita, and optional local AI.
+
+### Verdict
+
+MODIFY LOCAL-AI ROUTING.
+
+### Required changes
+
+Before local GPU inference:
+
+- inspect/estimate VRAM and GPU headroom
+- consider active play/editor workload
+- queue or choose another route when contention is material
+- benchmark smaller-model/CPU/local/cloud alternatives
+- measure foreground performance, not only inference throughput
+
+A local model is not "free" when it causes editor stutter or OOM.
+
+## Attack 135 — Throughput benchmarks can miss the thing users feel
+
+### Evidence
+
+OSDI 1996 work on interactive-system performance argued that throughput-focused benchmarks are inadequate for interactive workloads and demonstrated direct event-latency measurement. More recent systems work continues to focus on tail latency under contention.
+
+### Verdict
+
+NEW INTERACTIVE-LATENCY METRICS.
+
+### Required changes
+
+Performance testing should include:
+
+- p50/p95/p99 command latency
+- UEFN/editor responsiveness impact
+- play-session frame-time/jank impact where measurable
+- project-switch/warm latency
+- worst-case maintenance pauses
+
+Average throughput alone cannot approve a RELAY background workload.
+
+## Attack 136 — Database maintenance can create surprise latency and disk amplification
+
+### Evidence
+
+SQLite WAL documentation notes that read performance degrades as WAL grows, checkpoints can produce occasional slower commits, and checkpoint starvation can allow WAL growth. SQLite VACUUM rebuilds the database and may require as much as roughly twice the database size in free disk space during the operation.
+
+### Verdict
+
+NEW STORAGE-MAINTENANCE BUDGET.
+
+### Required changes
+
+Whatever database RELAY selects must benchmark:
+
+- checkpoint/compaction/vacuum latency
+- required temporary disk headroom
+- foreground read/write impact
+- long-reader/long-write behavior
+- maintenance interruption/recovery
+
+Maintenance should be scheduled/deferred around active creative work.
+
+## Attack 137 — "SQLite can grow to terabytes" is not a product requirement
+
+### Evidence
+
+SQLite's own limits documentation describes enormous theoretical database limits while explicitly supporting lower runtime limits to prevent excess resource utilization.
+
+### Verdict
+
+SET PRODUCT-LEVEL BOUNDS BELOW TECHNOLOGY MAXIMA.
+
+### Required changes
+
+- project/global storage quotas
+- evidence/index/database growth alarms
+- application-level maximums appropriate to public hardware
+- clear SQLITE_FULL/equivalent degraded behavior if the chosen store reaches a bound
+- stress tests at RELAY-supported sizes rather than database theoretical maxima
+
+## Attack 138 — Evidence binaries can dominate operational storage
+
+### Problem
+
+Screenshots, visual regressions, profiler captures, telemetry dumps, and diagnostic artifacts are much larger than normalized metadata.
+
+### Verdict
+
+NEW TIERED-EVIDENCE-STORAGE REQUIREMENT.
+
+### Required changes
+
+Benchmark:
+
+- large BLOBs in database
+- files/object-style local storage plus metadata references
+- compression
+- thumbnails
+- content-hash deduplication
+- changed-region/delta strategies where appropriate
+
+Keep full evidence only according to retention/pin policy. Metadata and summaries may outlive heavyweight binaries.
+
+## Attack 139 — Resource controls should use the operating system before RELAY reinvents scheduling
+
+### Evidence
+
+Windows exposes EcoQoS/power throttling for non-foreground work and Job Objects for CPU, memory, process, and limit notifications.
+
+### Verdict
+
+BENCHMARK OS-NATIVE RESOURCE CONTROLS FIRST.
+
+### Required changes
+
+Phase 1 should evaluate:
+
+- EcoQoS
+- process/thread priority
+- memory priority
+- Job Object CPU/memory notifications/limits
+
+Prefer soft prioritization/backoff before hard caps. A hard cap that makes jobs fail or creates tail latency is not automatically an improvement.
+
+## Attack 140 — Inactive polling creates invisible power and battery tax
+
+### Evidence
+
+Windows Search uses activity-aware backoff and idle detection rather than indexing at full speed continuously. Older TCP Nice research similarly demonstrated that aggressive background work can harm demand performance while background-aware scheduling can use spare capacity with little foreground interference.
+
+### Verdict
+
+NEW EVENT-DRIVEN/ADAPTIVE-POLLING RULE.
+
+### Required changes
+
+- prefer change events/journals to periodic scans
+- back off polling when stable
+- coalesce health checks
+- suspend inactive integration polling where safe
+- raise frequency only during active jobs
+- measure background wakeups/CPU/network as part of idle cost
+
+## Attack 141 — Performance profiles should initially be policy, not another wall of settings
+
+### Problem
+
+We need foreground-safe, balanced, idle/batch, and diagnostic behavior, but exposing dozens of CPU/GPU/indexing controls would violate the simplicity attack.
+
+### Verdict
+
+AUTOMATE RESOURCE MODES; EXPOSE ADVANCED OVERRIDES LATER.
+
+### Required changes
+
+Internally support modes such as:
+
+- foreground-safe
+- balanced
+- idle-boost
+- temporary diagnostic burst
+
+Use measured machine/user activity to switch when reliable.
+
+Show the current resource mode in diagnostics, but avoid requiring normal users to tune scheduler knobs.
+
+## Attack 142 — Resource testing on one high-end developer PC proves little
+
+### Evidence
+
+Epic's current UEFN requirements span 16 GB minimum versus 32 GB recommended RAM and 4 GB versus 8 GB recommended VRAM, with NVMe recommended. That is already a materially different resource envelope before considering creator hardware above/below those points.
+
+### Verdict
+
+NEW HARDWARE-TIER BENCHMARK REQUIREMENT.
+
+### Required changes
+
+Benchmark at least:
+
+- UEFN minimum-class hardware
+- UEFN recommended-class hardware
+- high-end creator workstation
+
+Use versioned hardware fixtures. A feature that is invisible on a high-end workstation but cripples minimum/recommended hardware does not pass.
+
+## Attack 143 — Resource use must be scoped to active work
+
+### Problem
+
+Deep scans, full tests, compaction, historical compatibility scans, and semantic indexing are valuable but not equally urgent.
+
+### Verdict
+
+NEW RESOURCE-AWARE JOB PRIORITY.
+
+### Required changes
+
+Jobs declare:
+
+- foreground/interactive versus background
+- expected CPU/RAM/GPU/I/O intensity
+- deadline/urgency
+- interruptibility/resumability
+- active project association
+
+The scheduler may defer lower-value work rather than letting every job compete equally.
+
+## Attack 144 — Resource telemetry can become another observability tax
+
+### Problem
+
+Measuring CPU/GPU/disk/power at high frequency can itself create overhead and data volume.
+
+### Verdict
+
+KEEP PERFORMANCE TELEMETRY TIERED.
+
+### Required changes
+
+- low-rate summary in normal mode
+- higher-resolution sampling only for diagnostics/benchmarks
+- avoid retaining high-frequency raw counters indefinitely
+- benchmark the monitoring overhead itself
+- use OS/platform counters rather than custom tracing when they are sufficient
+
+## Attack 145 — Energy cost matters, but data-center totals do not answer desktop scheduling
+
+### Evidence
+
+The Lawrence Berkeley National Laboratory's 2025 update projects U.S. data centers could consume 9.5–15.3% of U.S. electricity by 2030, and DOE explicitly highlights operational/energy-management efficiency. Software-engineering research likewise identifies energy as a growing engineering concern.
+
+### Verdict
+
+MEASURE ENERGY, DO NOT OVERGENERALIZE IT.
+
+### Required changes
+
+- include power/battery/thermal impact in controlled RELAY benchmarks where practical
+- do not infer local-versus-cloud energy superiority from national data-center totals
+- treat energy as one routing/resource factor alongside privacy, latency, cost, and quality
+- report measured local values separately from external/provider estimates
+
+## Attack 146 — Performance regression can erase RELAY's token savings
+
+### Problem
+
+A release that saves 30% AI tokens but adds 15 seconds to project startup, 4 GB idle RAM, or persistent UEFN stutter has failed the larger cost mission.
+
+### Verdict
+
+NEW PERFORMANCE RELEASE GATE.
+
+### Required changes
+
+Track regression budgets for:
+
+- cold/warm startup
+- first useful audit
+- idle CPU/RAM
+- project-switch latency
+- indexing cost
+- storage growth
+- foreground interference
+- maintenance pauses
+- local-AI coexistence
+
+A milestone can fail for resource regression even if functional and token benchmarks improve.
+
+## Attack 147 — "Capture everything now, optimize later" is incompatible with public use
+
+### Problem
+
+Telemetry, captures, vector indexes, compatibility history, backups, and multi-project evidence all compound over time.
+
+### Verdict
+
+NEW LONG-RUN SOAK REQUIREMENT.
+
+### Required changes
+
+Run multi-day/multi-week accelerated soak tests that measure:
+
+- database/index growth
+- evidence storage growth
+- memory leaks
+- background CPU
+- watcher/queue growth
+- stale project processes
+- compaction/maintenance frequency
+- performance after long histories
+
+Public performance testing must include aging, not just clean-install benchmarks.
+
+## Phase 0 performance/resource closure requirements
+
+Phase 0 now also requires:
+
+97. foreground creative workload has priority over optional RELAY/local-AI work
+98. background jobs have adaptive backoff/resource semantics
+99. basic useful project readiness does not require full deep/semantic indexing
+100. Windows indexing evaluates USN/change-feed acceleration plus reconciliation rather than full polling
+101. inactive-project routine resource cost is explicitly budgeted
+102. local AI routing accounts for GPU/VRAM/foreground contention
+103. interactive/tail latency is part of performance acceptance
+104. database/index maintenance and temporary disk amplification are benchmarked
+105. evidence storage uses quotas/tiering/dedup strategies rather than unbounded binaries
+106. Windows-native QoS/resource controls are benchmarked before custom scheduling
+107. resource modes do not become mandatory tuning complexity
+108. hardware-tier benchmarks include UEFN minimum/recommended/high-end classes
+109. resource-intensive jobs declare priority/intensity/interruptibility
+110. performance telemetry has its own overhead budget
+111. energy is measured where practical without unsupported local-vs-cloud claims
+112. release gates include local resource regressions as well as AI-token savings
+113. long-run soak tests cover storage/index/resource aging

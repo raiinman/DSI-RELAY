@@ -38,6 +38,7 @@ Deliver:
 - simplicity, configuration-space, time-to-first-value, and operability review
 - public-release legal/licensing, platform-terms, branding, asset-rights, and privacy-claims review
 - public contract versioning, schema evolution, deprecation, version-skew, and compatibility-lifecycle review
+- performance/resource economics, foreground-interference, indexing-scale, storage-maintenance, and hardware-tier review
 
 Exit criteria:
 
@@ -68,6 +69,12 @@ Exit criteria:
 - important team writes/approvals carry stale-state preconditions
 - agent/client actions preserve useful actor/delegator attribution
 - revocation/offboarding semantics cover active and queued work
+- foreground creator workload outranks optional background/local-AI work
+- basic useful readiness does not require full deep/semantic indexing
+- inactive-project idle resource cost is benchmarked
+- local-AI routing includes GPU/VRAM/foreground contention
+- hardware-tier and long-run resource benchmarks are defined
+- resource regressions can fail milestone/release gates
 
 ## Phase 1 — Technical spike and stack selection
 
@@ -119,6 +126,12 @@ Research/prototype:
 - credential-broker prototype
 - egress-policy/provider-profile prototype
 - local-only network-behavior test harness
+- Windows QoS/Job Object resource-control prototype
+- USN-assisted indexing benchmark
+- foreground-interference/local-AI coexistence benchmark
+- storage/index maintenance benchmark
+- hardware-tier performance fixture definition
+- long-run resource-aging/soak harness
 
 Exit criteria:
 
@@ -127,6 +140,8 @@ Exit criteria:
 - structured command round trip
 - persistent result round trip
 - basic automated tests
+- cold/warm startup and first-use performance baseline
+- idle CPU/RAM baseline with one and multiple projects
 
 ## Phase 2 — Core and command system
 
@@ -181,6 +196,8 @@ Exit criteria:
 - changed-only index update demonstrated
 - project capability report works
 - full rescan is not required for ordinary small changes
+- changed-file processing meets resource/latency budget on supported hardware tiers
+- inactive projects stay within idle resource budget
 
 ## Phase 4 — Context and cost engine
 
@@ -203,6 +220,7 @@ Exit criteria:
 - exact facts survive compilation tests
 - full-history versus compiled-context benchmarks run
 - context/remote-call savings are measurable
+- token savings are reported beside local CPU/GPU/RAM/storage and human-latency costs
 
 ## Phase 5 — Dashboard
 

@@ -646,7 +646,7 @@ fn benchmark_two_watched_projects_at_fifteen_thousand_files() {
         baseline_ms.push(built["elapsed_ms"].as_u64().unwrap());
     }
     thread::sleep(Duration::from_millis(500));
-    let mut metadata_ms = Vec::new();
+    let mut attachment_verify_ms = Vec::new();
     for project_id in ["PRJ-bench-alpha", "PRJ-bench-bravo"] {
         let reconciled = call(
             &state,
@@ -658,7 +658,25 @@ fn benchmark_two_watched_projects_at_fifteen_thousand_files() {
             ),
         );
         assert!(reconciled.ok, "{:?}", reconciled.error);
-        metadata_ms.push(reconciled.result.unwrap()["elapsed_ms"].as_u64().unwrap());
+        let result = reconciled.result.unwrap();
+        assert_eq!(result["files_hashed"], FILES_PER_PROJECT);
+        attachment_verify_ms.push(result["elapsed_ms"].as_u64().unwrap());
+    }
+    let mut metadata_ms = Vec::new();
+    for project_id in ["PRJ-bench-alpha", "PRJ-bench-bravo"] {
+        let reconciled = call(
+            &state,
+            request(
+                &format!("bench-clean-metadata-{project_id}"),
+                "project.index.reconcile",
+                json!({ "project_id": project_id }),
+                true,
+            ),
+        );
+        assert!(reconciled.ok, "{:?}", reconciled.error);
+        let result = reconciled.result.unwrap();
+        assert_eq!(result["files_hashed"], 0);
+        metadata_ms.push(result["elapsed_ms"].as_u64().unwrap());
     }
     let (_, cpu_before) = process_sample(&host.0);
     thread::sleep(Duration::from_millis(1_000));
@@ -736,6 +754,7 @@ fn benchmark_two_watched_projects_at_fifteen_thousand_files() {
             "project_count": 2,
             "total_fixture_files": 2 * FILES_PER_PROJECT,
             "baseline_ms": baseline_ms,
+            "attachment_verify_ms": attachment_verify_ms,
             "metadata_reconcile_ms": metadata_ms,
             "watcher_one_file_stale_wall_ms": watcher_stale_ms,
             "post_hint_reconcile_ms": after_hint["elapsed_ms"],

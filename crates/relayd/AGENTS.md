@@ -30,6 +30,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 - Explicit full-content verification after a metadata-invisible edit through `tests/phase3_second_slice.rs`.
 - Live OS notifications, shared-root handling, distinct-root isolation, directory uncertainty, idle resource sample, and hard-restart continuity through `tests/phase3_watcher.rs`.
 - Ignored, manually invoked 15,000-file two-project scale fixture in `tests/phase3_watcher.rs`; record host class and avoid treating one run as a tier budget.
+- The scale fixture measures watcher-attachment full verification separately from a subsequent clean metadata pass, so these costs are not conflated after schema 6.
 - Live idle recovery after hard restart detects a same-size/same-timestamp edit without a manual reconciliation command; debug-only accelerated idle timing is limited to the test fixture.
 - Live project-configuration transport test verifies versioned metadata and conflict behavior after a hard restart; parallel fixtures use distinct daemon instance names.
 

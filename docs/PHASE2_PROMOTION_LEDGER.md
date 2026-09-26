@@ -34,6 +34,14 @@ Accepted in the second production slice:
 
 Second-slice acceptance is recorded in `PHASE2_SECOND_SLICE_EVIDENCE.md`.
 
-Current next promotion target: adapter broker/manifest lifecycle plus the D-155 through D-157 Windows worker-isolation boundary behind production interfaces.
+Accepted in the third production slice:
+
+- Adapter lifecycle: promoted as versioned generic manifests, install/uninstall state, artifact/component integrity revalidation, bounded backoff/quarantine, and registry-bound invocation.
+- Adapter isolation: promoted with the qualified stable AppContainer/LPAC backend, mailbox-only direct writes, read/execute-only dedicated package trees, Job Object containment, direct-network/child-process denial, exact security restoration, and fail-closed unmeasured builds.
+- Adapter concurrency: same-package invocations serialize temporary ACL/label mutation while different package trees remain independently runnable.
+
+Third-slice acceptance is recorded in `PHASE2_THIRD_SLICE_EVIDENCE.md`.
+
+Current next work: Phase 2 closure review. Dashboard transport and update inventory remain later production promotions and are not Phase 2 Core-and-command-system exit gates.
 
 Promotion rule: each row moves from evidence to production only with focused tests and a resource check. UEFN-specific behavior remains outside the core.

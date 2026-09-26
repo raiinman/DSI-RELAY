@@ -38,5 +38,6 @@ Own production Rust implementation promoted from Phase 1 evidence.
 
 - `relay-contracts/AGENTS.md` — owns versioned command envelopes, the shared command registry, deterministic schema validation, and client-safe discovery metadata.
 - `relay-core/AGENTS.md` — owns deterministic service logic, SQLite state, durable project/result/job records, idempotency, provenance/trust, and diagnostics.
+- `relay-adapter/AGENTS.md` — owns generic adapter manifests, broker lifecycle, and qualified Windows worker isolation.
 - `relay-cli/AGENTS.md` — owns the canonical human/machine CLI client.
 - `relayd/AGENTS.md` — owns the per-user daemon process, Windows local IPC, startup/restart state, and transport boundary.

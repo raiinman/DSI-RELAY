@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const STORAGE_SCHEMA_VERSION: i64 = 6;
+pub const STORAGE_SCHEMA_VERSION: i64 = 7;
 static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,6 +65,17 @@ pub struct ProjectRecord {
     pub name: String,
     pub root_uri: String,
     pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProjectConfiguration {
+    pub project_id: String,
+    pub revision: i64,
+    pub format_version: i64,
+    pub project_type: String,
+    pub adapter_id: Option<String>,
+    pub adapter_version: Option<String>,
     pub updated_at: String,
 }
 
@@ -433,6 +444,9 @@ impl RelayStorage {
         if self.schema_version()? < 6 {
             self.apply_schema_six()?;
         }
+        if self.schema_version()? < 7 {
+            self.apply_schema_seven()?;
+        }
         Ok(())
     }
 
@@ -783,6 +797,29 @@ impl RelayStorage {
         tx.commit().map_err(|error| StorageError::sqlite("commit schema migration 6", error))
     }
 
+    fn apply_schema_seven(&mut self) -> Result<(), StorageError> {
+        let applied_at = sqlite_now(&self.conn)?;
+        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| StorageError::sqlite("begin schema-7 migration", error))?;
+        tx.execute_batch(
+            "CREATE TABLE project_configuration (
+               project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+               revision INTEGER NOT NULL CHECK(revision >= 1),
+               format_version INTEGER NOT NULL CHECK(format_version = 1),
+               project_type TEXT NOT NULL,
+               adapter_id TEXT,
+               adapter_version TEXT,
+               updated_at TEXT NOT NULL,
+               CHECK((adapter_id IS NULL) = (adapter_version IS NULL))
+             );"
+        ).map_err(|error| StorageError::sqlite("create schema-7 project configuration", error))?;
+        tx.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
+            params![7i64, applied_at],
+        ).map_err(|error| StorageError::sqlite("record schema migration 7", error))?;
+        tx.commit().map_err(|error| StorageError::sqlite("commit schema migration 7", error))
+    }
+
     pub fn db_path(&self) -> &Path {
         &self.db_path
     }
@@ -911,6 +948,82 @@ impl RelayStorage {
             })?);
         }
         Ok(projects)
+    }
+
+    pub fn get_project_configuration(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<ProjectConfiguration>, StorageError> {
+        self.conn.query_row(
+            "SELECT project_id, revision, format_version, project_type,
+                    adapter_id, adapter_version, updated_at
+             FROM project_configuration WHERE project_id = ?1",
+            [project_id],
+            |row| Ok(ProjectConfiguration {
+                project_id: row.get(0)?,
+                revision: row.get(1)?,
+                format_version: row.get(2)?,
+                project_type: row.get(3)?,
+                adapter_id: row.get(4)?,
+                adapter_version: row.get(5)?,
+                updated_at: row.get(6)?,
+            }),
+        ).optional().map_err(|error| {
+            StorageError::sqlite("read project configuration", error)
+        })
+    }
+
+    pub fn put_project_configuration(
+        &self,
+        project_id: &str,
+        expected_revision: i64,
+        project_type: &str,
+        adapter_id: Option<&str>,
+        adapter_version: Option<&str>,
+    ) -> Result<ProjectConfiguration, StorageError> {
+        let now = sqlite_now(&self.conn)?;
+        let tx = self.conn.unchecked_transaction().map_err(|error| {
+            StorageError::sqlite("begin project configuration update", error)
+        })?;
+        let project_exists: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM projects WHERE id = ?1",
+            [project_id],
+            |row| row.get(0),
+        ).map_err(|error| StorageError::sqlite("check configured project", error))?;
+        if project_exists == 0 {
+            return Err(StorageError::new("PROJECT_NOT_FOUND", "project not found"));
+        }
+        let current_revision: Option<i64> = tx.query_row(
+            "SELECT revision FROM project_configuration WHERE project_id = ?1",
+            [project_id],
+            |row| row.get(0),
+        ).optional().map_err(|error| StorageError::sqlite("read configuration revision", error))?;
+        if current_revision.unwrap_or(0) != expected_revision {
+            return Err(StorageError::new(
+                "PROJECT_CONFIG_CONFLICT",
+                format!("expected configuration revision {expected_revision}, found {}", current_revision.unwrap_or(0)),
+            ));
+        }
+        let next_revision = expected_revision.checked_add(1).ok_or_else(|| {
+            StorageError::new("PROJECT_CONFIG_CONFLICT", "configuration revision exhausted")
+        })?;
+        tx.execute(
+            "INSERT INTO project_configuration(
+               project_id, revision, format_version, project_type,
+               adapter_id, adapter_version, updated_at
+             ) VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6)
+             ON CONFLICT(project_id) DO UPDATE SET
+               revision=excluded.revision,
+               project_type=excluded.project_type,
+               adapter_id=excluded.adapter_id,
+               adapter_version=excluded.adapter_version,
+               updated_at=excluded.updated_at",
+            params![project_id, next_revision, project_type, adapter_id, adapter_version, now],
+        ).map_err(|error| StorageError::sqlite("write project configuration", error))?;
+        tx.commit().map_err(|error| StorageError::sqlite("commit project configuration", error))?;
+        self.get_project_configuration(project_id)?.ok_or_else(|| {
+            StorageError::new("STORAGE_ERROR", "project configuration disappeared after update")
+        })
     }
 
     pub fn get_project_index_state(
@@ -2432,12 +2545,12 @@ mod tests {
     }
 
     #[test]
-    fn fresh_store_uses_schema_five_and_typed_records() {
+    fn fresh_store_uses_schema_seven_and_typed_records() {
         let dir = temp_dir("fresh");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 6);
+        assert_eq!(storage.schema_version().unwrap(), 7);
         let project = storage
             .register_project(
                 Some("PRJ-production"),
@@ -2490,7 +2603,7 @@ mod tests {
         create_schema_one_fixture(&path);
 
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 6);
+        assert_eq!(storage.schema_version().unwrap(), 7);
         let project = storage.get_project("PRJ-phase1").unwrap().unwrap();
         assert_eq!(project.name, "Phase 1 Fixture");
 
@@ -2514,7 +2627,7 @@ mod tests {
         create_schema_two_fixture(&path);
 
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 6);
+        assert_eq!(storage.schema_version().unwrap(), 7);
         let result = storage.get_result("RES-phase1").unwrap().unwrap();
         assert_eq!(result.payload["value"], 42);
         assert_eq!(result.trust, "local");
@@ -2624,7 +2737,7 @@ mod tests {
         drop(schema_three);
 
         let migrated = RelayStorage::open(&path).unwrap();
-        assert_eq!(migrated.schema_version().unwrap(), 6);
+        assert_eq!(migrated.schema_version().unwrap(), 7);
         assert_eq!(migrated.get_project("PRJ-phase1").unwrap().unwrap().name, "Phase 1 Fixture");
         assert_eq!(migrated.get_result("RES-phase1").unwrap().unwrap().payload["value"], 42);
         assert!(migrated.get_job("JOB-phase1").unwrap().is_some());
@@ -2698,7 +2811,7 @@ mod tests {
         drop(schema_four);
 
         let migrated = RelayStorage::open(&path).unwrap();
-        assert_eq!(migrated.schema_version().unwrap(), 6);
+        assert_eq!(migrated.schema_version().unwrap(), 7);
         let state = migrated.get_project_index_state("PRJ-schema4").unwrap().unwrap();
         assert_eq!(state.generation, 3);
         assert_eq!(state.baseline_generation, 3);
@@ -2742,12 +2855,54 @@ mod tests {
         drop(schema_five);
 
         let migrated = RelayStorage::open(&path).unwrap();
-        assert_eq!(migrated.schema_version().unwrap(), 6);
+        assert_eq!(migrated.schema_version().unwrap(), 7);
         let state = migrated.get_project_index_state("PRJ-schema5").unwrap().unwrap();
         assert_eq!(state.generation, 4);
         assert_eq!(state.baseline_generation, 1);
         assert_eq!(state.status, "stale");
         assert!(state.content_verification_required);
+        drop(migrated);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn schema_six_project_configuration_migrates_to_seven_without_touching_index() {
+        let dir = temp_dir("schema6-to-schema7");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("relay.sqlite3");
+        let conn = Connection::open(&path).unwrap();
+        let mut schema_six = RelayStorage { db_path: path.clone(), conn };
+        schema_six.configure().unwrap();
+        schema_six.conn.execute_batch(
+            "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);"
+        ).unwrap();
+        schema_six.apply_schema_one().unwrap();
+        schema_six.apply_schema_two().unwrap();
+        schema_six.apply_schema_three().unwrap();
+        schema_six.apply_schema_four().unwrap();
+        schema_six.apply_schema_five().unwrap();
+        schema_six.apply_schema_six().unwrap();
+        assert_eq!(schema_six.schema_version().unwrap(), 6);
+        schema_six.conn.execute(
+            "INSERT INTO projects(id, name, root_uri, created_at, updated_at)
+             VALUES ('PRJ-schema6', 'Schema 6', 'file:///fixture', 'fixture', 'fixture')",
+            [],
+        ).unwrap();
+        schema_six.conn.execute(
+            "INSERT INTO project_index_state(project_id, generation, baseline_generation,
+             status, file_count, total_bytes, last_reconciled_at, updated_at,
+             content_verification_required)
+             VALUES ('PRJ-schema6', 4, 1, 'stale', 0, 0, 'fixture', 'fixture', 1)",
+            [],
+        ).unwrap();
+        drop(schema_six);
+
+        let migrated = RelayStorage::open(&path).unwrap();
+        assert_eq!(migrated.schema_version().unwrap(), 7);
+        assert!(migrated.get_project_configuration("PRJ-schema6").unwrap().is_none());
+        let index = migrated.get_project_index_state("PRJ-schema6").unwrap().unwrap();
+        assert_eq!(index.generation, 4);
+        assert!(index.content_verification_required);
         drop(migrated);
         fs::remove_dir_all(dir).unwrap();
     }
@@ -2863,7 +3018,7 @@ mod tests {
 
         drop(storage);
         let reopened = RelayStorage::open(&path).unwrap();
-        assert_eq!(reopened.schema_version().unwrap(), 6);
+        assert_eq!(reopened.schema_version().unwrap(), 7);
         assert_eq!(
             reopened
                 .get_project_index_state("PRJ-index-a")

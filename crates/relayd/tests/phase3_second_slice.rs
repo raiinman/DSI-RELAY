@@ -39,10 +39,11 @@ fn call(state: &LocalHostState, request: CommandRequest) -> CommandResponse {
 }
 
 fn spawn_host(state_dir: &Path) -> (Child, LocalHostState) {
+    let instance = state_dir.parent().unwrap().file_name().unwrap().to_string_lossy();
     let child = Command::new(env!("CARGO_BIN_EXE_relayd"))
         .env("RELAY_TEST_DISABLE_WATCHER", "1")
         .env("RELAY_STATE_DIR", state_dir)
-        .env("RELAY_INSTANCE", "phase3-edges")
+        .env("RELAY_INSTANCE", instance.as_ref())
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -63,6 +64,58 @@ fn spawn_host(state_dir: &Path) -> (Child, LocalHostState) {
 }
 
 #[test]
+fn versioned_project_configuration_survives_daemon_restart() {
+    let dir = fixture_dir();
+    let state_dir = dir.join("state");
+    let root = dir.join("project");
+    fs::create_dir_all(&root).unwrap();
+    let (mut first, state) = spawn_host(&state_dir);
+    let imported = call(&state, request(
+        "REQ-config-import", "project.import",
+        json!({ "id": "PRJ-config", "name": "Configuration fixture", "root_path": root.to_string_lossy() }),
+        Some("IDEMP-config-import"),
+    ));
+    assert!(imported.ok, "{:?}", imported.error);
+    let written = call(&state, request(
+        "REQ-config-put", "project.configuration.put",
+        json!({
+            "project_id": "PRJ-config", "expected_revision": 0, "format_version": 1,
+            "project_type": "synthetic.project", "adapter_id": "fixture.parser",
+            "adapter_version": "1.2.0"
+        }),
+        Some("IDEMP-config-put"),
+    ));
+    assert!(written.ok, "{:?}", written.error);
+    assert_eq!(written.result.unwrap()["revision"], 1);
+    first.kill().unwrap();
+    first.wait().unwrap();
+
+    let (mut second, state) = spawn_host(&state_dir);
+    assert_eq!(state.storage_schema_version, Some(7));
+    let read = call(&state, request(
+        "REQ-config-get", "project.configuration.get",
+        json!({ "project_id": "PRJ-config" }), None,
+    ));
+    assert!(read.ok, "{:?}", read.error);
+    let config = read.result.unwrap();
+    assert_eq!(config["revision"], 1);
+    assert_eq!(config["adapter_version"], "1.2.0");
+    let stale = call(&state, request(
+        "REQ-config-stale", "project.configuration.put",
+        json!({
+            "project_id": "PRJ-config", "expected_revision": 0, "format_version": 1,
+            "project_type": "synthetic.other"
+        }),
+        Some("IDEMP-config-stale"),
+    ));
+    assert_eq!(stale.error.unwrap().code, "PROJECT_CONFIG_CONFLICT");
+    let stopped = call(&state, request("REQ-config-stop", "system.shutdown", json!({}), None));
+    assert!(stopped.ok);
+    assert!(second.wait().unwrap().success());
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn project_edges_and_deltas_survive_hard_restart_without_scope_leakage() {
     let dir = fixture_dir();
     let root_a = dir.join("alpha");
@@ -77,7 +130,7 @@ fn project_edges_and_deltas_survive_hard_restart_without_scope_leakage() {
     fs::write(root_b.join("target.txt"), b"target B").unwrap();
 
     let (mut first, state) = spawn_host(&state_dir);
-    assert_eq!(state.storage_schema_version, Some(6));
+    assert_eq!(state.storage_schema_version, Some(7));
     for (project_id, root) in [("PRJ-alpha", &root_a), ("PRJ-bravo", &root_b)] {
         let imported = call(
             &state,
@@ -243,7 +296,7 @@ fn project_edges_and_deltas_survive_hard_restart_without_scope_leakage() {
     first.kill().unwrap();
     first.wait().unwrap();
     let (mut second, state) = spawn_host(&state_dir);
-    assert_eq!(state.storage_schema_version, Some(6));
+    assert_eq!(state.storage_schema_version, Some(7));
     let alpha_delta = call(
         &state,
         request(

@@ -337,7 +337,7 @@ fn two_projects_survive_restart_and_reconcile_changed_files_only() {
 
     {
         let storage = RelayStorage::open(state_dir.join("relay.sqlite3")).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 6);
+        assert_eq!(storage.schema_version().unwrap(), 7);
         let alpha_files = storage.list_project_files("PRJ-alpha").unwrap();
         let bravo_files = storage.list_project_files("PRJ-bravo").unwrap();
         assert_eq!(alpha_files.len(), 120);

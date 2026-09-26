@@ -31,6 +31,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 - Live OS notifications, shared-root handling, distinct-root isolation, directory uncertainty, idle resource sample, and hard-restart continuity through `tests/phase3_watcher.rs`.
 - Ignored, manually invoked 15,000-file two-project scale fixture in `tests/phase3_watcher.rs`; record host class and avoid treating one run as a tier budget.
 - Live idle recovery after hard restart detects a same-size/same-timestamp edit without a manual reconciliation command; debug-only accelerated idle timing is limited to the test fixture.
+- Live project-configuration transport test verifies versioned metadata and conflict behavior after a hard restart; parallel fixtures use distinct daemon instance names.
 
 # Child DOX Index
 

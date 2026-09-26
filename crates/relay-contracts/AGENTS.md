@@ -14,6 +14,7 @@ Own the versioned machine contracts shared by RELAY Core and every client surfac
 - Stable command/capability IDs are never silently reused.
 - Additive optional fields remain compatible; incompatible requested command versions fail explicitly.
 - Discovery metadata must remain compact enough for CLI/dashboard/AI clients.
+- Project configuration commands expose versioned, project-scoped metadata. A declared adapter ID/version is a binding preference, never proof that the adapter is installed or that its parser output is trusted.
 - No secret values, project paths, or runtime state are embedded in contract metadata.
 
 # Verification

@@ -1419,3 +1419,13 @@ Schema 6 stores a per-project `content_verification_required` flag. An upgrade f
 The per-user daemon attempts one stale project after a quiet period and signed-in-session input inactivity, while no RELAY command or hint batch is active. Enumeration and content hashing can defer before commit when activity returns or a bounded attempt expires. Failed and deferred attempts back off. The Windows input signal is a conservative scheduling proxy, not proof that creator applications are free of CPU/GPU or storage pressure. Projects exceeding the attempt limit remain stale until explicit recovery or a future chunked scheduler. Supported-tier, burst, and prolonged-contention evidence is still required for Phase 3 closure.
 
 Evidence: `docs/PHASE3_SIXTH_SLICE_EVIDENCE.md`.
+
+## D-167 — Project configuration is versioned declaration, not adapter authority
+
+Status: Phase 3 seventh slice accepted on synthetic Core and daemon fixtures
+
+Schema 7 stores one optional configuration record per project. Version-1 `project.configuration.put` and `project.configuration.get` commands expose a bounded generic project type and optional declared adapter ID/exact version pair. Writes require the current revision, beginning at zero for an unconfigured project; stale writes fail instead of silently replacing another choice. Project scope and normal RELAY state-write authority apply. The additive migration preserves schema-6 index continuity state.
+
+The declared adapter binding is not evidence that the package is installed, compatible, sandboxed, or permitted, and it cannot grant authority to replace dependency edges. Adapter-specific settings, credentials, absolute paths, and parser output are outside this format-1 foundation. A generic parser/adapter execution and observation contract is still needed before automatic dependency extraction can be accepted.
+
+Evidence: `docs/PHASE3_SEVENTH_SLICE_EVIDENCE.md`.

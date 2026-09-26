@@ -17,6 +17,7 @@ Own production RELAY Core deterministic local business logic and durable state.
 - Durable result/job outputs carry provenance/trust metadata.
 - Phase 3 project baselines and change rows are project-scoped, derived state. Canonical roots stay local; machine-facing index paths are project-relative. Reconciliation treats watcher paths as hints and hashes changed candidates after authoritative metadata enumeration.
 - Schema-5 delta reads and dependency edges are bounded, project-scoped derived state. Edge replacement requires the current index generation and source content hash; source/target changes invalidate edges, and rebuild resets the delta boundary.
+- Schema-7 project configuration is separate from derived index state, versioned by format and revision, and limited to a project type plus an optional declared adapter ID/version pair. Core must not treat that declaration as installed capability or parser authority.
 - Hint-only index updates read and hash only named files, commit `stale` state, and never claim complete continuity. Delta and dependency-edge reads/writes require ready state.
 - Normal reconciliation checks all filesystem metadata and hashes changed candidates. Explicit `verify_content` reconciliation hashes all files for uncertain continuity and detects same-size/same-timestamp edits. After continuity loss, a durable schema-6 flag requires full content verification before `ready` can be restored.
 - Trusted daemon watcher input can query local indexed roots, durably mark continuity loss, and run cooperatively cancellable reconciliation. These methods never expose canonical roots through command results.
@@ -30,6 +31,7 @@ Own production RELAY Core deterministic local business logic and durable state.
 - Hint-update tests cover targeted work counts, rename/directory hints, missed-event recovery, stale restart, and cross-project denial.
 - Content-verification tests cover same-size/same-timestamp changes missed by metadata-only reconciliation and the full-hash cost on a 1,000-file fixture.
 - Schema-5-to-6 migration and hard-restart tests preserve the verification requirement; a metadata-only commit cannot clear it. Guarded reconciliation abandons partial plans before a storage commit.
+- Schema-6-to-7 migration preserves index continuity state. Configuration tests cover revision conflict, malformed bindings, cross-project scope denial, and restart persistence.
 
 # Child DOX Index
 

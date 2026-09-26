@@ -206,6 +206,77 @@
       "errors": ["STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
     },
     {
+      "id": "project.configuration.put",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Set a versioned project type and declared adapter binding with a revision guard.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id", "expected_revision", "format_version", "project_type"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "expected_revision": { "type": "integer", "minimum": 0 },
+          "format_version": { "type": "integer", "const": 1 },
+          "project_type": { "type": "string", "minLength": 1 },
+          "adapter_id": { "type": "string", "minLength": 1 },
+          "adapter_version": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["project_id", "configured", "revision", "format_version", "project_type", "adapter_id", "adapter_version", "updated_at"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "configured": { "type": "boolean", "const": true },
+          "revision": { "type": "integer", "minimum": 1 },
+          "format_version": { "type": "integer", "const": 1 },
+          "project_type": { "type": "string" },
+          "adapter_id": { "type": ["string", "null"] },
+          "adapter_version": { "type": ["string", "null"] },
+          "updated_at": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["PROJECT_NOT_FOUND", "PROJECT_CONFIG_CONFLICT", "VALIDATION_FAILED", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "project.configuration.get",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Read project-scoped configuration and declared adapter version metadata.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": { "project_id": { "type": "string", "minLength": 1 } },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["project_id", "configured", "revision", "format_version", "project_type", "adapter_id", "adapter_version", "updated_at"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "configured": { "type": "boolean" },
+          "revision": { "type": "integer", "minimum": 0 },
+          "format_version": { "type": "integer", "const": 1 },
+          "project_type": { "type": ["string", "null"] },
+          "adapter_id": { "type": ["string", "null"] },
+          "adapter_version": { "type": ["string", "null"] },
+          "updated_at": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["PROJECT_NOT_FOUND", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
       "id": "result.put",
       "version": 1,
       "stability": "phase1",

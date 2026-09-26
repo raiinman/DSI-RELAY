@@ -903,6 +903,12 @@ impl RelayCore {
                 self.project_import(&request.arguments)
             }
             "project.list" => self.project_list(authority),
+            "project.configuration.put" => {
+                self.project_configuration_put(&request.arguments)
+            }
+            "project.configuration.get" => {
+                self.project_configuration_get(&request.arguments)
+            }
             "project.index.build" => {
                 self.project_index_build(&request.arguments)
             }
@@ -1155,6 +1161,80 @@ impl RelayCore {
             }
         }
         Ok(json!({ "projects": projects }))
+    }
+
+    fn project_configuration_put(
+        &self,
+        arguments: &Value,
+    ) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"].as_str().unwrap();
+        let expected_revision = arguments["expected_revision"].as_i64().unwrap();
+        let project_type = arguments["project_type"].as_str().unwrap();
+        let adapter_id = arguments.get("adapter_id").and_then(Value::as_str);
+        let adapter_version = arguments.get("adapter_version").and_then(Value::as_str);
+        let valid_token = |value: &str, max: usize| {
+            !value.is_empty() && value.len() <= max && value.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'+')
+            })
+        };
+        if !valid_token(project_type, 128)
+            || adapter_id.is_some() != adapter_version.is_some()
+            || adapter_id.is_some_and(|value| !valid_token(value, 128))
+            || adapter_version.is_some_and(|value| !valid_token(value, 64))
+        {
+            return Err(CoreCommandError::new(
+                "VALIDATION_FAILED",
+                "project type and optional adapter binding must be bounded identifiers",
+            ));
+        }
+        let config = self.with_storage(|storage| storage.put_project_configuration(
+            project_id, expected_revision, project_type, adapter_id, adapter_version,
+        ))?;
+        Ok(json!({
+            "project_id": config.project_id,
+            "configured": true,
+            "revision": config.revision,
+            "format_version": config.format_version,
+            "project_type": config.project_type,
+            "adapter_id": config.adapter_id,
+            "adapter_version": config.adapter_version,
+            "updated_at": config.updated_at
+        }))
+    }
+
+    fn project_configuration_get(
+        &self,
+        arguments: &Value,
+    ) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"].as_str().unwrap();
+        let config = self.with_storage(|storage| {
+            if storage.get_project(project_id)?.is_none() {
+                return Err(StorageError::new("PROJECT_NOT_FOUND", "project not found"));
+            }
+            storage.get_project_configuration(project_id)
+        })?;
+        match config {
+            Some(config) => Ok(json!({
+                "project_id": config.project_id,
+                "configured": true,
+                "revision": config.revision,
+                "format_version": config.format_version,
+                "project_type": config.project_type,
+                "adapter_id": config.adapter_id,
+                "adapter_version": config.adapter_version,
+                "updated_at": config.updated_at
+            })),
+            None => Ok(json!({
+                "project_id": project_id,
+                "configured": false,
+                "revision": 0,
+                "format_version": 1,
+                "project_type": null,
+                "adapter_id": null,
+                "adapter_version": null,
+                "updated_at": null
+            })),
+        }
     }
 
     fn project_index_build(
@@ -2248,6 +2328,76 @@ mod tests {
 
     fn runtime() -> RuntimeContext {
         RuntimeContext::in_process()
+    }
+
+    #[test]
+    fn project_configuration_is_scoped_versioned_and_restart_safe() {
+        let dir = temp_dir("project-configuration");
+        fs::create_dir_all(&dir).unwrap();
+        let core = RelayCore::open(CoreConfig::new(&dir));
+        let runtime = runtime();
+        for project_id in ["PRJ-config-a", "PRJ-config-b"] {
+            let mut register = request(
+                &format!("register-{project_id}"),
+                "project.register",
+                json!({ "id": project_id, "name": project_id, "root_uri": "file:///fixture" }),
+            );
+            register.idempotency_key = Some(format!("key-register-{project_id}"));
+            assert!(core.execute(register, &runtime).ok);
+        }
+        let missing = core.execute(request("config-missing", "project.configuration.get", json!({
+            "project_id": "PRJ-config-a"
+        })), &runtime);
+        assert!(missing.ok);
+        assert_eq!(missing.result.unwrap()["revision"], 0);
+
+        let mut put = request("config-put", "project.configuration.put", json!({
+            "project_id": "PRJ-config-a", "expected_revision": 0,
+            "format_version": 1, "project_type": "synthetic.project",
+            "adapter_id": "fixture.parser", "adapter_version": "1.2.0+fixture"
+        }));
+        put.idempotency_key = Some("key-config-put".to_string());
+        let saved = core.execute(put, &runtime);
+        assert!(saved.ok, "{:?}", saved.error);
+        assert_eq!(saved.result.unwrap()["revision"], 1);
+
+        let mut stale_put = request("config-stale", "project.configuration.put", json!({
+            "project_id": "PRJ-config-a", "expected_revision": 0,
+            "format_version": 1, "project_type": "synthetic.other"
+        }));
+        stale_put.idempotency_key = Some("key-config-stale".to_string());
+        assert_eq!(core.execute(stale_put, &runtime).error.unwrap().code, "PROJECT_CONFIG_CONFLICT");
+        let mut invalid = request("config-invalid", "project.configuration.put", json!({
+            "project_id": "PRJ-config-a", "expected_revision": 1,
+            "format_version": 1, "project_type": "synthetic.project",
+            "adapter_id": "fixture.parser"
+        }));
+        invalid.idempotency_key = Some("key-config-invalid".to_string());
+        assert_eq!(core.execute(invalid, &runtime).error.unwrap().code, "VALIDATION_FAILED");
+
+        let mut scoped = ExecutionAuthority::local_user("scoped-config-reader");
+        scoped.project_ids = Some(["PRJ-config-b".to_string()].into_iter().collect());
+        let denied = core.execute_authorized(request("config-cross-project", "project.configuration.get", json!({
+            "project_id": "PRJ-config-a"
+        })), &runtime, &scoped);
+        assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
+        drop(core);
+
+        let reopened = RelayCore::open(CoreConfig::new(&dir));
+        let read = reopened.execute(request("config-restart", "project.configuration.get", json!({
+            "project_id": "PRJ-config-a"
+        })), &runtime);
+        assert!(read.ok, "{:?}", read.error);
+        let config = read.result.unwrap();
+        assert_eq!(config["revision"], 1);
+        assert_eq!(config["adapter_id"], "fixture.parser");
+        assert_eq!(config["adapter_version"], "1.2.0+fixture");
+        let other = reopened.execute(request("config-other", "project.configuration.get", json!({
+            "project_id": "PRJ-config-b"
+        })), &runtime);
+        assert_eq!(other.result.unwrap()["configured"], false);
+        drop(reopened);
+        fs::remove_dir_all(dir).unwrap();
     }
     fn register_project(core: &RelayCore) -> String {
         let mut req = request(

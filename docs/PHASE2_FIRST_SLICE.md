@@ -1,5 +1,7 @@
 # Phase 2 first slice
 
+Status: Complete — accepted on 2026-09-25. Evidence: `PHASE2_FIRST_SLICE_EVIDENCE.md`.
+
 Goal: promote the proven Phase 1 contracts into one production-shaped core vertical before adding new product features.
 
 The first slice must prove, together:

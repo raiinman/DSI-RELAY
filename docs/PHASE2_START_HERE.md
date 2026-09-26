@@ -2,7 +2,14 @@
 
 ## Status
 
-Phase 2 - Core and command system - is the active next implementation phase after Phase 1 stack selection closed on 2026-09-25.
+Phase 2 - Core and command system - is active.
+
+The first two production-shaped Core slices are complete and accepted.
+
+- Slice 1 promotes the per-user Rust daemon/CLI transport, shared command registry, schema-2 SQLite project/result/job/idempotency state, provenance/trust fields, diagnostics health, restart persistence, and damaged-store behavior. Evidence: `PHASE2_FIRST_SLICE_EVIDENCE.md`.
+- Slice 2 promotes permission/effect enforcement, trusted actor/client/delegator attribution, project scoping, schema-3 transaction/usage/credential/egress state, data-classification/local-only egress primitives, durable credential-handle metadata/revocation, restart persistence, and migration from schema 1/2. Evidence: `PHASE2_SECOND_SLICE_EVIDENCE.md`.
+
+Current next work: promote the adapter broker/manifest lifecycle and the D-155 through D-157 strong Windows worker-isolation boundary behind production interfaces.
 
 ## Locked foundation
 

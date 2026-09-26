@@ -101,7 +101,7 @@ Completed prototype evidence:
 - Spike 13: packaging/update benchmark; D-158 selects signed per-user side-by-side bundles with verify → stage → atomic activation → schema-aware rollback as the default personal/direct Windows path, while retaining MSIX/App Installer as an optional trusted-signing/Store channel.
 - Spike 14: logging/diagnostic benchmark; D-159 selects bounded structured JSONL as the default local diagnostic record, with ETW optional deep tracing and independent diagnostics health surfaced in `status` / `doctor`.
 - Phase 1 closure review: PASS. Required stack decisions, CLI/host round trip, persistent result round trip, automated tests, startup/restart baselines, and idle CPU/RAM baselines are present.
-- Current next work: Phase 2 first core slice.
+- Phase 2 handoff: first production Core slice is now accepted; active work continues under the Phase 2 section.
 
 Research/prototype:
 
@@ -168,6 +168,13 @@ Exit criteria:
 ## Phase 2 — Core and command system
 
 Status: Active — Phase 1 stack selection is closed; production-shaped promotion is underway.
+
+Completed promotion evidence:
+
+- First core vertical accepted: shared registry validation, schema-2 SQLite project/result/job/idempotency state, provenance/trust metadata, independent diagnostics health, per-user daemon, canonical CLI transport, graceful/hard restart persistence, damaged-store Degraded behavior, and low-footprint resource verification. Evidence: `PHASE2_FIRST_SLICE_EVIDENCE.md`.
+- Second core vertical accepted: permission/effect enforcement, trusted identity/project scope, schema-3 transaction/usage/credential/egress state, idempotent transaction de-duplication, data classification/local-only egress, credential-handle metadata/revocation, schema-1/2 migration, hard-restart persistence, and low-footprint resource verification. Evidence: `PHASE2_SECOND_SLICE_EVIDENCE.md`.
+
+Current next work: promote the adapter broker/manifest lifecycle and strong Windows worker isolation behind production interfaces.
 
 Build:
 

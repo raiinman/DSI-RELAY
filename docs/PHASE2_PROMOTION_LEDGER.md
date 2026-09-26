@@ -42,6 +42,6 @@ Accepted in the third production slice:
 
 Third-slice acceptance is recorded in `PHASE2_THIRD_SLICE_EVIDENCE.md`.
 
-Current next work: Phase 2 closure review. Dashboard transport and update inventory remain later production promotions and are not Phase 2 Core-and-command-system exit gates.
+Phase 2 closure review: PASS. Current next work is Phase 3 project discovery and indexing. Dashboard transport and update inventory remain later production promotions and were not Phase 2 Core-and-command-system exit gates.
 
 Promotion rule: each row moves from evidence to production only with focused tests and a resource check. UEFN-specific behavior remains outside the core.

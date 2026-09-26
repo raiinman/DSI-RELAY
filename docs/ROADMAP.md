@@ -167,14 +167,16 @@ Exit criteria:
 
 ## Phase 2 — Core and command system
 
-Status: Active — Phase 1 stack selection is closed; production-shaped promotion is underway.
+Status: Complete — Phase 2 closed on 2026-09-26 after three accepted production slices and a final 54-test workspace closure run.
 
 Completed promotion evidence:
 
 - First core vertical accepted: shared registry validation, schema-2 SQLite project/result/job/idempotency state, provenance/trust metadata, independent diagnostics health, per-user daemon, canonical CLI transport, graceful/hard restart persistence, damaged-store Degraded behavior, and low-footprint resource verification. Evidence: `PHASE2_FIRST_SLICE_EVIDENCE.md`.
 - Second core vertical accepted: permission/effect enforcement, trusted identity/project scope, schema-3 transaction/usage/credential/egress state, idempotent transaction de-duplication, data classification/local-only egress, credential-handle metadata/revocation, schema-1/2 migration, hard-restart persistence, and low-footprint resource verification. Evidence: `PHASE2_SECOND_SLICE_EVIDENCE.md`.
+- Third core vertical accepted: generic adapter manifest/broker lifecycle, artifact/component revalidation, registry-bound capabilities, bounded failure/quarantine behavior, qualified AppContainer/LPAC worker isolation, Job Object containment, package-lock concurrency, and measured inactive/invocation cost. Evidence: `PHASE2_THIRD_SLICE_EVIDENCE.md`.
+- Phase 2 closure review: PASS. All four published exit criteria pass and the exact accepted production tree passed 54 workspace tests. Evidence: `PHASE2_CLOSURE_REVIEW.md`.
 
-Current next work: promote the adapter broker/manifest lifecycle and strong Windows worker isolation behind production interfaces.
+Current next work: Phase 3 project discovery and indexing.
 
 Build:
 
@@ -206,6 +208,8 @@ Exit criteria:
 - measured job metadata exists
 
 ## Phase 3 — Project discovery and indexing
+
+Status: Active — Phase 2 Core/command promotion is closed. Project discovery/indexing work begins from the accepted production workspace.
 
 Build:
 

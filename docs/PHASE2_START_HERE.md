@@ -2,15 +2,15 @@
 
 ## Status
 
-Phase 2 - Core and command system - is active.
+Phase 2 - Core and command system - is complete.
 
-The first three production-shaped Core slices are complete and accepted.
+The three production-shaped Core slices are complete and accepted. The formal closure review passes every published Phase 2 exit criterion; see `PHASE2_CLOSURE_REVIEW.md`.
 
 - Slice 1 promotes the per-user Rust daemon/CLI transport, shared command registry, schema-2 SQLite project/result/job/idempotency state, provenance/trust fields, diagnostics health, restart persistence, and damaged-store behavior. Evidence: `PHASE2_FIRST_SLICE_EVIDENCE.md`.
 - Slice 2 promotes permission/effect enforcement, trusted actor/client/delegator attribution, project scoping, schema-3 transaction/usage/credential/egress state, data-classification/local-only egress primitives, durable credential-handle metadata/revocation, restart persistence, and migration from schema 1/2. Evidence: `PHASE2_SECOND_SLICE_EVIDENCE.md`.
 - Slice 3 promotes the generic adapter manifest/broker lifecycle, registry-bound capabilities, artifact/component integrity revalidation, bounded failure/quarantine behavior, and the qualified stable AppContainer/LPAC + Job Object worker boundary. Evidence: `PHASE2_THIRD_SLICE_EVIDENCE.md`.
 
-Current next work: perform the Phase 2 closure review against the published Core-and-command-system exit criteria. Do not begin tool-specific adapter or Phase 3 implementation until that review passes.
+Current next work: Phase 3 project discovery and indexing. Use `PHASE3_START_HERE.md` as the active implementation authority. Phase 2 contracts remain the production foundation and should not be reopened without contradictory evidence.
 
 ## Locked foundation
 

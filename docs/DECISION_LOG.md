@@ -1319,3 +1319,33 @@ The Phase 1 module defaults (512 KiB current/rotated-file target, four retained 
 No UEFN, Fortnite, Blender, Krita, or real adapter behavior was implemented in Spike 14.
 
 Evidence: `spikes/phase1/results/2026-09-25-spike14-diagnostics-foundation-windows.json`.
+
+
+## D-160 — Phase 2 Core and command system is closed; Phase 3 becomes active
+
+Status: Approved phase transition
+
+Phase 2 closes after three accepted production-shaped slices and a final workspace-wide verification.
+
+The published Phase 2 exit criteria all pass:
+
+- human-friendly and structured machine execution converge on the same daemon/Core command path
+- durable result IDs survive process/restart boundaries
+- machine mode remains non-interactive and returns structured errors
+- durable job/checkpoint and transaction metadata is measured and persisted
+
+The exact accepted production tree passed `cargo test --workspace` with 54 non-doc tests and 0 failures.
+
+The closed Phase 2 production foundation is:
+
+- `relay-contracts` for command/registry/versioned envelope contracts
+- `relay-core` for deterministic service logic, schema-3 persistence, authority, transactions, usage, credential-handle/egress foundations, and diagnostics
+- `relayd` for the per-user Windows daemon and protected local transport
+- `relay` for the canonical CLI
+- `relay-adapter` for generic adapter manifests, broker lifecycle, and the qualified Windows sandbox boundary
+
+Phase 3 begins from this accepted foundation and owns generic project discovery/indexing. It must preserve project isolation, watcher-plus-authoritative-reconciliation semantics, derived/rebuildable index state, trusted identity/project scope, and foreground-safe resource scheduling.
+
+No UEFN/Fortnite/editor-specific behavior is authorized by this phase transition.
+
+Evidence: `docs/PHASE2_CLOSURE_REVIEW.md`, `docs/PHASE2_FIRST_SLICE_EVIDENCE.md`, `docs/PHASE2_SECOND_SLICE_EVIDENCE.md`, and `docs/PHASE2_THIRD_SLICE_EVIDENCE.md`.

@@ -1397,3 +1397,15 @@ A live fixture rewrote a file with different same-length bytes and restored its 
 OS watcher delivery, automatic continuity-loss signaling and foreground-safe recovery scheduling, dependency extraction, hardware-tier budgets, and closure review remain Phase 3 work. D-149 and Phase 2 authority assumptions remain unchanged.
 
 Evidence: `docs/PHASE3_FOURTH_SLICE_EVIDENCE.md`.
+
+## D-165 — Bounded Windows watcher delivery feeds provisional Core hints
+
+Status: Phase 3 fifth slice accepted; automatic reconciliation scheduling remains open
+
+The per-user daemon now subscribes to recursive OS notifications for indexed local project roots using `notify` 8.2.0. Projects sharing a root share one subscription. A bounded callback queue and 32-path batch limit feed the existing `project.index.apply_hints` command under a trusted local daemon identity. The worker defers hint hashing during active RELAY client commands and leaves expensive files above 64 MiB for explicit recovery. Normal file events update only named paths and mark the index stale; notifications are never treated as complete project truth.
+
+Callback errors, overflow, ambiguous directory or rename events, watch failures, and daemon downtime durably mark affected indexes stale. On startup, prior baselines are marked stale before the daemon publishes readiness. The recovery path is `project.index.reconcile`, with `verify_content: true` when metadata continuity is insufficient. The live Windows fixtures proved two projects on one watched root both received a file event, distinct project roots remained isolated, directory uncertainty was surfaced, and hard restart preserved the stale boundary. One second of idle observation on the shared-root fixture measured 10,817,536 bytes working set and 0 ms sampled CPU increase; it does not establish a supported hardware-tier budget.
+
+The watcher dependency added 23 resolved cross-platform lockfile packages and grew the optimized daemon by 346,112 bytes on this host. Automatic foreground-aware full reconciliation, long-run burst/scale evidence, dependency extraction, and closure review remain open. D-149 and Phase 2 authority rules remain intact.
+
+Evidence: `docs/PHASE3_FIFTH_SLICE_EVIDENCE.md`.

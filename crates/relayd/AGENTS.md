@@ -15,6 +15,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 - Host state distinguishes process health from Core recovery health.
 - Daemon records transport-safe diagnostics without persisting command arguments/results.
 - Restart must preserve Core operational state.
+- The daemon's recursive OS watcher feeds bounded file-path hints through Core and marks continuity loss stale. Startup marks persisted baselines stale before readiness; notification events never establish complete truth. Background hint hashing defers during foreground RELAY commands.
 
 # Verification
 
@@ -26,6 +27,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 - Synthetic Phase 3 two-project import, baseline, reconciliation, privacy, resource, graceful-restart, and hard-restart coverage through `tests/phase3_first_slice.rs`.
 - Synthetic Phase 3 change-delta, dependency-edge, provisional hint-update, stale-state, isolation, and hard-restart coverage through `tests/phase3_second_slice.rs`.
 - Explicit full-content verification after a metadata-invisible edit through `tests/phase3_second_slice.rs`.
+- Live OS notifications, shared-root handling, distinct-root isolation, directory uncertainty, idle resource sample, and hard-restart continuity through `tests/phase3_watcher.rs`.
 
 # Child DOX Index
 

@@ -920,6 +920,16 @@ impl RelayStorage {
             })
     }
 
+    pub fn mark_project_index_stale(&self, project_id: &str) -> Result<(), StorageError> {
+        let now = sqlite_now(&self.conn)?;
+        self.conn.execute(
+            "UPDATE project_index_state SET status = 'stale', updated_at = ?2
+             WHERE project_id = ?1",
+            params![project_id, now],
+        ).map_err(|error| StorageError::sqlite("mark project index stale", error))?;
+        Ok(())
+    }
+
     pub fn list_project_files(
         &self,
         project_id: &str,

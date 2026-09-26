@@ -19,6 +19,7 @@ Own production RELAY Core deterministic local business logic and durable state.
 - Schema-5 delta reads and dependency edges are bounded, project-scoped derived state. Edge replacement requires the current index generation and source content hash; source/target changes invalidate edges, and rebuild resets the delta boundary.
 - Hint-only index updates read and hash only named files, commit `stale` state, and never claim complete continuity. Authoritative reconciliation restores `ready`; delta and dependency-edge reads/writes require ready state.
 - Normal reconciliation checks all filesystem metadata and hashes changed candidates. Explicit `verify_content` reconciliation hashes all files for uncertain continuity and detects same-size/same-timestamp edits; schedule this expensive recovery around foreground work.
+- Trusted daemon watcher input can query local indexed roots and durably mark index status `stale` without changing generation. These methods never expose canonical roots through command results.
 
 # Verification
 

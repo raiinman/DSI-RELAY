@@ -106,6 +106,7 @@ fn wait_state(dir: &Path, expected_pid: u32) -> (LocalHostState, u64) {
 
 fn spawn_host(dir: &Path, instance: &str) -> (Child, LocalHostState, u64) {
     let child = Command::new(env!("CARGO_BIN_EXE_relayd"))
+        .env("RELAY_TEST_DISABLE_WATCHER", "1")
         .env("RELAY_STATE_DIR", dir)
         .env("RELAY_INSTANCE", instance)
         .stdin(Stdio::null())

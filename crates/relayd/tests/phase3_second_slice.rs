@@ -40,6 +40,7 @@ fn call(state: &LocalHostState, request: CommandRequest) -> CommandResponse {
 
 fn spawn_host(state_dir: &Path) -> (Child, LocalHostState) {
     let child = Command::new(env!("CARGO_BIN_EXE_relayd"))
+        .env("RELAY_TEST_DISABLE_WATCHER", "1")
         .env("RELAY_STATE_DIR", state_dir)
         .env("RELAY_INSTANCE", "phase3-edges")
         .stdin(Stdio::null())

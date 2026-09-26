@@ -52,6 +52,7 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `PHASE3_SECOND_SLICE_EVIDENCE.md` — accepted schema-5 change-delta, dependency-edge, migration, isolation, and restart evidence.
 - `PHASE3_THIRD_SLICE_EVIDENCE.md` — accepted provisional targeted hint-update, stale-state, recovery, and scale-fixture evidence.
 - `PHASE3_FOURTH_SLICE_EVIDENCE.md` — accepted explicit full-content verification for uncertain index continuity.
+- `PHASE3_FIFTH_SLICE_EVIDENCE.md` — accepted Windows watcher delivery, bounded hint batching, stale-state signals, and restart evidence.
 - `ROADMAP.md` — staged delivery plan and milestone exit criteria.
 - `RESEARCH_PLAN.md` — academic/technical research and benchmark program.
 - `PHASE0_ADVERSARIAL_REVIEW.md` — adversarial challenge to current assumptions and required architecture changes.

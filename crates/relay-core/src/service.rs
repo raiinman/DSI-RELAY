@@ -78,6 +78,26 @@ pub struct RelayCore {
     producer: Producer,
 }
 impl RelayCore {
+    /// Local daemon input only; never return canonical roots through command results.
+    pub fn index_watch_targets(&self) -> Result<Vec<(String, String)>, String> {
+        self.with_storage(|storage| {
+            let mut targets = Vec::new();
+            for project in storage.list_projects()? {
+                if storage.get_project_index_state(&project.id)?.is_some() {
+                    targets.push((project.id, project.root_uri));
+                }
+            }
+            Ok(targets)
+        })
+        .map_err(|error| error.message)
+    }
+
+    /// Record loss of notification continuity without changing a project generation.
+    pub fn mark_index_stale(&self, project_id: &str) -> Result<(), String> {
+        self.with_storage(|storage| storage.mark_project_index_stale(project_id))
+            .map_err(|error| error.message)
+    }
+
     pub fn open(config: CoreConfig) -> Self {
         let _ = std::fs::create_dir_all(&config.data_dir);
 

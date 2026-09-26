@@ -856,3 +856,496 @@ Soak tests track database/index growth, evidence retention, memory leaks, stale 
 Status: Approved
 
 RELAY's cost model includes local CPU/GPU/RAM/disk/network/power and human-visible latency. "Cheaper AI" is not success if the local workstation pays a larger resource cost.
+
+## D-146 — Node per-user host remains a provisional Phase 1 candidate
+
+Status: Superseded by D-152 and D-153
+
+Spike 1 proved a normal signed-in-user Node 24.19 process can host the structured RELAY contract over a Windows named pipe with authenticated version/capability negotiation, non-interactive CLI execution, diagnostics, and hard-kill restart recovery.
+
+On the 2026-09-24 Windows fixture using the integrated Spikes 1–3 source snapshot, startup-to-ready was 91.536 ms p50, authenticated handshake + status was 1.058 ms p50, and a full CLI process + status was 141.929 ms p50. The host sampled 118,153,216 bytes RSS while idle.
+
+Node may continue through Phase 1 because it gives a dependency-free prototype path to SQLite and Zstandard on the current fixture. It is not the final runtime choice: idle memory is material, and explicit Windows named-pipe DACL/cross-user denial has not yet been proven. Final host/IPC selection requires a lower-footprint comparison and OS access-control tests.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike1-node-windows.json`.
+
+## D-147 — SQLite is the provisional operational-state store
+
+Status: Confirmed and selected by D-153
+
+Node's built-in SQLite 3.53.3 in WAL mode with `synchronous=FULL` is approved to continue as the prototype store for project registry data, compact results, job/checkpoint state, and schema migration metadata.
+
+Spike 2 measured 2.013 ms p50 durable result writes, 1.136 ms p50 result reads, and 1.164 ms p50 `quick_check` round trips. Results and checkpoints survived a hard process kill, and deliberately damaged storage caused a `Degraded` host with blocked writes rather than false health.
+
+This decision does not approve heavyweight evidence BLOBs in SQLite. Concurrency, checkpoint starvation, VACUUM/compaction, disk-full injection, backup/restore, and interrupted migration remain required before the storage architecture is final.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike2-node-sqlite-windows.json`.
+
+## D-148 — Evidence reduction is a scoped pipeline, not maximum compression
+
+Status: Phase 1 provisional
+
+Spike 3 supports this prototype direction:
+
+- hash exact bytes before storage and deduplicate whole blobs before compression
+- use project-scoped deduplication by default; workspace-scoped deduplication requires an explicit policy because it crosses project boundaries
+- use fast Zstandard, currently level 1, as the hot/warm exact-evidence candidate only when compression actually reduces bytes
+- store incompressible payloads raw rather than paying CPU to make them larger
+- keep heavyweight evidence as hashed files/blobs with SQLite metadata unless later real-workload evidence reverses the maintenance tradeoff
+- treat log aggregation and telemetry downsampling as retention-class transformations, never invisible replacements for exact evidence
+- allow colder idle-time recompression only when a measured break-even justifies the extra CPU/I/O
+- keep lossy image encodings as reference derivatives; pinned/exact evidence requires lossless storage
+
+On the synthetic lifecycle corpus, project-scoped whole-blob dedupe removed 71.7% of raw referenced bytes before compression; workspace scope removed 80.0%. Level-19 Zstandard took roughly 6.8–9.4 seconds on the ~9–12 MB structured-text fixtures for relatively small gains over fast levels, while incompressible data grew slightly at every tested level. Recompressing the layout corpus from level 1 to level 9 saved only 0.3573% more bytes for 143 ms of work.
+
+SQLite BLOBs were faster on the small layout fixture, but `VACUUM INTO` required another database-sized copy. Metadata + hashed files had sub-millisecond-to-low-millisecond reads/writes while limiting atomic recompression headroom to one blob. The image-format result is not sufficient to pick a production codec because the synthetic image is not representative of UEFN screenshots.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike3-evidence-lifecycle-windows.json`.
+
+## D-149 — Windows indexing uses watcher hints plus reconciliation; USN is optional privilege
+
+Status: Phase 1 provisional
+
+Spike 4 rejects both repeated full parsing and file notifications as standalone sources of truth.
+
+The least-privilege Windows prototype path is:
+
+1. establish a persisted baseline/reconciliation snapshot
+2. use recursive file notifications as low-latency dirty-path hints
+3. parse/hash only candidate files during normal incremental work
+4. reconcile against project state on startup, after watcher downtime/errors, after uncertain bursts, and according to later resource-aware policy
+5. expose Reconciling/Degraded state instead of calling an uncertain index current
+
+On the 15,000-file synthetic fixture, a metadata reconciliation scan took 2.420 s and a full content parse took 10.562 s while reading 16,028,956 logical bytes. After 160 live file operations, changed-only parsing handled 150 files in 103.241 ms and read 154,660 bytes, a 99.0354% byte reduction versus parsing the full current tree.
+
+Windows recursive notifications were fast but not complete under burst load. A rapid burst exposed only 36 of 170 changed paths (21.1765%). A control run with 40 edits spaced 10 ms apart detected 40 of 40 paths with 3 ms p50 latency. Therefore notification delivery is an accelerator/hint channel, not authoritative project truth.
+
+An intentional watcher outage followed by 70 changed paths was fully recovered by reconciliation; the scan took 2.334 s and changed-only parsing of the recovered candidates took 43.399 ms while reading 61,498 bytes.
+
+NTFS USN remains useful in principle but is not a normal-host dependency. Journal metadata was queryable in the signed-in user context, the journal advanced across offline mutations, continuity metadata remained valid, and Node file inode values matched NTFS USN file-reference IDs. However reading journal records returned Access Denied without elevation on the benchmark fixture. A future narrowly privileged helper may be benchmarked only if its recovery/latency benefit exceeds installer, security, compatibility, and operability cost. RELAY Core must remain correct without it.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike4-windows-indexing.json`.
+
+## D-150 — Foreground-safe scheduling defers first; hard CPU caps are not a default
+
+Status: Phase 1 provisional
+
+Spike 5 measured RELAY-style CPU hashing/compression work while the real UEFN editor process and main window were active. RELAY does not raise or alter the creator application's priority; scheduling policy applies only to RELAY-owned work.
+
+The provisional resource policy is:
+
+1. detect an active creator workload and enter `foreground_safe`
+2. defer or do not start optional heavy work such as deep indexing, storage maintenance, inactive-project reconciliation, and local AI
+3. allow explicit bounded diagnostics or interactive RELAY commands when required
+4. when background work must continue, prefer soft OS intent signals such as Below-Normal priority / EcoQoS and cooperative backoff over hard CPU caps
+5. do not apply Job Object hard CPU caps as a routine foreground-safety mechanism
+6. keep inactive projects cold; registering projects must not create resident workers or periodic compute by itself
+
+On the high-end Windows fixture with UEFN open, baseline UEFN `WM_NULL` message-pump latency was about 5 ms p95. With 12 RELAY worker threads, Normal, Below-Normal, EcoQoS, weight-based Job Object, and a 25% hard cap all kept median p95 near baseline; therefore this fixture did not prove an editor-responsiveness benefit from always-on throttling.
+
+The throughput cost was material. Normal-priority background work measured about 13.3 GiB/s hashing throughput, while Below-Normal/EcoQoS/weight-based controls generally reduced throughput into the roughly 10.4–12.1 GiB/s range. The 25% hard cap reduced throughput to roughly 6.1–6.5 GiB/s without improving p95.
+
+A second full-CPU saturation run used all 16 logical CPUs. Normal-priority work still held UEFN p95 near the 4.955 ms saturation baseline while delivering about 14.1–14.3 GiB/s. EcoQoS reduced throughput to about 10.1–11.3 GiB/s with no meaningful p95 improvement. The 25% hard cap reduced throughput to about 6.1–6.3 GiB/s and produced much worse UEFN p99 tail latency (about 12.8–15.1 ms in the two runs versus about 5.1–5.4 ms for Normal). This rejects hard caps as the normal scheduling policy.
+
+Registered inactive projects remained effectively cold: one project and one hundred projects both sampled 0 ms host CPU over three idle seconds, with only about 180 KB RSS difference on the fixture. This supports persisted cold state rather than one resident service stack per project.
+
+EcoQoS, memory priority, Below-Normal priority, and Job Object controls were successfully applied and queried through Windows APIs. Memory-priority behavior under actual system memory pressure, Fortnite play-session frame time, GPU local-model contention, and minimum/recommended hardware remain open benchmark gates.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike5-resource-coexistence-windows.json`.
+
+## D-151 — Dashboard is a thin static/HTTP surface hosted by relayd
+
+Status: Phase 1 provisional
+
+Spike 6 rejects a separate resident dashboard backend/process for the default personal installation.
+
+The dashboard remains a client/presentation surface over RELAY's one command system:
+
+- named-pipe clients and the embedded HTTP adapter use the same structured `dispatchCommand` envelope builder
+- dashboard browser code owns rendering only; it does not access SQLite/project files or implement health/project/result business rules
+- the Phase 1 shell exposes a read-only command subset: `system.status`, `system.doctor`, `project.list`, and `result.get`
+- dashboard-only side-effect execution is not created; `system.shutdown` and other non-exposed commands are rejected by the adapter
+- Core degraded/error state passes through unchanged; the dashboard does not reinterpret a damaged store as healthy
+- the local HTTP listener binds to loopback and uses a per-start random same-origin dashboard token plus restrictive security headers/CSP; this is an implementation boundary, not a completed public browser threat model
+
+On the high-end Windows fixture, the static dashboard assets totaled 9,515 bytes and added zero runtime package dependencies.
+
+A host-only process sampled 125,329,408 bytes RSS. Running a standalone dashboard proxy plus host sampled 260,890,624 bytes RSS, or 135,561,216 bytes above the host-only run. Hosting the same dashboard HTTP/static surface inside `relayd` sampled 131,760,128 bytes RSS, only 6,430,720 bytes above host-only in this run. All three shapes sampled 0 ms CPU during their five-second post-cooldown idle windows.
+
+Latency also favored the embedded shape. Direct named-pipe `system.status` was 0.295 ms p50 in the host-only run. The standalone dashboard proxy measured 1.356 ms p50 because it adds HTTP plus another named-pipe hop. The embedded HTTP path measured 0.378 ms p50 while still dispatching through the same command semantics.
+
+Therefore the default personal dashboard direction is static/local web presentation served by the existing per-user host rather than another resident dashboard daemon. A future desktop wrapper may host or navigate this surface, but it must not introduce a second command/business-logic backend merely for UI packaging.
+
+Open gates remain for write/approval authorization, client identity, live update transport, accessibility/usability testing, browser threat modeling, packaging, and public update integrity.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike6-dashboard-shell-windows.json`.
+
+## D-152 — Rust becomes the preferred Phase 1 runtime/IPC candidate for deeper parity
+
+Status: Superseded by D-153
+
+Spike 7 changes the preferred runtime/IPC candidate from Node to Rust for the next parity work. It does not yet make Rust the final implementation language or approve a rewrite of every proven subsystem.
+
+A neutral head-to-head harness used the same Windows workstation, named-pipe protocol requests, restart fault, process metrics, CLI launches, and embedded-dashboard workload for both candidates. The Rust challenger deliberately implemented only the host/runtime/IPC surface; SQLite, indexing, evidence storage, background jobs, and adapters remain unported until Rust earns them.
+
+On the final comparison:
+
+- Node idle host RSS was 119,095,296 bytes; Rust was 6,529,024 bytes, a 94.52% reduction.
+- Node repeated startup was 91.340 ms p50; Rust was 29.991 ms p50.
+- Direct authenticated `system.status` was 0.284 ms p50 on Node and 0.265 ms on Rust.
+- A full CLI-process status call was 141.296 ms p50 on Node and 21.476 ms on Rust.
+- After hard kill, replacement state became ready in 81.895 ms on Node and 27.251 ms on Rust; both returned healthy status afterward.
+- With the same embedded dashboard assets, Node sampled 127,373,312 bytes RSS and Rust 7,036,928 bytes. Dashboard status was 0.748 ms p50 on Node and 0.555 ms on Rust.
+- The actual Node CLI successfully called the Rust host, and the actual Rust CLI successfully called the Node host, proving protocol-level interoperability for the shared command subset.
+- Wrong auth tokens and incompatible protocol ranges failed closed on both candidates.
+
+Rust also closes the unresolved local-IPC access-control gate. The challenger creates the Windows named pipe with a protected current-user-only DACL and retains the per-start random application token as defense in depth. After creation it calls Windows `GetSecurityInfo` on the actual pipe handle and refuses startup unless the kernel-returned descriptor is owned by the current user, has a protected DACL, and contains exactly one full-control ACE for that user. The final benchmark reported this verification as passed. Node/libuv's pipe ACL remains unverified rather than being classified as insecure.
+
+The trade-off is real. The selected Node host path measured 556 source lines and no unsafe boundary, while the Rust challenger measured 1,420 source lines and 21 `unsafe` mentions concentrated around Win32 interoperability. Rust required three direct Cargo dependencies / 14 resolved packages, a roughly 12.7-second clean optimized build, and a 438,272-byte stripped release executable. Node requires no compile step and no npm runtime packages, although the Node executable on the fixture was about 92.8 MB.
+
+At the close of Spike 7, Rust was promoted only to **preferred candidate for deeper parity** while Node remained the working storage reference. Spike 8 subsequently completed that durability/dependency gate; D-153 supersedes this runtime-selection state.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike7-runtime-ipc-challenger-windows.json`.
+
+
+## D-153 — Rust + bundled SQLite becomes the selected Phase 1 local core foundation
+
+Status: Phase 1 selected
+
+Spike 8 closes the runtime/storage selection gate that D-152 left open. The selected Phase 1 local foundation is now:
+
+- Rust for the normal signed-in-user `relayd` host and canonical local CLI/runtime
+- the kernel-verified current-user Windows named pipe plus random per-start token from Spike 7
+- the embedded static/HTTP dashboard surface from D-151, hosted by the same Rust process
+- SQLite for operational metadata/compact results/jobs/migration state
+- `rusqlite 0.40.2` with default features disabled and bundled SQLite enabled
+- schema version 1 kept database-compatible with the Node reference implementation
+
+Node remains a compatibility/reference implementation during Phase 1, not the intended shipping daemon.
+
+The neutral Spike 8 harness replayed the Spike 2 workload against both runtimes: 1 project, 300 result writes, 600 result reads, 100 checkpoint updates, and 20 `quick_check` calls. Both runtimes survived a hard process kill with the selected result, checkpoint, project registry, and schema intact. Both also started `Degraded` on a deliberately malformed database and on a future schema version, blocked storage writes, and preserved the damaged/future store instead of silently replacing or downgrading it.
+
+Cross-runtime schema compatibility was tested in both directions: Node-created schema-1 projects/results/jobs were opened and read correctly by Rust, and Rust-created schema-1 data was opened and read correctly by Node. Stored payload hashes and producer versions were preserved. Node used SQLite 3.53.3; the Rust bundled build used SQLite 3.53.2.
+
+The runtime advantage survived real storage:
+
+- post-restart idle RSS: Node 120,500,224 bytes; Rust 9,367,552 bytes — Rust remained 92.23% lower
+- initial storage-ready startup: Node 87.836 ms; Rust 46.915 ms
+- restart storage-ready startup: Node 90.713 ms; Rust 47.205 ms
+- result write p50: Node 1.031 ms; Rust 1.002 ms
+- result read p50: Node 0.360 ms; Rust 0.343 ms
+- `quick_check` p50: Node 0.382 ms; Rust 0.363 ms
+- checkpoint update p50: Node 0.794 ms; Rust 1.563 ms
+- both clean-close databases were 1,462,272 bytes and both cleared WAL/SHM files after clean shutdown
+
+The Rust checkpoint path is slower on this fixture, but the absolute p50 remains low and does not reverse the runtime/resource decision. Concurrency and maintenance behavior remain separate gates rather than being inferred from single-writer latency.
+
+The dependency/build cost also became concrete. Relative to the Spike 7 Rust host, the storage-enabled release executable grew from 438,272 bytes to 2,153,472 bytes, direct Cargo dependencies from 3 to 5, and the resolved package graph from 14 to 34 packages. A clean optimized build with cached crates measured 32.013 seconds; an incremental no-change release build measured 264 ms. Selected dependency metadata reports `rusqlite` MIT, `libsqlite3-sys` MIT, and `sha2` MIT OR Apache-2.0. The bundled SQLite 3.53.2 amalgamation contains SQLite's upstream copyright disclaimer/public-domain dedication; final installer notice generation and release-license auditing remain packaging gates.
+
+This selection confirms D-147's SQLite operational-store architecture while superseding its Node-specific implementation path. It does not reopen D-148: heavyweight evidence remains outside SQLite by default.
+
+Open storage gates remain concurrent-reader/writer behavior, long-reader WAL/checkpoint pressure, VACUUM/maintenance interruption, disk-full injection, backup/restore, and interrupted future migrations. Those are maintenance/release-hardening work; they no longer block the Phase 1 language/runtime choice.
+
+D-153 supersedes the runtime-choice portions of D-146 and D-152.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike8-rust-storage-parity-windows.json`.
+
+## D-154 — One JSON command registry is RELAY's Phase 1 semantic contract source
+
+Status: Phase 1 selected
+
+Spike 9 selects a plain machine-readable JSON command registry using the JSON Schema 2020-12 dialect with a deliberately bounded RELAY validation profile. The registry is the semantic source for command IDs, per-command contract versions, concise purpose, argument/result schemas, declared errors, effect/permission/idempotency classes, and surface visibility.
+
+The selected Rust core embeds and validates the registry at startup. Unsupported registry-format versions, unsupported schema keywords, duplicate command/version pairs, and active reuse of reserved/deprecated command IDs fail closed. Arguments are validated before business logic; successful results and command error envelopes are validated before return. Deterministic validation requires no model call.
+
+The current Phase 1 registry contains 13 commands. CLI catalog/help/describe metadata, dashboard command exposure, adapter discovery metadata, AI discovery metadata, and command capability IDs are all derived from the same registry. The dashboard no longer owns a separate command allowlist.
+
+Command-version omission remains compatible with existing Spike 1–8 clients and currently resolves to the latest registered command version. A client may explicitly request a command contract version. Unsupported requested versions return `COMMAND_VERSION_INCOMPATIBLE`. Breaking command-shape changes require a new command contract version; additive optional fields may remain within a compatible version when the compatibility checker confirms older payloads remain accepted. Reserved/deprecated IDs may not be silently reused.
+
+On the Windows fixture, registry validation added no direct Cargo dependency and no resolved package to the Spike 8 Rust graph: 5 direct dependencies / 34 resolved packages remained unchanged. The release executable grew 118,272 bytes, from 2,153,472 to 2,271,744 bytes. With the embedded dashboard open, sampled idle RSS was 8,523,776 bytes and no CPU time was observed in the five-second idle sample.
+
+Measured p50 round trips were 0.275 ms for `system.status` with registry validation, 0.271 ms for compact AI `registry.list`, 0.220 ms for `registry.describe project.register`, and 0.189 ms for deterministic rejection of an invalid request.
+
+The minified full registry was 10,408 bytes. Compact AI discovery was 1,971 bytes (18.94% of the full registry), while one `project.register` description was 855 bytes (8.21%). Using the transparent benchmark heuristic of four UTF-8 bytes per token, those are approximately 2,602, 493, and 214 tokens respectively; these are not model-specific tokenizer counts.
+
+A general-purpose Rust `jsonschema` 0.57.0 cost probe with default features disabled resolved 80 packages, produced a 4,229,120-byte tiny validator executable, and took 72.5 seconds for the first optimized build on this fixture. RELAY therefore keeps its bounded validator instead of importing a general-purpose engine until real commands require unsupported JSON Schema features.
+
+TypeSpec, CUE, and Protocol Buffers remain valid technologies, but Phase 1 does not add their compiler/language/code-generation toolchains to the local core. RELAY's current CLI, dashboard, gateway, adapter-discovery, and AI-facing contracts are already JSON-shaped, so a debuggable JSON registry minimizes translation and packaging cost. This choice does not prohibit generated bindings or alternate transports later.
+
+The selected registry mechanism is not a freeze of the current 13-command catalog and is not a promise that every future extension contract must live in the built-in core registry. Signed/versioned extension contract packaging remains later work.
+
+Evidence: `spikes/phase1/results/2026-09-24-spike9-command-registry-windows.json`.
+
+
+## D-155 — Out-of-process adapter broker + manifest becomes the Phase 1 adapter execution foundation
+
+Status: Phase 1 selected
+
+Spike 10 selects the generic adapter execution foundation before any real UEFN or other tool adapter work.
+
+The selected shape is:
+
+- third-party adapter implementation code runs in a separate worker process, never loaded directly into RELAY Core
+- manifest format 1 declares adapter identity/version, publisher/source, artifact digest, RELAY adapter-protocol range, command/version bindings, requested permissions, target-tool requirements, component/dependency metadata, update source/channel, build provenance, and review status
+- the manifest requests capabilities; broker policy decides what is actually granted
+- command bindings must resolve to the trusted D-154 command registry and adapter-visible command surface before a worker can launch
+- the worker executable SHA-256 is verified before launch; the executable worker component carries its own version/source/digest inventory
+- workers launch on demand rather than remaining resident merely because an adapter is installed
+- worker identity, protocol, process ID, and exact capability set are rechecked during the worker hello
+- arguments and results/errors are validated through the trusted RELAY command registry; adapter-provided schemas or prose do not become Core policy
+- stdout, stderr, errors, and structured worker results remain untrusted adapter data with provenance attached
+- crash/hang/invalid-message failures feed explicit restart backoff and quarantine state
+
+Windows Job Objects are selected for the first containment layer. The broker sets and queries back:
+
+- kill-on-job-close
+- active-process limit of 1
+- per-process memory limit
+
+The synthetic fixture used a 32 MiB memory limit. A worker attempting to reserve 128 MiB reported failure. These exact resource values are spike settings, not final product defaults.
+
+The neutral benchmark measured:
+
+- manifest/digest/policy/command compatibility validation: 0.291 ms p50
+- full on-demand worker invocation, including process launch, hello, Job Object assignment, registry validation, result validation, and teardown: 7.424 ms p50 / 9.103 ms p95
+- synthetic worker crash surfaced as \`ADAPTER_WORKER_EXITED\` in 6.203 ms without crashing the broker
+- a 100 ms hang test surfaced as \`ADAPTER_TIMEOUT\` in 122.097 ms
+- invalid JSON surfaced as \`ADAPTER_INVALID_MESSAGE\`
+- hostile stderr remained an untrusted observation and did not alter the broker's network-deny policy
+- 0 installed adapters: 4,460,544 bytes RSS and 0 sampled CPU ms over five seconds
+- 100 installed inactive adapters: 5,275,648 bytes RSS and 0 sampled CPU ms; the 100-adapter delta was 815,104 bytes
+- both idle cases had zero adapter-worker processes; the observed child was Windows \`conhost.exe\`, not an adapter worker
+- installing/validating 100 inactive manifests took 56.487 ms
+- no new direct Cargo dependency or resolved package was added over Spike 9
+- the selected core executable remained 2,271,744 bytes in this prototype because the broker is not yet wired into the daemon command surface; the synthetic worker executable was 215,040 bytes. Final daemon-integration binary cost remains to be measured.
+
+Eight synthetic integration tests also covered over-permissioned manifests, incompatible protocol/command bindings, bad artifact/component digests, identity/capability mismatch, crash/backoff/quarantine, hang timeout, invalid JSON, bad result schema, undeclared worker errors, hostile stderr, and the memory cap.
+
+This decision does **not** classify the current worker process as a security sandbox. The worker still executes under the signed-in user's token. Job Objects provide process lifecycle/resource containment but do not by themselves deny arbitrary filesystem, registry, local IPC, or network access. Manifest/policy denial therefore remains an authorization boundary enforced by the trusted broker, not an OS containment guarantee against a malicious worker.
+
+Before open third-party adapters can be treated as strongly isolated, Phase 1 must test an OS-enforced Windows capability boundary for filesystem/network/process access while preserving the developer-tool integration workflows RELAY needs. Until then, third-party adapter execution remains experimental/controlled rather than a general marketplace security promise.
+
+No UEFN, Fortnite, Blender, Krita, or other real adapter behavior was implemented in Spike 10.
+
+Evidence: \`spikes/phase1/results/2026-09-24-spike10-adapter-broker-windows.json\`.
+
+
+## D-156 — Strong adapter isolation requires an OS capability sandbox; the experimental Windows backend remains provisional
+
+Status: Phase 1 selected security model; backend provisional
+
+Spike 11 selects the security semantics that must wrap untrusted third-party adapter workers in addition to D-155's broker and Job Object containment.
+
+The selected Windows boundary is:
+
+- launch the worker in an AppContainer/process sandbox rather than under the unrestricted signed-in-user token
+- grant only explicit filesystem paths; the broker-owned mailbox is read/write and the executable-worker directory is read-only
+- deny filesystem access outside granted roots by default
+- deny network access by default
+- translate only broker-approved capability names into OS capabilities; unsupported capability names fail in RELAY before process launch
+- require an explicit egress policy as well as the required Windows network capability before network is enabled
+- supply a custom minimized environment instead of inheriting the parent environment
+- inherit no handles
+- disable Win32k system calls for the synthetic worker
+- preserve the outer D-155 Job Object limits: one active process, process-memory limit, and kill-on-close
+- fail closed when the sandbox contract/version is unsupported; never silently retry the worker unrestricted
+
+On the measured Windows fixture, `processmodel.dll` exports Microsoft's experimental `Experimental_CreateProcessInSandbox` API and reports file version 10.0.26100.9444. The prototype dynamically loads this API rather than adding a hard loader dependency.
+
+The synthetic worker itself verified `TokenIsAppContainer=true`. With no network grant, it could read/write the mailbox, read its executable from the read-only worker directory, but could not write that read-only directory, read or write a sibling blocked directory, open outbound TCP, observe the synthetic parent secret, observe `USERPROFILE`, or create a second process. Default TCP denial surfaced as WSAEACCES 10013. Child-process creation failed while the query-verified outer Job Object retained active-process limit 1, 32 MiB process-memory limit, and kill-on-close.
+
+A positive egress test also passed. On this serviced build, the `internetClient` capability appeared in the AppContainer token but did not by itself permit TCP; the final explicit-grant path combines RELAY's capability allowlist, `internetClient`, and SandboxSpec egress default-allow. The same network-enabled worker still could not access the blocked filesystem roots or create a child process.
+
+RELAY does not trust the experimental API to validate capability names. During exploratory probing on this fixture, Windows accepted an unknown capability string rather than rejecting launch as expected. The final path therefore allowlists supported capability names in the trusted broker before building the sandbox specification. An unsupported sandbox-spec version is also rejected before process launch, proving no unrestricted fallback.
+
+Measured deny-mode sandbox cost across 30 fresh workers was:
+
+- sandbox process creation: 30.037 ms p50 / 53.149 ms p95
+- full sandboxed mailbox round trip: 63.200 ms p50 / 108.509 ms p95
+- D-155 unsandboxed on-demand worker invocation reference: 7.424 ms p50
+- strong sandbox overhead: about 55.776 ms p50, or 8.51× the unsandboxed synthetic worker path
+
+The stronger boundary therefore has a real per-launch cost. Persistent worker pooling may later be benchmarked for trusted/high-frequency integrations, but no pooling exception may weaken the selected isolation semantics for untrusted adapters.
+
+The implementation added one direct Rust dependency, `flatbuffers` 25.12.19 (Apache-2.0), and three resolved packages versus Spike 10. The release build graph grew from 34 to 37 packages. The selected core executable remained 2,271,744 bytes because the sandbox backend is not yet wired into the daemon command surface and unused code is stripped. The synthetic sandbox worker measured 256,000 bytes. A clean optimized all-binary build measured 36.074 seconds on cached crates.
+
+The current direct backend is **not** selected as RELAY's permanent public Windows sandbox API. Microsoft documents `CreateProcessInSandbox` as experimental, and its behavior may change. D-156 selects the isolation policy/semantics and validates this backend on the measured host. Before public open third-party adapters, RELAY must prove a stable Windows process-container/fallback implementation and OS-version support matrix with the same adversarial fixture. If a host cannot provide the required strong boundary, untrusted adapter launch must remain unavailable rather than degrade to the D-155 worker-only model.
+
+No UEFN, Fortnite, Blender, Krita, or other real adapter behavior was implemented in Spike 11.
+
+Evidence: `spikes/phase1/results/2026-09-25-spike11-windows-adapter-sandbox.json`.
+
+
+## D-157 — Stable LPAC AppContainer + brokered egress is the Windows release-candidate sandbox on qualified builds
+
+Status: Phase 1 selected Windows sandbox backend; OS-build matrix conservative
+
+Spike 12 replaces the experimental Spike 11 processmodel backend in RELAY's intended release path with Microsoft's documented desktop AppContainer launch path:
+
+- `CreateAppContainerProfile` / AppContainer SID identity
+- `SECURITY_CAPABILITIES` through `STARTUPINFOEX`
+- `CreateProcessW` with extended startup attributes
+- Low Privilege AppContainer behavior with All Application Packages opt-out
+- Win32k system-call disable mitigation
+- the existing D-155 outer Job Object limits
+
+The strong isolation semantics from D-156 remain unchanged: filesystem outside grants is denied, direct worker network is denied, inherited environment is minimized, child-process creation remains bounded, and unsupported isolation never falls back to an unrestricted worker.
+
+The stable release policy is deliberately narrower than the exploratory Spike 11 backend. An untrusted worker receives exactly one direct read/write path: a broker-owned ephemeral mailbox. Project/user writes must return through trusted broker commands. Worker/project paths may be read-only.
+
+Network access is brokered rather than granted directly to the worker. The stable backend rejects direct capability requests before launch and exposes egress only through a trusted target allowlist.
+
+On the final 30-run Windows fixture:
+
+- stable LPAC prelaunch policy/ACL setup: 19.941 ms p50 / 25.328 ms p95
+- stable `CreateProcessW` AppContainer launch: 5.517 ms p50 / 9.187 ms p95
+- full stable sandbox round trip including temporary security restoration: 63.261 ms p50 / 86.259 ms p95
+- experimental Spike 11 reference round trip: 65.297 ms p50 / 84.733 ms p95
+- stable-vs-experimental p50 ratio: 0.9688; the documented stable path remained slightly faster at p50 on the final rerun
+
+The worker verified `TokenIsAppContainer=true`, could use the mailbox, could not write the read-only worker tree, could not read/write blocked filesystem paths, could not use direct TCP, did not inherit the synthetic parent secret or `USERPROFILE`, and could not create a child process. The outer Job Object again query-verified one active process, 32 MiB process-memory limit, and kill-on-close.
+
+Temporary filesystem security changes are bounded to the broker-owned mailbox and read-only worker tree. Integration tests and the benchmark verify that the DACL is restored, the temporary Low-Integrity label is removed after exit, and the worker-tree descriptor is restored exactly. The mailbox is ephemeral and deleted by the broker fixture.
+
+The release selector uses matrix version 1 and enables strong untrusted launch only on Windows builds that have passed RELAY's full adversarial fixture. Build 26200 is the only physically qualified build in this spike. A simulated experimental-only host and a simulated unmeasured stable-API host both select `disabled`; a measured host still selects the stable backend even if the experimental API is absent.
+
+Spike 12 added no direct Cargo dependency, no resolved package, and no selected core-binary growth over Spike 11. A clean optimized all-binary build measured 40.017 seconds on cached crates. The stable probe executable measured 390,144 bytes; the synthetic sandbox worker measured 248,832 bytes. The stable backend/source selector added 1,686 selected source lines and 66 `unsafe` mentions, concentrated at the Windows ABI/security boundary.
+
+The experimental `Experimental_CreateProcessInSandbox` backend remains in the Phase 1 repository only as a measured reference. It is never a release fallback.
+
+Microsoft documents the stable AppContainer APIs back to Windows 8 desktop apps, but documentation availability is not treated as RELAY qualification. Additional Windows builds must run the same adversarial suite before entering the release allowlist. Real UEFN/Blender/Krita adapter compatibility inside this boundary also remains unproven.
+
+No UEFN, Fortnite, Blender, Krita, or other real adapter product behavior was implemented in Spike 12.
+
+Evidence: `spikes/phase1/results/2026-09-25-spike12-stable-windows-sandbox-matrix.json`.
+
+## D-158 — Signed side-by-side bundles are the default personal Windows install/update path
+
+Status: Phase 1 selected packaging/update model; MSIX retained as optional managed channel
+
+Spike 13 compares signed MSIX + App Installer against a RELAY-owned per-user side-by-side updater using the same synthetic Rust core + adapter payload.
+
+The default personal/direct-download path is the signed side-by-side model:
+
+- versioned binaries live under a per-user install root
+- updates arrive as ZIP payloads with a detached CMS signature over the bundle SHA-256 digest
+- the updater verifies signer identity, signed digest, release metadata, and every component hash before staging
+- staging never changes the active version
+- activation changes one fsync'd `current.json` pointer only after compatibility checks
+- rollback activates a previously verified version only after storage-schema preflight
+- uninstall removes binaries/version state but leaves separately owned durable RELAY/project data untouched
+- no Session 0 service is required
+
+On the non-elevated Windows fixture, the side-by-side path physically completed install, tamper rejection, staged update, activation, incompatible rollback rejection, compatible rollback, uninstall, and durable-data survival.
+Measured side-by-side results:
+
+- v2 ZIP payload: 1,317,397 bytes plus 1,239-byte CMS signature for a 2,486,784-byte raw two-component payload
+- v2 build/sign/verify: 1.169 seconds
+- v1 install + verification + activation: 412.206 ms
+- v2 stage/verification without activation: 402.001 ms
+- atomic v2 activation: 3.392 ms
+- compatible rollback to v1: 4.493 ms
+- uninstall binaries/version state: 4.305 ms
+- the prototype updater is 245 source lines / 7,297 bytes
+
+Tampering the ZIP caused `UPDATE_SIGNATURE_INVALID` before extraction and left v1 active. Staging valid v2 left v1 active until the explicit activation step. Simulated storage schema 2 caused v1 rollback to fail `UPDATE_STORAGE_SCHEMA_INCOMPATIBLE` while v2 remained active.
+
+Both active-version records retained channel/source, maximum storage schema, and the core/adapter version + SHA-256 + provenance inventory. The external marker and SQLite fixture survived both update candidates' uninstall paths.
+MSIX/App Installer remains an optional Windows-managed/Store channel rather than the default direct-download path. The fixture produced valid signed v1/v2 MSIX packages, rejected a tampered signature, verified both packaged component inventories, and generated an upgrade-only App Installer definition with on-launch/background checks.
+
+The v2 MSIX measured 1,349,288 bytes, about 2.3% larger than the side-by-side ZIP + CMS signature. Build/sign/verify measured 1.264 seconds on the final fixture.
+
+The non-admin fixture could not physically register the self-signed MSIX: AppX returned `0x80073CF0` with certificate trust error `0x800B0109`, even after temporary current-user trust. That is recorded as a distribution/trust dependency, not papered over with elevation. Public MSIX distribution requires a certificate Windows already trusts or Store/managed signing.
+
+The Phase 1 Node side-by-side updater is evidence code, not the shipping updater. Production must implement the selected model in the shipping stack, define the publisher-key/trust bootstrap without installing a test root, use HTTPS for automated delivery, and keep rollback/data-schema checks separate.
+
+No UEFN, Fortnite, Blender, Krita, or real adapter payload was packaged.
+
+Evidence: `spikes/phase1/results/2026-09-25-spike13-packaging-update-windows.json`.
+
+
+## D-159 — Bounded structured JSONL is the default local diagnostic record; ETW is optional deep tracing
+
+Status: Phase 1 selected logging/diagnostic foundation
+
+Spike 14 selects a bounded append-only JSONL diagnostic record for the normal per-user support path.
+
+The selected foundation is:
+
+- one versioned structured event envelope with stable event ID, timestamp, severity, component, project/job/result references, correlation/causation IDs, source/trust metadata, declared completeness/sampling state, capture mode, and structured attributes
+- deterministic redaction of credential/secret/token/path keys plus path-looking string values before persistence
+- normal capture with bounded strings/collections and a 4 KiB event ceiling
+- explicit temporary detail mode, capped to 15 minutes and a 32 KiB event ceiling
+- append-only current JSONL plus bounded rotated files; retention eviction is counted rather than presented as complete history
+- periodic `sync_data` durability with a Phase 1 normal window of 16 events, plus explicit flush on shutdown/support boundaries
+- partial-tail restart recovery that removes only the incomplete trailing record and reports the recovered byte count
+- aggregate/health support summaries by default; unrestricted raw history and private event attributes are not included in the default support export
+- diagnostic capture has its own health state. A logging failure marks live host recovery/doctor state Degraded rather than allowing otherwise healthy storage/IPC state to hide missing evidence
+- normal command instrumentation records command identity/version/outcome/error code and correlation ID only; it does not persist command arguments or results
+
+The neutral Windows benchmark used the same 10,000-event synthetic envelope for JSONL, SQLite, and ETW.
+
+Default JSONL with a 16-event durability window measured:
+
+- 3,685.9 events/second
+- 0.0196 ms p50 append latency
+- 3.8777 ms p50 durability-sync boundary latency
+- 3,735,997 retained bytes after bounded rotation in the 4 x 1 MiB benchmark fixture
+- 5,289 events / 4 files explicitly recorded as retention-evicted
+- 19.707 ms aggregate-read cost
+- 5,197,824 bytes idle RSS and 0 sampled CPU ms over five seconds
+
+The sync-every-event control measured 4.1647 ms p50 and 239.4 events/second. This makes the durability/throughput trade explicit rather than implying every normal event is power-loss durable immediately.
+
+SQLite was substantially faster at the same 16-event durability window:
+
+- 24,350.6 events/second
+- 0.0030 ms p50 insert latency
+- 0.4272 ms p50 16-event commit latency
+- 4,247,552 retained bytes after retaining 4,096 rows
+- 108.608 ms combined prune/checkpoint/VACUUM/post-VACUUM-checkpoint maintenance in the measured run
+- 6,242,304 bytes idle RSS and 0 sampled CPU ms
+
+SQLite is therefore not rejected for performance. It remains selected for operational state under D-153. It is not selected as the default raw diagnostic record because JSONL already exceeds the expected diagnostic event rate by a wide margin while keeping raw support evidence directly inspectable/salvageable, bounded by simple file rotation, and outside the operational SQLite/WAL/checkpoint/VACUUM failure and maintenance domain.
+
+ETW with no active consumer measured effectively zero write-call latency and 0 retained bytes; the provider was disabled and the path was non-durable. Attempting to start a durable ETW consumer session as the normal non-elevated user returned Access Denied. ETW therefore remains an optional Windows deep-tracing hook for explicit diagnostic sessions, not the default support record. If a later product path enables ETW sessions, provider/session loss counters must be surfaced as diagnostic completeness degradation.
+
+Temporary detail mode increased bytes/event by 4.187x and p50 write latency by 1.106x in the synthetic fixture while remaining below the declared 32 KiB event ceiling. A deliberately partial JSONL tail recovered 11 bytes, preserved the prior complete event, and left zero invalid lines.
+
+The candidate added no direct Rust dependency and no resolved Cargo package. The existing `windows-sys` dependency only enabled the ETW feature surface. The clean optimized core/probe build measured 37.447 seconds, and the release core measured 2,360,832 bytes in this final run. The benchmark/prototype diagnostics source contains the platform ETW unsafe calls; the normal JSONL storage implementation itself does not require a new native/unsafe boundary.
+
+The Phase 1 module defaults (512 KiB current/rotated-file target, four retained files, 16-event sync window) are prototype defaults, not public retention policy. Hardware-tier tuning, final user-facing support-bundle archive format, encryption-at-rest policy, remote telemetry/analytics, and elevated ETW session benchmarking remain later work.
+
+No UEFN, Fortnite, Blender, Krita, or real adapter behavior was implemented in Spike 14.
+
+Evidence: `spikes/phase1/results/2026-09-25-spike14-diagnostics-foundation-windows.json`.
+
+
+## D-160 — Phase 2 Core and command system is closed; Phase 3 becomes active
+
+Status: Approved phase transition
+
+Phase 2 closes after three accepted production-shaped slices and a final workspace-wide verification.
+
+The published Phase 2 exit criteria all pass:
+
+- human-friendly and structured machine execution converge on the same daemon/Core command path
+- durable result IDs survive process/restart boundaries
+- machine mode remains non-interactive and returns structured errors
+- durable job/checkpoint and transaction metadata is measured and persisted
+
+The exact accepted production tree passed `cargo test --workspace` with 54 non-doc tests and 0 failures.
+
+The closed Phase 2 production foundation is:
+
+- `relay-contracts` for command/registry/versioned envelope contracts
+- `relay-core` for deterministic service logic, schema-3 persistence, authority, transactions, usage, credential-handle/egress foundations, and diagnostics
+- `relayd` for the per-user Windows daemon and protected local transport
+- `relay` for the canonical CLI
+- `relay-adapter` for generic adapter manifests, broker lifecycle, and the qualified Windows sandbox boundary
+
+Phase 3 begins from this accepted foundation and owns generic project discovery/indexing. It must preserve project isolation, watcher-plus-authoritative-reconciliation semantics, derived/rebuildable index state, trusted identity/project scope, and foreground-safe resource scheduling.
+
+No UEFN/Fortnite/editor-specific behavior is authorized by this phase transition.
+
+Evidence: `docs/PHASE2_CLOSURE_REVIEW.md`, `docs/PHASE2_FIRST_SLICE_EVIDENCE.md`, `docs/PHASE2_SECOND_SLICE_EVIDENCE.md`, and `docs/PHASE2_THIRD_SLICE_EVIDENCE.md`.

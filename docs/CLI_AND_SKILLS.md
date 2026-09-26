@@ -180,6 +180,8 @@ relay command describe spawns.validate
 
 This avoids preloading a giant command schema.
 
+Phase 1 D-154 implements this as compact `registry.list` discovery plus on-demand `registry.describe`. The current CLI's local catalog/help/describe rendering is derived from the same registry used by the host validator, and command capability IDs include their contract version. AI clients should prefer the compact list and fetch one full contract only when needed.
+
 ## Single command metadata source
 
 The command registry should generate or feed:
@@ -192,6 +194,8 @@ The command registry should generate or feed:
 - thin MCP schema
 
 Do not hand-maintain separate descriptions for the same command.
+
+D-154 makes this concrete: the built-in Phase 1 registry is plain JSON using a bounded JSON Schema 2020-12 profile. Surface-specific prose may be layered on top, but command identity/version, schemas, declared errors, effect/permission/idempotency classes, and surface visibility stay registry-owned.
 
 ## Remote clients
 

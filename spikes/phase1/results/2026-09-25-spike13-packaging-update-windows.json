@@ -1,0 +1,387 @@
+{
+  "benchmark": "phase1-spike13-packaging-update-windows",
+  "recorded_at": "2026-09-25T12:46:47.037Z",
+  "decision_informed": "Which Windows install/update model should RELAY use for the default non-admin personal path while keeping update integrity, rollback, durable data, and component provenance explicit.",
+  "hypothesis": "Signed MSIX + App Installer will satisfy the default per-user install/update contract with less RELAY-owned updater/recovery code than a custom signed side-by-side updater, while schema-aware binary rollback remains a RELAY preflight in either model.",
+  "runtime": {
+    "os": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "arch": "x64"
+    },
+    "cpu_model": "AMD Ryzen 7 5800X3D 8-Core Processor",
+    "logical_cpu_count": 16,
+    "total_memory_bytes": 51437408256,
+    "token": {
+      "elevated": false,
+      "session_id": 1,
+      "user_sid_present": true
+    },
+    "app_installer_version": "1.29.380.0"
+  },
+  "toolchain": {
+    "makeappx_version": "10.0.26100.7705 (WinBuild.160101.0800)",
+    "signtool_version": "4.00 (WinBuild.160101.0800)",
+    "powershell_present": true,
+    "tar_present": true,
+    "raw_payload_bytes": 2486784,
+    "release_components": 2
+  },
+  "msix_appinstaller": {
+    "package_v1": {
+      "size_bytes": 1349280,
+      "build_sign_verify_ms": 1301.409
+    },
+    "package_v2": {
+      "size_bytes": 1349288,
+      "build_sign_verify_ms": 1263.638,
+      "signature": {
+        "status": "Valid",
+        "signer_subject": "CN=DSIRelaySpike13Test"
+      }
+    },
+    "appinstaller": {
+      "bytes": 580,
+      "sha256": "78b03cdeeac21a86489fecb7f8cbf8e502ee2beffad045719351f47bb0ed41fd",
+      "on_launch_check": true,
+      "background_update": true,
+      "automatic_downgrade_disabled": true,
+      "distribution_uri_scheme": "https",
+      "ms_appinstaller_uri_required": false
+    },
+    "package_v1_inventory": {
+      "version": "1.0.0.0",
+      "channel": "stable",
+      "source": "msix-appinstaller",
+      "components": [
+        {
+          "id": "relay-core",
+          "version": "1.0.0.0",
+          "source": "local-release-build",
+          "provenance": "spike13-synthetic",
+          "hash_matches": true
+        },
+        {
+          "id": "synthetic-adapter",
+          "version": "1.0.0.0",
+          "source": "local-release-build",
+          "provenance": "spike13-synthetic",
+          "hash_matches": true
+        }
+      ]
+    },
+    "package_v2_inventory": {
+      "version": "1.1.0.0",
+      "channel": "stable",
+      "source": "msix-appinstaller",
+      "components": [
+        {
+          "id": "relay-core",
+          "version": "1.1.0.0",
+          "source": "local-release-build",
+          "provenance": "spike13-synthetic",
+          "hash_matches": true
+        },
+        {
+          "id": "synthetic-adapter",
+          "version": "1.1.0.0",
+          "source": "local-release-build",
+          "provenance": "spike13-synthetic",
+          "hash_matches": true
+        }
+      ]
+    },
+    "install_v1_attempt": {
+      "ok": false,
+      "elapsed_ms": 5686.44,
+      "hresult": "0x80073CF0",
+      "hresults": [
+        "0x80073CF0",
+        "0x800B0109"
+      ]
+    },
+    "lifecycle_proven_on_fixture": false,
+    "installed_v1": null,
+    "start_version_response": null,
+    "installed_v1_inventory": null,
+    "tampered_signature_rejected": true,
+    "tampered_update_attempt": null,
+    "version_after_tampered_update": null,
+    "update_v2_ms": null,
+    "installed_v2": null,
+    "installed_v2_inventory": null,
+    "incompatible_rollback_error": null,
+    "version_after_blocked_rollback": null,
+    "rollback_v1_ms": null,
+    "version_after_compatible_rollback": null,
+    "uninstall_ms": 527.815,
+    "package_removed": true,
+    "durable_data_after_uninstall": {
+      "marker_exists": true,
+      "database_exists": true,
+      "schema_version": 1
+    },
+    "update_model": {
+      "manual_offline": "signed .msix install",
+      "automated": "signed .appinstaller OnLaunch + background update; automatic downgrade disabled",
+      "rollback": "RELAY storage-schema preflight then explicit ForceUpdateFromAnyVersion"
+    }
+  },
+  "side_by_side": {
+    "bundle_v1": {
+      "size_bytes": 1317396,
+      "signature_bytes": 1239,
+      "build_sign_verify_ms": 1135.745
+    },
+    "bundle_v2": {
+      "size_bytes": 1317397,
+      "signature_bytes": 1239,
+      "build_sign_verify_ms": 1168.66,
+      "signature": {
+        "subject": "CN=DSIRelaySpike13Test",
+        "signers": 1
+      }
+    },
+    "tampered_signature_rejected": true,
+    "install_v1_ms": 412.97,
+    "active_v1": {
+      "version": "1.0.0.0",
+      "bundle_sha256": "e6a957695561f27b1622e49e6e2a6bd6b53c4bfafd8a93749bd1ab9a34dfc33f",
+      "channel": "stable",
+      "source": "relay-side-by-side",
+      "max_storage_schema": 1,
+      "components": [
+        {
+          "id": "relay-core",
+          "kind": "core",
+          "path": "relay-rust-challenger.exe",
+          "version": "1.0.0.0",
+          "source": "local-release-build",
+          "provenance": "spike13-synthetic",
+          "sha256": "60aa351672989fb0fade6e0e4a427de606a024f973bd17e4fc63300e2d0bd572"
+        },
+        {
+          "id": "synthetic-adapter",
+          "kind": "adapter-worker",
+          "path": "relay-synthetic-adapter.exe",
+          "version": "1.0.0.0",
+          "source": "local-release-build",
+          "provenance": "spike13-synthetic",
+          "sha256": "ce845f4c548356c58fc78fad43342765f70904507a2aa5d4c81bc3af5dede233"
+        }
+      ]
+    },
+    "tampered_update_error": "UPDATE_SIGNATURE_INVALID",
+    "active_after_tampered_update": {
+      "version": "1.0.0.0",
+      "bundle_sha256": "e6a957695561f27b1622e49e6e2a6bd6b53c4bfafd8a93749bd1ab9a34dfc33f",
+      "channel": "stable",
+      "source": "relay-side-by-side",
+      "max_storage_schema": 1,
+      "components": [
+        {
+          "id": "relay-core",
+          "kind": "core",
+          "path": "relay-rust-challenger.exe",
+          "version": "1.0.0.0",
+          "source": "local-release-build",
+          "provenance": "spike13-synthetic",
+          "sha256": "60aa351672989fb0fade6e0e4a427de606a024f973bd17e4fc63300e2d0bd572"
+        },
+        {
+          "id": "synthetic-adapter",
+          "kind": "adapter-worker",
+          "path": "relay-synthetic-adapter.exe",
+          "version": "1.0.0.0",
+          "source": "local-release-build",
+          "provenance": "spike13-synthetic",
+          "sha256": "ce845f4c548356c58fc78fad43342765f70904507a2aa5d4c81bc3af5dede233"
+        }
+      ]
+    },
+    "stage_v2_ms": 387.298,
+    "active_after_stage_before_activation": {
+      "version": "1.0.0.0",
+      "bundle_sha256": "e6a957695561f27b1622e49e6e2a6bd6b53c4bfafd8a93749bd1ab9a34dfc33f",
+      "channel": "stable",
+      "source": "relay-side-by-side",
+      "max_storage_schema": 1,
+      "components": [
+        {
+          "id": "relay-core",
+          "kind": "core",
+          "path": "relay-rust-challenger.exe",
+          "version": "1.0.0.0",
+          "source": "local-release-build",
+          "provenance": "spike13-synthetic",
+          "sha256": "60aa351672989fb0fade6e0e4a427de606a024f973bd17e4fc63300e2d0bd572"
+        },
+        {
+          "id": "synthetic-adapter",
+          "kind": "adapter-worker",
+          "path": "relay-synthetic-adapter.exe",
+          "version": "1.0.0.0",
+          "source": "local-release-build",
+          "provenance": "spike13-synthetic",
+          "sha256": "ce845f4c548356c58fc78fad43342765f70904507a2aa5d4c81bc3af5dede233"
+        }
+      ]
+    },
+    "activate_v2_ms": 6.51,
+    "active_v2": {
+      "version": "1.1.0.0",
+      "bundle_sha256": "57414c7d22c297d22a4cdbd54d7691d3e76809fdb60726100b54c1a74408597b",
+      "channel": "stable",
+      "source": "relay-side-by-side",
+      "max_storage_schema": 1,
+      "components": [
+        {
+          "id": "relay-core",
+          "kind": "core",
+          "path": "relay-rust-challenger.exe",
+          "version": "1.1.0.0",
+          "source": "local-release-build",
+          "provenance": "spike13-synthetic",
+          "sha256": "60aa351672989fb0fade6e0e4a427de606a024f973bd17e4fc63300e2d0bd572"
+        },
+        {
+          "id": "synthetic-adapter",
+          "kind": "adapter-worker",
+          "path": "relay-synthetic-adapter.exe",
+          "version": "1.1.0.0",
+          "source": "local-release-build",
+          "provenance": "spike13-synthetic",
+          "sha256": "ce845f4c548356c58fc78fad43342765f70904507a2aa5d4c81bc3af5dede233"
+        }
+      ]
+    },
+    "incompatible_rollback_error": "UPDATE_STORAGE_SCHEMA_INCOMPATIBLE",
+    "active_after_blocked_rollback": {
+      "version": "1.1.0.0",
+      "bundle_sha256": "57414c7d22c297d22a4cdbd54d7691d3e76809fdb60726100b54c1a74408597b",
+      "channel": "stable",
+      "source": "relay-side-by-side",
+      "max_storage_schema": 1,
+      "components": [
+        {
+          "id": "relay-core",
+          "kind": "core",
+          "path": "relay-rust-challenger.exe",
+          "version": "1.1.0.0",
+          "source": "local-release-build",
+          "provenance": "spike13-synthetic",
+          "sha256": "60aa351672989fb0fade6e0e4a427de606a024f973bd17e4fc63300e2d0bd572"
+        },
+        {
+          "id": "synthetic-adapter",
+          "kind": "adapter-worker",
+          "path": "relay-synthetic-adapter.exe",
+          "version": "1.1.0.0",
+          "source": "local-release-build",
+          "provenance": "spike13-synthetic",
+          "sha256": "ce845f4c548356c58fc78fad43342765f70904507a2aa5d4c81bc3af5dede233"
+        }
+      ]
+    },
+    "rollback_v1_ms": 4.873,
+    "active_after_compatible_rollback": {
+      "version": "1.0.0.0",
+      "bundle_sha256": "e6a957695561f27b1622e49e6e2a6bd6b53c4bfafd8a93749bd1ab9a34dfc33f",
+      "channel": "stable",
+      "source": "relay-side-by-side",
+      "max_storage_schema": 1,
+      "components": [
+        {
+          "id": "relay-core",
+          "kind": "core",
+          "path": "relay-rust-challenger.exe",
+          "version": "1.0.0.0",
+          "source": "local-release-build",
+          "provenance": "spike13-synthetic",
+          "sha256": "60aa351672989fb0fade6e0e4a427de606a024f973bd17e4fc63300e2d0bd572"
+        },
+        {
+          "id": "synthetic-adapter",
+          "kind": "adapter-worker",
+          "path": "relay-synthetic-adapter.exe",
+          "version": "1.0.0.0",
+          "source": "local-release-build",
+          "provenance": "spike13-synthetic",
+          "sha256": "ce845f4c548356c58fc78fad43342765f70904507a2aa5d4c81bc3af5dede233"
+        }
+      ]
+    },
+    "uninstall_ms": 4.383,
+    "binaries_removed": true,
+    "durable_data_after_uninstall": {
+      "marker_exists": true,
+      "database_exists": true,
+      "schema_version": 1
+    },
+    "updater_source_lines": 245,
+    "updater_source_bytes": 7297,
+    "update_model": {
+      "manual_offline": "ZIP bundle + detached CMS signature",
+      "automated": "RELAY-owned updater fetches signed bundle, verifies, stages side-by-side, then atomically changes active pointer",
+      "rollback": "activate prior verified version only after storage-schema preflight"
+    }
+  },
+  "shared": {
+    "current_user_non_elevated": true,
+    "user_session_id": 1,
+    "relay_service_count_before": 0,
+    "relay_service_count_after": 0,
+    "signing_fixture": "ephemeral CurrentUser code-signing cert trusted only in CurrentUser\\TrustedPeople + CurrentUser\\Root during the fixture; cleanup removes both and production must use a real trusted signing path",
+    "durable_data_root_owned_separately": true
+  },
+  "comparison": {
+    "msix_v2_bytes": 1349288,
+    "side_by_side_v2_bytes": 1317397,
+    "side_by_side_v2_signature_bytes": 1239,
+    "msix_vs_side_by_side_size_ratio": 1.0232,
+    "raw_payload_bytes": 2486784,
+    "custom_updater_owned_source_lines": 245,
+    "msix_update_engine": "Windows App Installer / AppX deployment stack",
+    "side_by_side_update_engine": "RELAY-owned verification/staging/activation/rollback code"
+  },
+  "selection": {
+    "default_personal_path": "signed_side_by_side",
+    "optional_windows_managed_channel": "msix_appinstaller_when_trusted_signing_or_store_path_exists",
+    "reason": "the side-by-side candidate physically proved the complete non-admin install/update/rollback/uninstall contract on this fixture; the self-signed MSIX package was correctly built and signed but AppX deployment rejected the local test trust chain"
+  },
+  "pass_fail": {
+    "non_admin_default_personal_install_proven": true,
+    "no_relay_session0_service": true,
+    "msix_signature_valid": true,
+    "msix_tamper_signature_rejected": true,
+    "msix_package_component_inventory_valid": true,
+    "msix_trust_gate_classified": true,
+    "msix_lifecycle_consistent_if_installable": true,
+    "appinstaller_upgrade_only_auto_update_defined": true,
+    "side_signature_valid": true,
+    "side_tamper_rejected": true,
+    "side_interrupted_stage_not_activated": true,
+    "side_update_v2_works": true,
+    "side_incompatible_rollback_blocked": true,
+    "side_compatible_rollback_works": true,
+    "side_component_inventory_retained": true,
+    "side_uninstall_preserves_durable_data": true,
+    "cleanup_complete": true,
+    "all_gates_pass": true
+  },
+  "limitations": [
+    "The MSIX fixture uses an ephemeral self-signed current-user test certificate imported into CurrentUser TrustedPeople + CurrentUser Root only for local verification and removed in finally. Public direct-download distribution requires a certificate Windows already trusts or Microsoft Store signing; RELAY must not ship the test trust path.",
+    "MSIX auto-update behavior is defined by a generated 2021-schema .appinstaller file. This non-admin fixture attempts Add-AppxPackage; if Windows rejects the ephemeral self-signed trust chain, the result records that trust gate rather than claiming install/update/rollback lifecycle proof. The benchmark does not host a production HTTPS update endpoint.",
+    "The ms-appinstaller URI scheme is not required by the selected fixture; consumer distribution can link to the .appinstaller file itself.",
+    "The side-by-side updater is a Phase 1 Node prototype used to measure RELAY-owned updater/recovery complexity; a production custom updater would need an implementation in the selected shipping stack.",
+    "The two package versions contain the same current Rust executable binaries with different synthetic release/package version metadata. Storage schema version 2 is simulated only to test rollback refusal, not as a real migration.",
+    "The durable-data fixture is intentionally outside both package roots. Production uninstall UX must separately expose any explicit user choice to remove durable RELAY data.",
+    "Only one Windows 11 workstation and one App Installer version were measured; enterprise policy, Store distribution, and older supported Windows builds remain separate release qualification work.",
+    "No UEFN, Fortnite, Blender, Krita, or real adapter payload was packaged in Spike 13."
+  ],
+  "cleanup": {
+    "package_remaining": false,
+    "test_certificate_remaining": false,
+    "relay_service_count_after_cleanup": 0
+  }
+}

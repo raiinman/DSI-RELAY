@@ -210,6 +210,8 @@ Compatibility is versioned.
 
 Inactive adapters should not add routine CPU/memory, dashboard noise, AI context, or health-check burden.
 
+Phase 1 D-155 validates the lazy-worker default: installed adapter manifests remain metadata-only until invoked. On the synthetic fixture, 100 installed inactive manifests launched zero adapter workers, sampled 0 CPU ms over five seconds, and added about 815 KB RSS versus the zero-adapter broker process. Do not replace this with one permanently resident process per installed adapter unless a later integration benchmark proves the throughput benefit is worth the idle cost.
+
 ## Generalization rule
 
 Do not build a universal engine abstraction based only on imagination.

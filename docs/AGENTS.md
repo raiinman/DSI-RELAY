@@ -36,7 +36,18 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `LEGAL_LICENSING_AND_DISTRIBUTION.md` — platform terms, redistribution, copyleft boundaries, asset provenance, AI output rights, privacy claims, and public-release legal gates.
 - `VERSIONING_AND_COMPATIBILITY.md` — contract stability, version skew, schema evolution, deprecation, migrations, support windows, and compatibility debt.
 - `PERFORMANCE_AND_RESOURCE_ECONOMICS.md` — foreground priority, indexing scale, local AI contention, storage maintenance, hardware tiers, and resource budgets.
-- `PHASE1_START_HERE.md` — active Phase 1 execution order, prototype gates, and fresh-chat handoff.
+- `PHASE1_START_HERE.md` — closed Phase 1 spike/stack-selection record and handoff.
+- `PHASE2_START_HERE.md` — closed Phase 2 implementation record and promotion order.
+- `PHASE2_FIRST_SLICE.md` — acceptance contract for the first production-shaped Core vertical.
+- `PHASE2_FIRST_SLICE_EVIDENCE.md` — accepted first-slice verification, restart, compatibility, and resource evidence.
+- `PHASE2_SECOND_SLICE.md` — acceptance contract for authority, policy, transaction, usage, egress, and credential-handle foundations.
+- `PHASE2_SECOND_SLICE_EVIDENCE.md` — accepted second-slice verification, migration, restart, security, and resource evidence.
+- `PHASE2_THIRD_SLICE.md` — acceptance contract for generic adapter lifecycle and strong Windows worker isolation promotion.
+- `PHASE2_THIRD_SLICE_EVIDENCE.md` — accepted third-slice adapter lifecycle, sandbox, concurrency, and resource evidence.
+- `PHASE2_PROMOTION_LEDGER.md` — maps Phase 1 evidence to deliberate Phase 2 production promotion gates.
+- `PHASE2_CLOSURE_REVIEW.md` — final Phase 2 exit-criteria review and production-foundation closure record.
+- `PHASE3_START_HERE.md` — active Phase 3 project discovery/indexing implementation authority.
+- `PHASE3_FIRST_SLICE.md` — acceptance contract for the first generic multi-project discovery/baseline/changed-only indexing vertical.
 - `ROADMAP.md` — staged delivery plan and milestone exit criteria.
 - `RESEARCH_PLAN.md` — academic/technical research and benchmark program.
 - `PHASE0_ADVERSARIAL_REVIEW.md` — adversarial challenge to current assumptions and required architecture changes.

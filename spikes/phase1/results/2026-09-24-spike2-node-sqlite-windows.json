@@ -1,0 +1,105 @@
+{
+  "benchmark": "phase1-spike2-node-sqlite-windows",
+  "recorded_at": "2026-09-25T01:48:37.125Z",
+  "decision_informed": "Whether Node's built-in SQLite is viable for RELAY durable operational metadata/results/checkpoints during Phase 1.",
+  "hypothesis": "SQLite WAL with synchronous=FULL can provide simple crash-recoverable local durability with acceptable latency for RELAY metadata and compact results.",
+  "runtime": {
+    "os": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "arch": "x64"
+    },
+    "node": "v24.19.0",
+    "sqlite": "3.53.3",
+    "cpu_model": "AMD Ryzen 7 5800X3D 8-Core Processor",
+    "logical_cpu_count": 16,
+    "total_memory_bytes": 51437408256
+  },
+  "storage": {
+    "engine": "SQLite",
+    "journal_mode": "WAL",
+    "synchronous": "FULL",
+    "schema_version": 1,
+    "payload_model": "compact JSON result rows; heavyweight evidence intentionally excluded"
+  },
+  "workload": {
+    "projects": 1,
+    "result_writes": 300,
+    "result_reads": 600,
+    "checkpoint_updates": 100,
+    "integrity_checks": 20,
+    "approximate_payload_json_bytes": 4057
+  },
+  "measurements": {
+    "startup_with_existing_store_ms": 123.842,
+    "result_put_round_trip": {
+      "n": 300,
+      "min_ms": 1.54,
+      "p50_ms": 2.013,
+      "p95_ms": 3.218,
+      "p99_ms": 6.14,
+      "max_ms": 8.921,
+      "mean_ms": 2.219
+    },
+    "result_get_round_trip": {
+      "n": 600,
+      "min_ms": 0.936,
+      "p50_ms": 1.136,
+      "p95_ms": 1.765,
+      "p99_ms": 3.07,
+      "max_ms": 7.946,
+      "mean_ms": 1.239
+    },
+    "checkpoint_round_trip": {
+      "n": 100,
+      "min_ms": 1.346,
+      "p50_ms": 1.601,
+      "p95_ms": 2.895,
+      "p99_ms": 4.239,
+      "max_ms": 4.318,
+      "mean_ms": 1.719
+    },
+    "quick_check_round_trip": {
+      "n": 20,
+      "min_ms": 1.065,
+      "p50_ms": 1.164,
+      "p95_ms": 1.301,
+      "p99_ms": 1.323,
+      "max_ms": 1.323,
+      "mean_ms": 1.173
+    },
+    "files_before_hard_kill": {
+      "db_bytes": 933888,
+      "wal_bytes": 4128272,
+      "shm_bytes": 32768
+    },
+    "files_after_clean_close": {
+      "db_bytes": 1462272,
+      "wal_bytes": 0,
+      "shm_bytes": 0
+    },
+    "host_after_work": {
+      "rss_bytes": 129097728,
+      "private_bytes": 172208128,
+      "cpu_ms": 546.875
+    },
+    "host_after_restart": {
+      "rss_bytes": 119939072,
+      "private_bytes": 159268864,
+      "cpu_ms": 109.375
+    }
+  },
+  "pass_fail": {
+    "project_registry": true,
+    "durable_result_after_hard_kill": true,
+    "durable_checkpoint_after_hard_kill": true,
+    "integrity_after_hard_kill": true,
+    "schema_version": true
+  },
+  "limitations": [
+    "Single workstation and local NVMe-class storage only; synced/network-backed paths are not evaluated.",
+    "This spike stores compact normalized result JSON in SQLite. It does not approve multi-megabyte evidence BLOBs in the database.",
+    "The workload is single-host/single-writer; concurrent reader/writer and long-reader checkpoint behavior remain for storage-maintenance testing.",
+    "VACUUM/checkpoint starvation, disk-full injection, backup/restore, and migration interruption are not yet covered by this narrow result-round-trip spike."
+  ]
+}

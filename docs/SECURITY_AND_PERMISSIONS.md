@@ -256,6 +256,8 @@ The local runtime should follow least-privilege design.
 - version local protocols and reject incompatible peers safely
 - test cross-user behavior and recovery after local host restarts
 
+Phase 1 Spike 7 proved the preferred Windows IPC direction with the Rust challenger: create the named pipe with a protected DACL scoped to the current user, verify the created kernel object's descriptor, and still require the random per-start application token as defense in depth. End-to-end testing from a second Windows user session remains an open release gate.
+
 ## Software update integrity
 
 Public update delivery is part of RELAY's trusted software path.
@@ -268,6 +270,10 @@ Before unattended updates are enabled:
 - retain release/build provenance where practical
 - keep update-specific privileged components narrowly scoped
 - include update and dependency integrity in release testing
+
+Phase 1 D-158 selects verify → stage → atomic activation for the default personal Windows path. Release metadata and every component digest are validated before staging; a tampered signed-bundle fixture failed before extraction and left the prior version active. Activation/rollback also performs durable-storage compatibility checks rather than treating a signed older binary as automatically safe.
+
+The Spike 13 test certificate/trust stores are fixture-only and are removed after the test. Production direct delivery must use a deliberate publisher-key/trust bootstrap and must never install a synthetic root certificate merely to make updates succeed.
 
 ## Remote gateway
 
@@ -291,6 +297,8 @@ Do not expose arbitrary shell execution through the public gateway.
 AI-facing remote/local execution should prefer validated command objects rather than raw arbitrary shell strings.
 
 The command registry defines allowed inputs and permissions.
+
+Phase 1 D-154 makes registry validation part of the execution boundary: the selected Rust core resolves the requested command/version, validates arguments before business logic, and validates successful results and error envelopes before returning them. Unsupported command versions, malformed payloads, undeclared command errors, and unsupported registry/schema features fail closed. This deterministic boundary does not depend on an AI/model judgment.
 
 ## Dashboard safety
 
@@ -349,7 +357,15 @@ Public adapters are executable third-party supply-chain components and must be t
 - apply time/resource limits and terminate/quarantine adapters that violate them
 - adapter failure must not corrupt or crash RELAY Core
 
-Out-of-process execution provides fault isolation but is not, by itself, a security sandbox. Security isolation requires OS-enforced restrictions or an equivalent brokered capability boundary. The exact Windows isolation mechanism remains a Phase 1 research decision.
+Out-of-process execution provides fault isolation but is not, by itself, a security sandbox. Security isolation requires OS-enforced restrictions or an equivalent brokered capability boundary. D-156 selects the required isolation semantics; D-157 selects the Windows release-candidate backend on qualified builds.
+
+Phase 1 D-155 proves the first Windows containment layer: workers launch on demand behind manifest/policy validation and are placed in a query-verified Job Object with kill-on-close, one active process, and a process-memory limit. Crash/hang/invalid-message failures are contained and feed backoff/quarantine.
+
+Phase 1 D-156 proves the stronger security semantics on the measured Windows fixture. An AppContainer/process sandbox denied filesystem access outside explicit grants, denied outbound TCP by default, minimized inherited environment, and—combined with the outer one-process Job Object—blocked second-process creation.
+
+D-157 moves the intended release path to Microsoft's documented AppContainer/LPAC launch APIs. Untrusted workers receive exactly one direct write grant: a broker-owned ephemeral mailbox. Project/user writes remain broker-mediated. Worker/project read access can be granted read-only. Direct worker network capabilities are disabled; egress is brokered through an explicit target allowlist.
+
+The Spike 12 fixture verifies that temporary mailbox/worker-tree security changes are restored after the process exits, including removal of the temporary Low-Integrity label. The experimental `Experimental_CreateProcessInSandbox` implementation remains reference-only and is never a release fallback. Unmeasured or unsupported Windows builds disable untrusted-adapter launch rather than falling back to an unrestricted worker.
 
 If an integration also installs code inside a target application, that companion component is part of the adapter's executable supply chain and must be inventoried separately.
 

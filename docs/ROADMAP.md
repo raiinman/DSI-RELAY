@@ -78,11 +78,30 @@ Exit criteria:
 
 ## Phase 1 — Technical spike and stack selection
 
-Status: Active
+Status: Complete — Phase 1 closed on 2026-09-25
 
 Gate: Passed — Phase 0 is closed. Stack choices become durable only after Phase 1 prototypes and benchmarks justify them.
 
 Goal: choose the minimum durable stack based on prototypes, not preference.
+
+Completed prototype evidence:
+
+- Spike 1: Node first proved the per-user host + CLI + structured command round trip.
+- Spike 2: Node first proved SQLite project/result/checkpoint durability with hard-kill recovery and degraded damaged-store behavior.
+- Spike 3: Evidence Storage Lifecycle compression/deduplication and BLOB-vs-file benchmark.
+- Spike 4: Windows indexing benchmark; notifications are hints, reconciliation + changed-only parsing is the least-privilege baseline, and USN reading remains optional/privileged.
+- Spike 5: resource coexistence benchmark against a live UEFN editor; foreground-safe deferral is primary, soft Windows QoS remains optional for unavoidable background work, and hard CPU caps are rejected as a routine default.
+- Spike 6: dashboard shell parity/resource benchmark; static/HTTP presentation hosted by `relayd` is favored over a separate resident dashboard backend.
+- Spike 7: neutral Node-vs-Rust runtime/IPC comparison; Rust materially improved footprint, startup/CLI latency, restart time, and explicit current-user pipe security while preserving protocol interoperability.
+- Spike 8: Rust reproduced the schema-1 SQLite durability/recovery contract, passed bidirectional database compatibility with Node, and retained a 92.23% post-storage idle-RSS reduction. D-153 selects Rust + bundled SQLite as the Phase 1 local core foundation.
+- Spike 9: one JSON command registry plus a bounded JSON Schema 2020-12 validation profile now drives Rust validation and derived CLI/dashboard/adapter/AI discovery metadata with no new runtime dependency. D-154 selects it as the semantic command-contract source.
+- Spike 10: synthetic out-of-process adapter broker/manifest benchmark; D-155 selects command-registry-bound on-demand workers with artifact/provenance checks, timeout/backoff/quarantine, and Windows Job Object lifecycle/resource containment while explicitly rejecting the claim that Job Objects are a complete security sandbox.
+- Spike 11: synthetic adversarial Windows sandbox benchmark; D-156 selects AppContainer/process isolation semantics with explicit filesystem grants, default-deny egress, broker-allowlisted capabilities, minimized environment, and outer Job Object limits. The measured experimental processmodel backend remains provisional rather than a release API commitment.
+- Spike 12: stable documented AppContainer/LPAC benchmark; D-157 selects mailbox-only direct writes, brokered egress, measured-build allowlisting, and fail-closed unsupported tiers while keeping the experimental backend reference-only.
+- Spike 13: packaging/update benchmark; D-158 selects signed per-user side-by-side bundles with verify → stage → atomic activation → schema-aware rollback as the default personal/direct Windows path, while retaining MSIX/App Installer as an optional trusted-signing/Store channel.
+- Spike 14: logging/diagnostic benchmark; D-159 selects bounded structured JSONL as the default local diagnostic record, with ETW optional deep tracing and independent diagnostics health surfaced in `status` / `doctor`.
+- Phase 1 closure review: PASS. Required stack decisions, CLI/host round trip, persistent result round trip, automated tests, startup/restart baselines, and idle CPU/RAM baselines are present.
+- Phase 2 handoff: first production Core slice is now accepted; active work continues under the Phase 2 section.
 
 Research/prototype:
 
@@ -148,6 +167,17 @@ Exit criteria:
 
 ## Phase 2 — Core and command system
 
+Status: Complete — Phase 2 closed on 2026-09-26 after three accepted production slices and a final 54-test workspace closure run.
+
+Completed promotion evidence:
+
+- First core vertical accepted: shared registry validation, schema-2 SQLite project/result/job/idempotency state, provenance/trust metadata, independent diagnostics health, per-user daemon, canonical CLI transport, graceful/hard restart persistence, damaged-store Degraded behavior, and low-footprint resource verification. Evidence: `PHASE2_FIRST_SLICE_EVIDENCE.md`.
+- Second core vertical accepted: permission/effect enforcement, trusted identity/project scope, schema-3 transaction/usage/credential/egress state, idempotent transaction de-duplication, data classification/local-only egress, credential-handle metadata/revocation, schema-1/2 migration, hard-restart persistence, and low-footprint resource verification. Evidence: `PHASE2_SECOND_SLICE_EVIDENCE.md`.
+- Third core vertical accepted: generic adapter manifest/broker lifecycle, artifact/component revalidation, registry-bound capabilities, bounded failure/quarantine behavior, qualified AppContainer/LPAC worker isolation, Job Object containment, package-lock concurrency, and measured inactive/invocation cost. Evidence: `PHASE2_THIRD_SLICE_EVIDENCE.md`.
+- Phase 2 closure review: PASS. All four published exit criteria pass and the exact accepted production tree passed 54 workspace tests. Evidence: `PHASE2_CLOSURE_REVIEW.md`.
+
+Current next work: Phase 3 project discovery and indexing.
+
 Build:
 
 - project registry
@@ -178,6 +208,8 @@ Exit criteria:
 - measured job metadata exists
 
 ## Phase 3 — Project discovery and indexing
+
+Status: Active — Phase 2 Core/command promotion is closed. Project discovery/indexing work begins from the accepted production workspace.
 
 Build:
 

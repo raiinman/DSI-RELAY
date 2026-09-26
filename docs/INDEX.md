@@ -2,11 +2,13 @@
 
 ## Start here
 
-1. PHASE1_START_HERE.md — active Phase 1 execution order and fresh-chat handoff.
+1. PHASE3_START_HERE.md — active Phase 3 execution order and fresh-chat handoff.
 2. PROJECT_PLAN.md — consolidated plan and current delivery target.
 3. PRODUCT_VISION.md — what RELAY is, who it serves, and what it must not become.
 4. SYSTEM_ARCHITECTURE.md — technical boundaries and data flow.
 5. ROADMAP.md — implementation order and milestone exit criteria.
+
+The accepted Phase 3 first-slice contract and results are in PHASE3_FIRST_SLICE.md and PHASE3_FIRST_SLICE_EVIDENCE.md.
 
 ## Core design
 

@@ -1,4 +1,5 @@
 pub mod diagnostics;
+pub mod indexing;
 pub mod policy;
 pub mod service;
 pub mod storage;

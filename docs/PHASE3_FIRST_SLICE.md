@@ -1,6 +1,6 @@
 # Phase 3 first slice
 
-Status: Active.
+Status: Accepted on the synthetic Windows fixture. Evidence: `PHASE3_FIRST_SLICE_EVIDENCE.md`. Phase 3 remains active.
 
 Goal: promote one generic multi-project discovery/indexing vertical into the production Rust workspace without adding tool-specific behavior.
 

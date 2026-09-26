@@ -6,7 +6,7 @@ Phase 3 — Project discovery and indexing — is active.
 
 Phase 2 is closed. The accepted production foundation is the Rust workspace containing `relay-contracts`, `relay-core`, `relayd`, `relay`, and `relay-adapter`.
 
-Phase 3 promotes project discovery/indexing behavior into that production workspace. Do not reopen Phase 1 stack selections or Phase 2 Core contracts without contradictory evidence.
+Phase 3 promotes project discovery/indexing behavior into that production workspace. The generic two-project first slice is accepted; see `PHASE3_FIRST_SLICE_EVIDENCE.md`. Do not reopen Phase 1 stack selections or Phase 2 Core contracts without contradictory evidence.
 
 ## Goal
 
@@ -54,7 +54,7 @@ Project-specific names, tool rules, and fixtures do not belong in Core.
 9. Phase 3 closure review against the published roadmap exit criteria
 ## First slice
 
-Use `PHASE3_FIRST_SLICE.md` as the acceptance contract.
+The first slice passed the `PHASE3_FIRST_SLICE.md` acceptance contract on its synthetic fixture. Use its evidence record as the baseline for the remaining Phase 3 work.
 
 The first slice must prove one production-shaped generic vertical:
 
@@ -70,6 +70,8 @@ The first slice must prove one production-shaped generic vertical:
 - measure idle overhead for multiple registered projects and changed-file latency
 
 No real editor integration or UEFN-specific parsing belongs in the first slice.
+
+The accepted implementation hashes changed candidates but still enumerates project metadata during reconciliation. Caller-provided watcher hints are supported; an OS watcher subscription, stronger continuity signal, dependency-edge extraction, and hardware-tier resource budgets remain Phase 3 work.
 ## Phase 3 rules
 
 - Never trust a watcher event as complete truth.
@@ -99,4 +101,4 @@ Phase 3 closes only when:
 
 For a fresh conversation:
 
-> Take over DSI RELAY Phase 3 from `phase3/project-discovery`. Read root `AGENTS.md`, `docs/AGENTS.md`, `docs/PHASE3_START_HERE.md`, and `docs/PHASE3_FIRST_SLICE.md` before editing. Phase 1 and Phase 2 are closed. Preserve the accepted Rust Core/command/authority/adapter contracts. Begin with the generic two-project discovery/baseline/changed-only indexing slice; keep it deterministic, synthetic, project-isolated, watcher-plus-reconciliation based, and benchmark-driven. Do not add UEFN-specific product behavior yet.
+> Take over DSI RELAY Phase 3 from `phase3/project-discovery`. Read root `AGENTS.md`, `docs/AGENTS.md`, `docs/PHASE3_START_HERE.md`, and `docs/PHASE3_FIRST_SLICE_EVIDENCE.md` before editing. Phase 1 and Phase 2 are closed, and the synthetic two-project first slice is accepted. Preserve the Rust Core/command/authority/adapter contracts. Continue generic continuity handling, change/delta and dependency-edge foundations, and resource evidence from the accepted schema-4 baseline. Keep project files authoritative, watcher events as hints, and UEFN-specific behavior outside Core.

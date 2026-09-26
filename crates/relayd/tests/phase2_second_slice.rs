@@ -214,7 +214,7 @@ fn authority_transactions_usage_and_egress_survive_restart() {
     let mut second = spawn_host(&dir, instance);
     let second_state = wait_state(&dir, second.id());
     assert_eq!(second_state.recovery_state, "Healthy");
-    assert_eq!(second_state.storage_schema_version, Some(3));
+    assert_eq!(second_state.storage_schema_version, Some(4));
 
     let transactions = call(
         &second_state,

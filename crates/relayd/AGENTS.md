@@ -23,6 +23,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 - graceful and hard-kill restart recovery with durable project/result/job verification.
 - damaged operational storage starts Degraded without replacement.
 - current-user pipe security verification.
+- Synthetic Phase 3 two-project import, baseline, reconciliation, privacy, resource, graceful-restart, and hard-restart coverage through `tests/phase3_first_slice.rs`.
 
 # Child DOX Index
 

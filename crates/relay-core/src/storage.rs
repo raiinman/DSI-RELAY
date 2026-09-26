@@ -1,3 +1,4 @@
+use crate::indexing::{IndexChange, IndexedFileSnapshot};
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -7,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const STORAGE_SCHEMA_VERSION: i64 = 3;
+pub const STORAGE_SCHEMA_VERSION: i64 = 4;
 static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,6 +67,31 @@ pub struct ProjectRecord {
     pub created_at: String,
     pub updated_at: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectIndexState {
+    pub project_id: String,
+    pub generation: i64,
+    pub status: String,
+    pub file_count: u64,
+    pub total_bytes: u64,
+    pub last_reconciled_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectChangeRecord {
+    pub id: String,
+    pub project_id: String,
+    pub generation: i64,
+    pub change_kind: String,
+    pub relative_path: String,
+    pub previous_path: Option<String>,
+    pub before_sha256: Option<String>,
+    pub after_sha256: Option<String>,
+    pub detected_at: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResultRecord {
     pub id: String,
@@ -264,6 +290,10 @@ fn sha256_hex(bytes: &[u8]) -> String {
     }
     output
 }
+fn sql_i64(value: u64) -> i64 {
+    i64::try_from(value).unwrap_or(i64::MAX)
+}
+
 fn json_text(value: &Value) -> Result<String, StorageError> {
     serde_json::to_string(value).map_err(|error| {
         StorageError::new(
@@ -354,6 +384,9 @@ impl RelayStorage {
         }
         if self.schema_version()? < 3 {
             self.apply_schema_three()?;
+        }
+        if self.schema_version()? < 4 {
+            self.apply_schema_four()?;
         }
         Ok(())
     }
@@ -581,6 +614,69 @@ impl RelayStorage {
         })
     }
 
+    fn apply_schema_four(&mut self) -> Result<(), StorageError> {
+        let applied_at = sqlite_now(&self.conn)?;
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| {
+                StorageError::sqlite("begin schema-4 migration", error)
+            })?;
+
+        tx.execute_batch(
+            "CREATE TABLE project_index_state (
+               project_id TEXT PRIMARY KEY
+                 REFERENCES projects(id) ON DELETE CASCADE,
+               generation INTEGER NOT NULL,
+               status TEXT NOT NULL,
+               file_count INTEGER NOT NULL,
+               total_bytes INTEGER NOT NULL,
+               last_reconciled_at TEXT NOT NULL,
+               updated_at TEXT NOT NULL
+             );
+
+             CREATE TABLE project_files (
+               project_id TEXT NOT NULL
+                 REFERENCES projects(id) ON DELETE CASCADE,
+               relative_path TEXT NOT NULL,
+               size_bytes INTEGER NOT NULL,
+               modified_unix_ns INTEGER NOT NULL,
+               content_sha256 TEXT NOT NULL,
+               indexed_at TEXT NOT NULL,
+               PRIMARY KEY(project_id, relative_path)
+             );
+             CREATE TABLE project_changes (
+               id TEXT PRIMARY KEY,
+               project_id TEXT NOT NULL
+                 REFERENCES projects(id) ON DELETE CASCADE,
+               generation INTEGER NOT NULL,
+               change_kind TEXT NOT NULL,
+               relative_path TEXT NOT NULL,
+               previous_path TEXT,
+               before_sha256 TEXT,
+               after_sha256 TEXT,
+               detected_at TEXT NOT NULL
+             );
+             CREATE INDEX project_changes_project_generation
+               ON project_changes(project_id, generation, detected_at);",
+        )
+        .map_err(|error| {
+            StorageError::sqlite("create schema-4 project index tables", error)
+        })?;
+
+        tx.execute(
+            "INSERT INTO schema_migrations(version, applied_at)
+             VALUES (?1, ?2)",
+            params![4i64, applied_at],
+        )
+        .map_err(|error| {
+            StorageError::sqlite("record schema migration 4", error)
+        })?;
+        tx.commit().map_err(|error| {
+            StorageError::sqlite("commit schema migration 4", error)
+        })
+    }
+
     pub fn db_path(&self) -> &Path {
         &self.db_path
     }
@@ -709,6 +805,378 @@ impl RelayStorage {
             })?);
         }
         Ok(projects)
+    }
+
+    pub fn get_project_index_state(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<ProjectIndexState>, StorageError> {
+        self.conn
+            .query_row(
+                "SELECT project_id, generation, status, file_count,
+                        total_bytes, last_reconciled_at, updated_at
+                 FROM project_index_state WHERE project_id = ?1",
+                [project_id],
+                |row| {
+                    Ok(ProjectIndexState {
+                        project_id: row.get(0)?,
+                        generation: row.get(1)?,
+                        status: row.get(2)?,
+                        file_count: row.get::<_, i64>(3)?.max(0) as u64,
+                        total_bytes: row.get::<_, i64>(4)?.max(0) as u64,
+                        last_reconciled_at: row.get(5)?,
+                        updated_at: row.get(6)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|error| {
+                StorageError::sqlite("read project index state", error)
+            })
+    }
+
+    pub fn list_project_files(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<IndexedFileSnapshot>, StorageError> {
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT relative_path, size_bytes, modified_unix_ns,
+                        content_sha256
+                 FROM project_files
+                 WHERE project_id = ?1
+                 ORDER BY relative_path",
+            )
+            .map_err(|error| {
+                StorageError::sqlite("prepare project file list", error)
+            })?;
+        let rows = statement
+            .query_map([project_id], |row| {
+                Ok(IndexedFileSnapshot {
+                    relative_path: row.get(0)?,
+                    size_bytes: row.get::<_, i64>(1)?.max(0) as u64,
+                    modified_unix_ns: row.get::<_, i64>(2)?.max(0) as u64,
+                    content_sha256: row.get(3)?,
+                })
+            })
+            .map_err(|error| {
+                StorageError::sqlite("query project file list", error)
+            })?;
+
+        let mut files = Vec::new();
+        for row in rows {
+            files.push(row.map_err(|error| {
+                StorageError::sqlite("decode project file row", error)
+            })?);
+        }
+        Ok(files)
+    }
+
+    pub fn replace_project_baseline(
+        &self,
+        project_id: &str,
+        files: &[IndexedFileSnapshot],
+        total_bytes: u64,
+    ) -> Result<ProjectIndexState, StorageError> {
+        let now = sqlite_now(&self.conn)?;
+        let tx = self.conn.unchecked_transaction().map_err(|error| {
+            StorageError::sqlite("begin project baseline transaction", error)
+        })?;
+
+        let project_exists: i64 = tx
+            .query_row(
+                "SELECT COUNT(*) FROM projects WHERE id = ?1",
+                [project_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| {
+                StorageError::sqlite("verify project for baseline", error)
+            })?;
+        if project_exists == 0 {
+            return Err(StorageError::new(
+                "PROJECT_NOT_FOUND",
+                "project not found",
+            ));
+        }
+
+        let current_generation: Option<i64> = tx
+            .query_row(
+                "SELECT generation FROM project_index_state
+                 WHERE project_id = ?1",
+                [project_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| {
+                StorageError::sqlite("read baseline generation", error)
+            })?;
+        let generation = current_generation.unwrap_or(0).saturating_add(1);
+
+        tx.execute(
+            "DELETE FROM project_files WHERE project_id = ?1",
+            [project_id],
+        )
+        .map_err(|error| {
+            StorageError::sqlite("clear prior project files", error)
+        })?;
+        tx.execute(
+            "DELETE FROM project_changes WHERE project_id = ?1",
+            [project_id],
+        )
+        .map_err(|error| {
+            StorageError::sqlite("clear prior project changes", error)
+        })?;
+
+        for file in files {
+            tx.execute(
+                "INSERT INTO project_files(
+                    project_id, relative_path, size_bytes,
+                    modified_unix_ns, content_sha256, indexed_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    project_id,
+                    file.relative_path,
+                    sql_i64(file.size_bytes),
+                    sql_i64(file.modified_unix_ns),
+                    file.content_sha256,
+                    now,
+                ],
+            )
+            .map_err(|error| {
+                StorageError::sqlite("insert baseline file", error)
+            })?;
+        }
+
+        tx.execute(
+            "INSERT INTO project_index_state(
+                project_id, generation, status, file_count,
+                total_bytes, last_reconciled_at, updated_at
+             ) VALUES (?1, ?2, 'ready', ?3, ?4, ?5, ?5)
+             ON CONFLICT(project_id) DO UPDATE SET
+               generation=excluded.generation,
+               status=excluded.status,
+               file_count=excluded.file_count,
+               total_bytes=excluded.total_bytes,
+               last_reconciled_at=excluded.last_reconciled_at,
+               updated_at=excluded.updated_at",
+            params![
+                project_id,
+                generation,
+                i64::try_from(files.len()).unwrap_or(i64::MAX),
+                sql_i64(total_bytes),
+                now,
+            ],
+        )
+        .map_err(|error| {
+            StorageError::sqlite("write project baseline state", error)
+        })?;
+
+        tx.commit().map_err(|error| {
+            StorageError::sqlite("commit project baseline", error)
+        })?;
+        self.get_project_index_state(project_id)?
+            .ok_or_else(|| StorageError::new(
+                "STORAGE_ERROR",
+                "project index state disappeared after baseline write",
+            ))
+    }
+
+    pub fn apply_project_reconciliation(
+        &self,
+        project_id: &str,
+        expected_generation: i64,
+        touched_files: &[IndexedFileSnapshot],
+        changes: &[IndexChange],
+        file_count: usize,
+        total_bytes: u64,
+    ) -> Result<ProjectIndexState, StorageError> {
+        let now = sqlite_now(&self.conn)?;
+        let tx = self.conn.unchecked_transaction().map_err(|error| {
+            StorageError::sqlite("begin project reconciliation", error)
+        })?;
+
+        let current_generation: Option<i64> = tx
+            .query_row(
+                "SELECT generation FROM project_index_state
+                 WHERE project_id = ?1",
+                [project_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| {
+                StorageError::sqlite("read reconciliation generation", error)
+            })?;
+
+        let Some(current_generation) = current_generation else {
+            return Err(StorageError::new(
+                "INDEX_BASELINE_MISSING",
+                "project baseline is missing",
+            ));
+        };
+        if current_generation != expected_generation {
+            return Err(StorageError::new(
+                "INDEX_GENERATION_CONFLICT",
+                format!(
+                    "expected project index generation {expected_generation}, found {current_generation}"
+                ),
+            ));
+        }
+        let next_generation = current_generation.saturating_add(1);
+
+        for change in changes {
+            match change.change_kind.as_str() {
+                "deleted" => {
+                    tx.execute(
+                        "DELETE FROM project_files
+                         WHERE project_id = ?1 AND relative_path = ?2",
+                        params![project_id, change.relative_path],
+                    )
+                    .map_err(|error| {
+                        StorageError::sqlite("delete indexed file", error)
+                    })?;
+                }
+                "renamed" => {
+                    if let Some(previous_path) = &change.previous_path {
+                        tx.execute(
+                            "DELETE FROM project_files
+                             WHERE project_id = ?1 AND relative_path = ?2",
+                            params![project_id, previous_path],
+                        )
+                        .map_err(|error| {
+                            StorageError::sqlite(
+                                "remove renamed indexed path",
+                                error,
+                            )
+                        })?;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        for file in touched_files {
+            tx.execute(
+                "INSERT INTO project_files(
+                    project_id, relative_path, size_bytes,
+                    modified_unix_ns, content_sha256, indexed_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(project_id, relative_path) DO UPDATE SET
+                   size_bytes=excluded.size_bytes,
+                   modified_unix_ns=excluded.modified_unix_ns,
+                   content_sha256=excluded.content_sha256,
+                   indexed_at=excluded.indexed_at",
+                params![
+                    project_id,
+                    file.relative_path,
+                    sql_i64(file.size_bytes),
+                    sql_i64(file.modified_unix_ns),
+                    file.content_sha256,
+                    now,
+                ],
+            )
+            .map_err(|error| {
+                StorageError::sqlite("upsert reconciled file", error)
+            })?;
+        }
+
+        for change in changes {
+            tx.execute(
+                "INSERT INTO project_changes(
+                    id, project_id, generation, change_kind,
+                    relative_path, previous_path,
+                    before_sha256, after_sha256, detected_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    opaque_id("CHG"),
+                    project_id,
+                    next_generation,
+                    change.change_kind,
+                    change.relative_path,
+                    change.previous_path,
+                    change.before_sha256,
+                    change.after_sha256,
+                    now,
+                ],
+            )
+            .map_err(|error| {
+                StorageError::sqlite("record project change", error)
+            })?;
+        }
+
+        tx.execute(
+            "UPDATE project_index_state
+             SET generation = ?2,
+                 status = 'ready',
+                 file_count = ?3,
+                 total_bytes = ?4,
+                 last_reconciled_at = ?5,
+                 updated_at = ?5
+             WHERE project_id = ?1",
+            params![
+                project_id,
+                next_generation,
+                i64::try_from(file_count).unwrap_or(i64::MAX),
+                sql_i64(total_bytes),
+                now,
+            ],
+        )
+        .map_err(|error| {
+            StorageError::sqlite("update project index state", error)
+        })?;
+
+        tx.commit().map_err(|error| {
+            StorageError::sqlite("commit project reconciliation", error)
+        })?;
+        self.get_project_index_state(project_id)?
+            .ok_or_else(|| StorageError::new(
+                "STORAGE_ERROR",
+                "project index state disappeared after reconciliation",
+            ))
+    }
+
+    pub fn list_project_changes(
+        &self,
+        project_id: &str,
+        limit: usize,
+    ) -> Result<Vec<ProjectChangeRecord>, StorageError> {
+        let mut statement = self.conn.prepare(
+            "SELECT id, project_id, generation, change_kind,
+                    relative_path, previous_path,
+                    before_sha256, after_sha256, detected_at
+             FROM project_changes
+             WHERE project_id = ?1
+             ORDER BY generation DESC, detected_at DESC, id DESC
+             LIMIT ?2",
+        ).map_err(|error| {
+            StorageError::sqlite("prepare project change list", error)
+        })?;
+        let rows = statement.query_map(
+            params![project_id, i64::try_from(limit).unwrap_or(i64::MAX)],
+            |row| {
+                Ok(ProjectChangeRecord {
+                    id: row.get(0)?,
+                    project_id: row.get(1)?,
+                    generation: row.get(2)?,
+                    change_kind: row.get(3)?,
+                    relative_path: row.get(4)?,
+                    previous_path: row.get(5)?,
+                    before_sha256: row.get(6)?,
+                    after_sha256: row.get(7)?,
+                    detected_at: row.get(8)?,
+                })
+            },
+        ).map_err(|error| {
+            StorageError::sqlite("query project change list", error)
+        })?;
+
+        let mut records = Vec::new();
+        for row in rows {
+            records.push(row.map_err(|error| {
+                StorageError::sqlite("decode project change row", error)
+            })?);
+        }
+        Ok(records)
     }
 
     pub fn put_result(
@@ -1571,12 +2039,12 @@ mod tests {
     }
 
     #[test]
-    fn fresh_store_uses_schema_three_and_typed_records() {
+    fn fresh_store_uses_schema_four_and_typed_records() {
         let dir = temp_dir("fresh");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 3);
+        assert_eq!(storage.schema_version().unwrap(), 4);
         let project = storage
             .register_project(
                 Some("PRJ-production"),
@@ -1629,7 +2097,7 @@ mod tests {
         create_schema_one_fixture(&path);
 
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 3);
+        assert_eq!(storage.schema_version().unwrap(), 4);
         let project = storage.get_project("PRJ-phase1").unwrap().unwrap();
         assert_eq!(project.name, "Phase 1 Fixture");
 
@@ -1646,14 +2114,14 @@ mod tests {
         fs::remove_dir_all(dir).unwrap();
     }
     #[test]
-    fn schema_two_fixture_migrates_to_three_without_replay_loss() {
+    fn schema_two_fixture_migrates_to_four_without_replay_loss() {
         let dir = temp_dir("schema2");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
         create_schema_two_fixture(&path);
 
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 3);
+        assert_eq!(storage.schema_version().unwrap(), 4);
         let result = storage.get_result("RES-phase1").unwrap().unwrap();
         assert_eq!(result.payload["value"], 42);
         assert_eq!(result.trust, "local");
@@ -1667,6 +2135,244 @@ mod tests {
         assert!(storage.list_transactions(None, 10).unwrap().is_empty());
 
         drop(storage);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn schema_three_fixture_migrates_to_four_without_authority_loss() {
+        let dir = temp_dir("schema3-to-schema4");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("relay.sqlite3");
+        create_schema_two_fixture(&path);
+
+        let conn = Connection::open(&path).unwrap();
+        let mut schema_three = RelayStorage {
+            db_path: path.clone(),
+            conn,
+        };
+        schema_three.configure().unwrap();
+        schema_three.apply_schema_three().unwrap();
+        assert_eq!(schema_three.schema_version().unwrap(), 3);
+
+        let transaction = schema_three
+            .begin_transaction(NewTransaction {
+                project_id: Some("PRJ-phase1"),
+                request_id: "REQ-schema3",
+                command: "result.put",
+                effect_class: "relay_state_write",
+                permission: "state_write",
+                actor_id: "ACTOR-schema3",
+                client_id: "CLIENT-schema3",
+                delegator_id: Some("USER-schema3"),
+                request_sha256: "schema3-sha",
+                intended_summary: "preserve authority state",
+                rollback_status: "not_available",
+            })
+            .unwrap();
+        schema_three
+            .finish_transaction(
+                &transaction.id,
+                "COMPLETED",
+                Some("RES-phase1"),
+                "verified",
+                Some("RES-phase1"),
+                Some("JOB-phase1"),
+                None,
+            )
+            .unwrap();
+        schema_three
+            .record_usage(UsageMetricInput {
+                request_id: "REQ-schema3",
+                command: "result.put",
+                command_version: 1,
+                actor_id: "ACTOR-schema3",
+                client_id: "CLIENT-schema3",
+                delegator_id: Some("USER-schema3"),
+                project_id: Some("PRJ-phase1"),
+                effect_class: "relay_state_write",
+                permission: "state_write",
+                ok: true,
+                replayed: false,
+                elapsed_ms: 7,
+                request_bytes: 100,
+                response_bytes: 80,
+                remote_calls: 0,
+                model_tokens_in: 0,
+                model_tokens_out: 0,
+            })
+            .unwrap();
+        schema_three
+            .upsert_credential_handle(
+                "credential.schema3",
+                "fixture",
+                &["read".to_string()],
+                "active",
+            )
+            .unwrap();
+        let egress = schema_three
+            .record_egress(EgressLedgerInput {
+                project_id: Some("PRJ-phase1"),
+                request_id: "REQ-schema3-egress",
+                actor_id: "ACTOR-schema3",
+                client_id: "CLIENT-schema3",
+                delegator_id: Some("USER-schema3"),
+                destination: "fixture-destination",
+                data_classes: &["project".to_string()],
+                modalities: &["text".to_string()],
+                source_refs: &["RES-phase1".to_string()],
+                purpose: "fixture",
+                approx_bytes: 42,
+                approx_tokens: 10,
+                credential_handle: Some("credential.schema3"),
+                decision: "blocked",
+                reason: "fixture policy",
+            })
+            .unwrap();
+        drop(schema_three);
+
+        let migrated = RelayStorage::open(&path).unwrap();
+        assert_eq!(migrated.schema_version().unwrap(), 4);
+        assert_eq!(migrated.get_project("PRJ-phase1").unwrap().unwrap().name, "Phase 1 Fixture");
+        assert_eq!(migrated.get_result("RES-phase1").unwrap().unwrap().payload["value"], 42);
+        assert!(migrated.get_job("JOB-phase1").unwrap().is_some());
+        assert!(migrated.get_idempotency("IDEMP-schema2").unwrap().is_some());
+        let preserved = migrated.get_transaction(&transaction.id).unwrap().unwrap();
+        assert_eq!(preserved.actor_id, "ACTOR-schema3");
+        assert_eq!(preserved.client_id, "CLIENT-schema3");
+        assert_eq!(preserved.delegator_id.as_deref(), Some("USER-schema3"));
+        assert_eq!(preserved.state, "COMPLETED");
+        assert_eq!(migrated.usage_summary().unwrap().command_count, 1);
+        assert_eq!(
+            migrated.get_credential_handle("credential.schema3").unwrap().unwrap().status,
+            "active"
+        );
+        assert_eq!(migrated.get_egress(&egress.id).unwrap().unwrap().decision, "blocked");
+        assert!(migrated.get_project_index_state("PRJ-phase1").unwrap().is_none());
+        assert!(migrated.list_project_files("PRJ-phase1").unwrap().is_empty());
+        drop(migrated);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn schema_four_project_index_round_trip_and_generation_guard() {
+        let dir = temp_dir("schema4-index");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("relay.sqlite3");
+        let storage = RelayStorage::open(&path).unwrap();
+        storage
+            .register_project(
+                Some("PRJ-index-a"),
+                "Index A",
+                "file:///fixture-a",
+            )
+            .unwrap();
+        storage
+            .register_project(
+                Some("PRJ-index-b"),
+                "Index B",
+                "file:///fixture-b",
+            )
+            .unwrap();
+
+        let a_files = vec![
+            IndexedFileSnapshot {
+                relative_path: "src/a.txt".to_string(),
+                size_bytes: 10,
+                modified_unix_ns: 100,
+                content_sha256: "a".repeat(64),
+            },
+            IndexedFileSnapshot {
+                relative_path: "src/shared.txt".to_string(),
+                size_bytes: 20,
+                modified_unix_ns: 101,
+                content_sha256: "b".repeat(64),
+            },
+        ];
+        let b_files = vec![IndexedFileSnapshot {
+            relative_path: "src/shared.txt".to_string(),
+            size_bytes: 30,
+            modified_unix_ns: 200,
+            content_sha256: "c".repeat(64),
+        }];
+
+        let a_state = storage
+            .replace_project_baseline("PRJ-index-a", &a_files, 30)
+            .unwrap();
+        let b_state = storage
+            .replace_project_baseline("PRJ-index-b", &b_files, 30)
+            .unwrap();
+        assert_eq!(a_state.generation, 1);
+        assert_eq!(b_state.generation, 1);
+        assert_eq!(storage.list_project_files("PRJ-index-a").unwrap(), a_files);
+        assert_eq!(storage.list_project_files("PRJ-index-b").unwrap(), b_files);
+
+        let touched = vec![IndexedFileSnapshot {
+            relative_path: "src/a.txt".to_string(),
+            size_bytes: 11,
+            modified_unix_ns: 300,
+            content_sha256: "d".repeat(64),
+        }];
+        let changes = vec![IndexChange {
+            change_kind: "modified".to_string(),
+            relative_path: "src/a.txt".to_string(),
+            previous_path: None,
+            before_sha256: Some("a".repeat(64)),
+            after_sha256: Some("d".repeat(64)),
+        }];
+        let next = storage
+            .apply_project_reconciliation(
+                "PRJ-index-a",
+                1,
+                &touched,
+                &changes,
+                2,
+                31,
+            )
+            .unwrap();
+        assert_eq!(next.generation, 2);
+        assert_eq!(
+            storage.list_project_files("PRJ-index-a").unwrap()[0]
+                .content_sha256,
+            "d".repeat(64)
+        );
+        assert_eq!(
+            storage.list_project_files("PRJ-index-b").unwrap(),
+            b_files
+        );
+        let history = storage
+            .list_project_changes("PRJ-index-a", 10)
+            .unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].generation, 2);
+
+        let error = storage
+            .apply_project_reconciliation(
+                "PRJ-index-a",
+                1,
+                &[],
+                &[],
+                2,
+                31,
+            )
+            .expect_err("stale generation must fail");
+        assert_eq!(error.code, "INDEX_GENERATION_CONFLICT");
+
+        drop(storage);
+        let reopened = RelayStorage::open(&path).unwrap();
+        assert_eq!(reopened.schema_version().unwrap(), 4);
+        assert_eq!(
+            reopened
+                .get_project_index_state("PRJ-index-a")
+                .unwrap()
+                .unwrap()
+                .generation,
+            2
+        );
+        assert_eq!(
+            reopened.list_project_files("PRJ-index-b").unwrap(),
+            b_files
+        );
+        drop(reopened);
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -1705,7 +2411,7 @@ mod tests {
         fs::remove_dir_all(dir).unwrap();
     }
     #[test]
-    fn schema_three_transaction_usage_credential_and_egress_round_trip() {
+    fn schema_four_transaction_usage_credential_and_egress_round_trip() {
         let dir = temp_dir("schema3");
         fs::create_dir_all(&dir).unwrap();
         let storage =

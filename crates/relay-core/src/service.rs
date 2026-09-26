@@ -2,6 +2,7 @@ use crate::diagnostics::{
     DiagnosticConfig, DiagnosticEvent, DiagnosticHealth,
     JsonlDiagnostics, Severity,
 };
+use crate::indexing;
 use crate::policy::{
     CredentialHandle, DataClass, EgressDecision, EgressRequest,
     ExecutionAuthority,
@@ -17,7 +18,7 @@ use relay_contracts::{
 };
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -529,7 +530,7 @@ impl RelayCore {
             })?;
 
         let project_id = match request.command.as_str() {
-            "project.register" => {
+            "project.register" | "project.import" => {
                 request.arguments.get("id").and_then(Value::as_str)
             }
             "result.put" | "job.checkpoint" => {
@@ -546,7 +547,10 @@ impl RelayCore {
 
         if project_id.is_some()
             || (authority.project_ids.is_some()
-                && request.command == "project.register")
+                && matches!(
+                    request.command.as_str(),
+                    "project.register" | "project.import"
+                ))
         {
             authority.require_project(project_id).map_err(|error| {
                 CoreCommandError::new(error.code, error.message)
@@ -569,7 +573,10 @@ impl RelayCore {
     fn transaction_project_id<'a>(
         request: &'a CommandRequest,
     ) -> Option<&'a str> {
-        if request.command == "project.register" {
+        if matches!(
+            request.command.as_str(),
+            "project.register" | "project.import"
+        ) {
             return None;
         }
         request
@@ -640,8 +647,10 @@ impl RelayCore {
         let state = if response.ok { "COMPLETED" } else { "FAILED" };
         let verification = if response.ok { "verified" } else { "failed" };
 
-        let project_id = if request.command == "project.register"
-            && response.ok
+        let project_id = if matches!(
+            request.command.as_str(),
+            "project.register" | "project.import"
+        ) && response.ok
         {
             after_ref
         } else {
@@ -741,7 +750,10 @@ impl RelayCore {
         {
             return Some(project_id.to_string());
         }
-        if request.command == "project.register" && response.ok {
+        if matches!(
+            request.command.as_str(),
+            "project.register" | "project.import"
+        ) && response.ok {
             return response
                 .result
                 .as_ref()
@@ -844,7 +856,19 @@ impl RelayCore {
             "project.register" => {
                 self.project_register(&request.arguments)
             }
+            "project.import" => {
+                self.project_import(&request.arguments)
+            }
             "project.list" => self.project_list(authority),
+            "project.index.build" => {
+                self.project_index_build(&request.arguments)
+            }
+            "project.index.reconcile" => {
+                self.project_index_reconcile(&request.arguments)
+            }
+            "project.capabilities" => {
+                self.project_capabilities(&request.arguments)
+            }
             "result.put" => self.result_put(request),
             "result.get" => self.result_get(&request.arguments, authority),
             "job.checkpoint" => self.job_checkpoint(request),
@@ -1035,6 +1059,31 @@ impl RelayCore {
         })
     }
 
+    fn project_import(
+        &self,
+        arguments: &Value,
+    ) -> Result<Value, CoreCommandError> {
+        let name = arguments["name"]
+            .as_str()
+            .expect("registry validation requires name");
+        let root_path = arguments["root_path"]
+            .as_str()
+            .expect("registry validation requires root_path");
+        let id = arguments.get("id").and_then(Value::as_str);
+        let root = indexing::canonical_project_root(root_path)
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        let root_uri = root.to_string_lossy().to_string();
+        let project = self.with_storage(|storage| {
+            storage.register_project(id, name, &root_uri)
+        })?;
+        Ok(json!({
+            "id": project.id,
+            "name": project.name,
+            "root_canonicalized": true,
+            "baseline_state": "missing"
+        }))
+    }
+
     fn project_list(
         &self,
         authority: &ExecutionAuthority,
@@ -1045,7 +1094,206 @@ impl RelayCore {
         if let Some(allowed) = &authority.project_ids {
             projects.retain(|project| allowed.contains(&project.id));
         }
+        for project in &mut projects {
+            if Path::new(&project.root_uri).is_absolute() {
+                project.root_uri = format!("local-project:{}", project.id);
+            }
+        }
         Ok(json!({ "projects": projects }))
+    }
+
+    fn project_index_build(
+        &self,
+        arguments: &Value,
+    ) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"]
+            .as_str()
+            .expect("registry validation requires project_id");
+        let project = self.with_storage(|storage| {
+            storage.get_project(project_id)
+        })?.ok_or_else(|| {
+            CoreCommandError::new("PROJECT_NOT_FOUND", "project not found")
+        })?;
+        let root = indexing::canonical_project_root(&project.root_uri)
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        let plan = indexing::build_baseline(&root)
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        let state = self.with_storage(|storage| {
+            storage.replace_project_baseline(
+                project_id,
+                &plan.files,
+                plan.stats.total_bytes,
+            )
+        })?;
+        Ok(json!({
+            "project_id": project_id,
+            "generation": state.generation,
+            "file_count": state.file_count,
+            "total_bytes": state.total_bytes,
+            "files_hashed": plan.stats.files_hashed,
+            "symlinks_skipped": plan.stats.symlinks_skipped,
+            "elapsed_ms": plan.stats.elapsed_ms,
+            "mode": "baseline"
+        }))
+    }
+
+    fn project_index_reconcile(
+        &self,
+        arguments: &Value,
+    ) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"]
+            .as_str()
+            .expect("registry validation requires project_id");
+        let hints: Vec<String> = arguments
+            .get("hints")
+            .and_then(Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let (project, index_state, previous) = self.with_storage(|storage| {
+            let project = storage
+                .get_project(project_id)?
+                .ok_or_else(|| {
+                    StorageError::new(
+                        "PROJECT_NOT_FOUND",
+                        "project not found",
+                    )
+                })?;
+            let state = storage
+                .get_project_index_state(project_id)?
+                .ok_or_else(|| {
+                    StorageError::new(
+                        "INDEX_BASELINE_MISSING",
+                        "project baseline is missing",
+                    )
+                })?;
+            let files = storage.list_project_files(project_id)?;
+            Ok((project, state, files))
+        })?;
+
+        let root = indexing::canonical_project_root(&project.root_uri)
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        let plan = indexing::reconcile(&root, &previous, &hints)
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        let state = self.with_storage(|storage| {
+            storage.apply_project_reconciliation(
+                project_id,
+                index_state.generation,
+                &plan.touched_files,
+                &plan.changes,
+                plan.files.len(),
+                plan.stats.total_bytes,
+            )
+        })?;
+
+        Ok(json!({
+            "project_id": project_id,
+            "generation": state.generation,
+            "file_count": state.file_count,
+            "total_bytes": state.total_bytes,
+            "files_hashed": plan.stats.files_hashed,
+            "files_unchanged": plan.stats.files_unchanged,
+            "hint_count": plan.stats.hint_count,
+            "hint_hits": plan.stats.hint_hits,
+            "changes": plan.changes,
+            "elapsed_ms": plan.stats.elapsed_ms,
+            "mode": "reconcile"
+        }))
+    }
+
+    fn project_capabilities(
+        &self,
+        arguments: &Value,
+    ) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"]
+            .as_str()
+            .expect("registry validation requires project_id");
+        let (project, state) = self.with_storage(|storage| {
+            let project = storage
+                .get_project(project_id)?
+                .ok_or_else(|| {
+                    StorageError::new(
+                        "PROJECT_NOT_FOUND",
+                        "project not found",
+                    )
+                })?;
+            let state = storage.get_project_index_state(project_id)?;
+            Ok((project, state))
+        })?;
+
+        let root_available =
+            indexing::canonical_project_root(&project.root_uri).is_ok();
+        let baseline_ready = state
+            .as_ref()
+            .map(|state| state.status == "ready")
+            .unwrap_or(false);
+        let baseline_state = if !root_available {
+            "unavailable"
+        } else if baseline_ready {
+            "ready"
+        } else {
+            "missing"
+        };
+
+        let mut capabilities = Vec::new();
+        capabilities.push(json!({
+            "id": "filesystem.read",
+            "state": if root_available { "available" } else { "unavailable" },
+            "detail": if root_available {
+                "canonical project root is readable"
+            } else {
+                "canonical project root is unavailable"
+            }
+        }));
+        capabilities.push(json!({
+            "id": "index.baseline",
+            "state": if root_available { "available" } else { "unavailable" },
+            "detail": if !root_available {
+                "project root is unavailable"
+            } else if baseline_ready {
+                "durable baseline exists"
+            } else {
+                "baseline can be built when the project root is available"
+            }
+        }));
+        capabilities.push(json!({
+            "id": "index.changed_only",
+            "state": if !root_available { "unavailable" } else if baseline_ready { "available" } else { "unknown" },
+            "detail": if !root_available {
+                "project root is unavailable"
+            } else if baseline_ready {
+                "metadata reconciliation hashes only new or metadata-changed files"
+            } else {
+                "requires a healthy baseline"
+            }
+        }));
+        capabilities.push(json!({
+            "id": "watcher.hints",
+            "state": "available",
+            "detail": "watcher paths are hints; authoritative reconciliation remains required"
+        }));
+        capabilities.push(json!({
+            "id": "reconciliation",
+            "state": if root_available { "available" } else { "unavailable" },
+            "detail": "filesystem metadata reconciliation is authoritative"
+        }));
+        capabilities.push(json!({
+            "id": "dependency_graph",
+            "state": "unknown",
+            "detail": "dependency-edge promotion is a later Phase 3 slice"
+        }));
+
+        Ok(json!({
+            "project_id": project_id,
+            "baseline_state": baseline_state,
+            "capabilities": capabilities
+        }))
     }
 
     fn result_put(
@@ -2077,6 +2325,60 @@ mod tests {
             denied_write.error.unwrap().code,
             "PROJECT_SCOPE_DENIED"
         );
+
+        drop(core);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn project_scope_blocks_cross_project_index_commands() {
+        let dir = temp_dir("phase3-index-scope");
+        let root_a = dir.join("alpha");
+        let root_b = dir.join("bravo");
+        fs::create_dir_all(&root_a).unwrap();
+        fs::create_dir_all(&root_b).unwrap();
+        fs::write(root_a.join("same.txt"), b"alpha").unwrap();
+        fs::write(root_b.join("same.txt"), b"bravo").unwrap();
+        let core = RelayCore::open(CoreConfig::new(dir.join("state")));
+        let runtime = runtime();
+
+        for (id, root) in [("PRJ-a", &root_a), ("PRJ-b", &root_b)] {
+            let mut import = request(
+                &format!("REQ-import-{id}"),
+                "project.import",
+                json!({
+                    "id": id,
+                    "name": id,
+                    "root_path": root.to_string_lossy()
+                }),
+            );
+            import.idempotency_key = Some(format!("IDEMP-import-{id}"));
+            assert!(core.execute(import, &runtime).ok);
+
+            let mut build = request(
+                &format!("REQ-build-{id}"),
+                "project.index.build",
+                json!({ "project_id": id }),
+            );
+            build.idempotency_key = Some(format!("IDEMP-build-{id}"));
+            assert!(core.execute(build, &runtime).ok);
+        }
+
+        let mut authority = ExecutionAuthority::local_user("CLIENT-scoped");
+        authority.project_ids = Some(["PRJ-a".to_string()].into_iter().collect());
+        for command in ["project.capabilities", "project.index.build", "project.index.reconcile"] {
+            let mut attempt = request(
+                &format!("REQ-deny-{command}"),
+                command,
+                json!({ "project_id": "PRJ-b" }),
+            );
+            if command != "project.capabilities" {
+                attempt.idempotency_key = Some(format!("IDEMP-deny-{command}"));
+            }
+            let denied = core.execute_authorized(attempt, &runtime, &authority);
+            assert!(!denied.ok, "{command} crossed project scope");
+            assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
+        }
 
         drop(core);
         fs::remove_dir_all(dir).unwrap();

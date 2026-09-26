@@ -765,7 +765,7 @@ mod tests {
     #[test]
     fn embedded_registry_is_valid() {
         validate_embedded_registry().expect("registry must validate");
-        assert_eq!(registry().commands.len(), 16);
+        assert_eq!(registry().commands.len(), 20);
         assert!(registry()
             .common_errors
             .iter()

@@ -209,7 +209,7 @@ Exit criteria:
 
 ## Phase 3 — Project discovery and indexing
 
-Status: Active — Phase 2 Core/command promotion is closed. Project discovery/indexing work begins from the accepted production workspace.
+Status: Active — the generic two-project first slice is accepted on a synthetic Windows fixture. Schema-4 migration, project isolation, baseline/restart persistence, hint-driven changed-only hashing, missed-hint reconciliation, capability reporting, and resource samples are recorded in `PHASE3_FIRST_SLICE_EVIDENCE.md`. OS watcher integration, stronger continuity handling, dependency edges, and hardware-tier budgets remain open.
 
 Build:
 

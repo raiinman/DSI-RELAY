@@ -1349,3 +1349,15 @@ Phase 3 begins from this accepted foundation and owns generic project discovery/
 No UEFN/Fortnite/editor-specific behavior is authorized by this phase transition.
 
 Evidence: `docs/PHASE2_CLOSURE_REVIEW.md`, `docs/PHASE2_FIRST_SLICE_EVIDENCE.md`, `docs/PHASE2_SECOND_SLICE_EVIDENCE.md`, and `docs/PHASE2_THIRD_SLICE_EVIDENCE.md`.
+
+## D-161 — Generic project baselines use schema-4 derived state and authoritative reconciliation
+
+Status: Phase 3 first slice accepted; later indexing optimizations remain open
+
+The first production Phase 3 slice stores project-scoped, project-relative file snapshots and change records in schema-4 SQLite tables. Canonical absolute roots remain local operational state. New import and project-list results hide imported local roots from machine-facing output.
+
+Baseline build hashes project files. Reconciliation accepts watcher paths only as hints, enumerates authoritative filesystem metadata, and hashes new, hinted, or metadata-changed candidates. A missed hint with a metadata change is recovered. Generation-guarded transactions apply changed rows and explicit add/modify/delete/rename records. Rebuild replaces only derived index state and never edits project source files.
+
+The accepted 120-file-per-project fixture demonstrated one-file hashing, two-project isolation, graceful and hard restart, schema-3 authority-state migration, and low idle cost. Metadata enumeration still scales with tree size; same-size/same-mtime unhinted edits, active OS watcher delivery, dependency-edge extraction, and hardware-tier budgets remain open Phase 3 work. This decision preserves D-149 rather than replacing it.
+
+Evidence: `docs/PHASE3_FIRST_SLICE_EVIDENCE.md`.

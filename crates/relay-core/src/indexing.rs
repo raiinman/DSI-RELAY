@@ -43,6 +43,14 @@ pub struct IndexPlan {
     pub stats: IndexStats,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HintPlan {
+    pub file_count: u64,
+    pub touched_files: Vec<IndexedFileSnapshot>,
+    pub changes: Vec<IndexChange>,
+    pub stats: IndexStats,
+}
+
 #[derive(Debug, Clone)]
 pub struct IndexError {
     pub code: &'static str,
@@ -305,6 +313,219 @@ pub fn reconcile(
         changes,
     })
 }
+
+pub fn apply_hints(
+    root: &Path,
+    previous_hinted: &[IndexedFileSnapshot],
+    hints: &[String],
+    base_file_count: u64,
+    base_total_bytes: u64,
+) -> Result<HintPlan, IndexError> {
+    let started = Instant::now();
+    let canonical_root = fs::canonicalize(root).map_err(|error| {
+        IndexError::new(
+            "PROJECT_PATH_INVALID",
+            format!("canonicalize project root: {error}"),
+        )
+    })?;
+    let normalized_hints = validate_hints(hints)?;
+    if normalized_hints.is_empty() {
+        return Err(IndexError::new(
+            "INDEX_HINT_INVALID",
+            "hint-only updates require at least one project-relative path",
+        ));
+    }
+    let mut current: BTreeMap<String, IndexedFileSnapshot> = previous_hinted
+        .iter()
+        .cloned()
+        .map(|file| (file.relative_path.clone(), file))
+        .collect();
+    let mut touched_files = Vec::new();
+    let mut changes = Vec::new();
+    let mut added_paths = Vec::new();
+    let mut deleted = Vec::new();
+    let mut files_hashed = 0usize;
+    let mut files_unchanged = 0usize;
+    let mut file_count = base_file_count;
+    let mut total_bytes = base_total_bytes;
+
+    for relative_path in &normalized_hints {
+        let absolute_path = canonical_root.join(relative_path);
+        reject_symlink_components(&canonical_root, relative_path)?;
+        let metadata = match fs::metadata(&absolute_path) {
+            Ok(metadata) => Some(metadata),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => {
+                return Err(IndexError::new(
+                    "PROJECT_FILE_UNREADABLE",
+                    format!("read hinted file metadata: {error}"),
+                ));
+            }
+        };
+        match metadata {
+            Some(metadata) if metadata.is_dir() => {
+                return Err(IndexError::new(
+                    "INDEX_HINT_DIRECTORY",
+                    "directory hints require authoritative reconciliation",
+                ));
+            }
+            Some(metadata) if metadata.is_file() => {
+                let canonical = fs::canonicalize(&absolute_path).map_err(|error| {
+                    IndexError::new(
+                        "PROJECT_FILE_UNREADABLE",
+                        format!("canonicalize hinted file: {error}"),
+                    )
+                })?;
+                if !canonical.starts_with(&canonical_root) {
+                    return Err(IndexError::new(
+                        "PROJECT_PATH_ESCAPE",
+                        "hinted file escaped the canonical project root",
+                    ));
+                }
+                let content_sha256 = hash_file(&canonical)?;
+                files_hashed += 1;
+                let modified_unix_ns = metadata
+                    .modified()
+                    .ok()
+                    .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                    .map(|duration| duration.as_nanos().min(u64::MAX as u128) as u64)
+                    .unwrap_or(0);
+                let snapshot = IndexedFileSnapshot {
+                    relative_path: relative_path.clone(),
+                    size_bytes: metadata.len(),
+                    modified_unix_ns,
+                    content_sha256: content_sha256.clone(),
+                };
+                match current.remove(relative_path) {
+                    Some(old) => {
+                        total_bytes = total_bytes
+                            .checked_sub(old.size_bytes)
+                            .and_then(|bytes| bytes.checked_add(snapshot.size_bytes))
+                            .ok_or_else(|| {
+                                IndexError::new(
+                                    "INDEX_METADATA_OVERFLOW",
+                                    "hinted update byte count overflow",
+                                )
+                            })?;
+                        if old.content_sha256 == content_sha256 {
+                            files_unchanged += 1;
+                        } else {
+                            changes.push(IndexChange {
+                                change_kind: "modified".to_string(),
+                                relative_path: relative_path.clone(),
+                                previous_path: None,
+                                before_sha256: Some(old.content_sha256),
+                                after_sha256: Some(content_sha256),
+                            });
+                        }
+                    }
+                    None => {
+                        file_count = file_count.checked_add(1).ok_or_else(|| {
+                            IndexError::new("INDEX_METADATA_OVERFLOW", "file count overflow")
+                        })?;
+                        total_bytes =
+                            total_bytes
+                                .checked_add(snapshot.size_bytes)
+                                .ok_or_else(|| {
+                                    IndexError::new(
+                                        "INDEX_METADATA_OVERFLOW",
+                                        "byte count overflow",
+                                    )
+                                })?;
+                        added_paths.push((relative_path.clone(), content_sha256));
+                    }
+                }
+                touched_files.push(snapshot);
+            }
+            Some(_) => {
+                return Err(IndexError::new(
+                    "INDEX_HINT_INVALID",
+                    "hinted path is not a regular file",
+                ));
+            }
+            None => {
+                if let Some(old) = current.remove(relative_path) {
+                    file_count = file_count.checked_sub(1).ok_or_else(|| {
+                        IndexError::new("INDEX_METADATA_OVERFLOW", "file count underflow")
+                    })?;
+                    total_bytes = total_bytes.checked_sub(old.size_bytes).ok_or_else(|| {
+                        IndexError::new("INDEX_METADATA_OVERFLOW", "byte count underflow")
+                    })?;
+                    deleted.push((relative_path.clone(), old.content_sha256));
+                }
+            }
+        }
+    }
+
+    for (from, to, sha) in match_renames(&mut added_paths, &mut deleted) {
+        changes.push(IndexChange {
+            change_kind: "renamed".to_string(),
+            relative_path: to,
+            previous_path: Some(from),
+            before_sha256: Some(sha.clone()),
+            after_sha256: Some(sha),
+        });
+    }
+    for (path, sha) in added_paths {
+        changes.push(IndexChange {
+            change_kind: "added".to_string(),
+            relative_path: path,
+            previous_path: None,
+            before_sha256: None,
+            after_sha256: Some(sha),
+        });
+    }
+    for (path, sha) in deleted {
+        changes.push(IndexChange {
+            change_kind: "deleted".to_string(),
+            relative_path: path,
+            previous_path: None,
+            before_sha256: Some(sha),
+            after_sha256: None,
+        });
+    }
+    changes.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+    Ok(HintPlan {
+        file_count,
+        stats: IndexStats {
+            files_seen: normalized_hints.len(),
+            files_hashed,
+            files_unchanged,
+            symlinks_skipped: 0,
+            total_bytes,
+            hint_count: normalized_hints.len(),
+            hint_hits: changes.len(),
+            elapsed_ms: elapsed_ms(started),
+        },
+        touched_files,
+        changes,
+    })
+}
+
+fn reject_symlink_components(root: &Path, relative_path: &str) -> Result<(), IndexError> {
+    let mut current = root.to_path_buf();
+    for component in Path::new(relative_path).components() {
+        current.push(component);
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(IndexError::new(
+                    "INDEX_HINT_INVALID",
+                    "hinted path crosses a symlink",
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
+            Err(error) => {
+                return Err(IndexError::new(
+                    "PROJECT_FILE_UNREADABLE",
+                    format!("inspect hinted path: {error}"),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn collect_metadata(root: &Path) -> Result<(Vec<FileMeta>, usize), IndexError> {
     let mut files = Vec::new();
     let mut stack = vec![root.to_path_buf()];
@@ -401,7 +622,7 @@ fn normalize_relative(path: &Path) -> Result<String, IndexError> {
     Ok(parts.join("/"))
 }
 
-fn validate_hints(hints: &[String]) -> Result<Vec<String>, IndexError> {
+pub fn validate_hints(hints: &[String]) -> Result<Vec<String>, IndexError> {
     let mut normalized = BTreeSet::new();
     for hint in hints {
         if Path::new(hint).is_absolute() {
@@ -518,6 +739,29 @@ mod tests {
         fs::write(path, content.as_bytes()).unwrap();
     }
 
+    fn committed_hints(
+        previous: &[IndexedFileSnapshot],
+        plan: &HintPlan,
+    ) -> Vec<IndexedFileSnapshot> {
+        let mut files: BTreeMap<String, IndexedFileSnapshot> = previous
+            .iter()
+            .cloned()
+            .map(|file| (file.relative_path.clone(), file))
+            .collect();
+        for change in &plan.changes {
+            if change.change_kind == "deleted" {
+                files.remove(&change.relative_path);
+            }
+            if let Some(previous_path) = &change.previous_path {
+                files.remove(previous_path);
+            }
+        }
+        for file in &plan.touched_files {
+            files.insert(file.relative_path.clone(), file.clone());
+        }
+        files.into_values().collect()
+    }
+
     #[test]
     fn baseline_and_one_file_change_hash_only_the_touched_file() {
         let dir = temp_dir("changed-only");
@@ -542,6 +786,115 @@ mod tests {
         assert_eq!(plan.changes[0].relative_path, "nested/b.txt");
         assert_eq!(plan.touched_files.len(), 1);
 
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn hinted_update_is_provisional_and_reconciliation_finds_unhinted_change() {
+        let dir = temp_dir("hint-only");
+        fs::create_dir_all(&dir).unwrap();
+        write(&dir.join("a.txt"), "alpha");
+        write(&dir.join("b.txt"), "bravo");
+        write(&dir.join("c.txt"), "charlie");
+        let baseline = build_baseline(&dir).unwrap();
+
+        write(&dir.join("a.txt"), "alpha changed and longer");
+        write(&dir.join("b.txt"), "bravo changed and longer");
+        let previous_hinted = vec![baseline.files[0].clone()];
+        let hinted = apply_hints(
+            &dir,
+            &previous_hinted,
+            &["a.txt".to_string()],
+            baseline.files.len() as u64,
+            baseline.stats.total_bytes,
+        )
+        .unwrap();
+        assert_eq!(hinted.stats.files_seen, 1);
+        assert_eq!(hinted.stats.files_hashed, 1);
+        assert_eq!(hinted.changes.len(), 1);
+        assert_eq!(hinted.changes[0].relative_path, "a.txt");
+
+        let reconciled = reconcile(&dir, &committed_hints(&baseline.files, &hinted), &[]).unwrap();
+        assert_eq!(reconciled.stats.files_hashed, 1);
+        assert_eq!(reconciled.changes.len(), 1);
+        assert_eq!(reconciled.changes[0].relative_path, "b.txt");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn hinted_rename_requires_both_paths_and_directory_hint_fails() {
+        let dir = temp_dir("hint-rename");
+        fs::create_dir_all(dir.join("nested")).unwrap();
+        write(&dir.join("old.txt"), "same content");
+        let baseline = build_baseline(&dir).unwrap();
+        fs::rename(dir.join("old.txt"), dir.join("new.txt")).unwrap();
+        let hinted = apply_hints(
+            &dir,
+            &baseline.files,
+            &["old.txt".to_string(), "new.txt".to_string()],
+            baseline.files.len() as u64,
+            baseline.stats.total_bytes,
+        )
+        .unwrap();
+        assert_eq!(hinted.changes.len(), 1);
+        assert_eq!(hinted.changes[0].change_kind, "renamed");
+        let error = apply_hints(
+            &dir,
+            &[],
+            &["nested".to_string()],
+            hinted.file_count,
+            hinted.stats.total_bytes,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "INDEX_HINT_DIRECTORY");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn large_fixture_hint_update_avoids_filesystem_tree_walk() {
+        let dir = temp_dir("hint-scale");
+        fs::create_dir_all(&dir).unwrap();
+        for index in 0..1_000 {
+            let relative = format!("group-{:02}/file-{index:04}.txt", index / 100);
+            write(&dir.join(relative), "small deterministic fixture");
+        }
+        let baseline = build_baseline(&dir).unwrap();
+        assert_eq!(baseline.stats.files_hashed, 1_000);
+        let changed_path = "group-07/file-0750.txt";
+        write(&dir.join(changed_path), "one changed file with more bytes");
+        let previous_hinted = baseline
+            .files
+            .iter()
+            .filter(|file| file.relative_path == changed_path)
+            .cloned()
+            .collect::<Vec<_>>();
+        let hinted = apply_hints(
+            &dir,
+            &previous_hinted,
+            &[changed_path.to_string()],
+            baseline.files.len() as u64,
+            baseline.stats.total_bytes,
+        )
+        .unwrap();
+        let confirmed = reconcile(&dir, &committed_hints(&baseline.files, &hinted), &[]).unwrap();
+        assert_eq!(hinted.stats.files_seen, 1);
+        assert_eq!(hinted.stats.files_hashed, 1);
+        assert_eq!(confirmed.stats.files_seen, 1_000);
+        assert_eq!(confirmed.stats.files_hashed, 0);
+        assert!(confirmed.changes.is_empty());
+        println!(
+            "PHASE3_HINT_METRICS={}",
+            serde_json::json!({
+                "fixture_files": 1_000,
+                "baseline_ms": baseline.stats.elapsed_ms,
+                "hint_update_ms": hinted.stats.elapsed_ms,
+                "hint_paths_stat_checked": hinted.stats.files_seen,
+                "hint_files_hashed": hinted.stats.files_hashed,
+                "full_metadata_reconcile_ms": confirmed.stats.elapsed_ms,
+                "full_metadata_files_seen": confirmed.stats.files_seen,
+                "full_reconcile_files_hashed": confirmed.stats.files_hashed
+            })
+        );
         fs::remove_dir_all(dir).unwrap();
     }
     #[test]

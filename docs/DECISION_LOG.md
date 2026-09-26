@@ -1373,3 +1373,15 @@ The version-1 `project.changes` command returns a bounded delta or a structured 
 Edges remain caller-supplied derived observations until a compatible parser or adapter exists. Producer metadata does not grant trust or permission. Project source files remain authoritative; D-149 watcher/reconciliation and Phase 2 project-scope enforcement remain intact.
 
 Evidence: `docs/PHASE3_SECOND_SLICE_EVIDENCE.md`.
+
+## D-163 — Targeted watcher hints produce provisional state until reconciliation
+
+Status: Phase 3 third slice accepted; OS watcher delivery remains open
+
+The version-1 `project.index.apply_hints` command stats and hashes only caller-supplied project-relative file paths, fetches only their prior indexed records, and commits changed rows with status `stale`. Directory and unsafe path hints fail. A hard restart preserves the stale marker.
+
+Hint-only changes are useful for low-latency local updates but are not proof that every filesystem change was observed. Delta and dependency-edge commands refuse to present stale state as authoritative. Full metadata reconciliation restores `ready` and recovers missed changes under the metadata continuity assumptions of D-149.
+
+The 1,000-file synthetic fixture checked one path in the hint step versus 1,000 files in the confirming metadata scan. Active OS notification delivery, drop/overflow handling, same-size/same-mtime recovery, and hardware-tier budgets remain Phase 3 gates.
+
+Evidence: `docs/PHASE3_THIRD_SLICE_EVIDENCE.md`.

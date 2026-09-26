@@ -567,6 +567,52 @@
       ]
     },
     {
+      "id": "project.index.apply_hints",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Apply bounded watcher-path hints without a full metadata walk; mark the index stale until reconciliation.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id", "hints"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "hints": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": [
+          "project_id", "generation", "file_count", "files_hashed",
+          "hint_count", "changes", "elapsed_ms", "index_status"
+        ],
+        "properties": {
+          "project_id": { "type": "string" },
+          "generation": { "type": "integer", "minimum": 1 },
+          "file_count": { "type": "integer", "minimum": 0 },
+          "files_hashed": { "type": "integer", "minimum": 0 },
+          "hint_count": { "type": "integer", "minimum": 1 },
+          "changes": { "type": "array", "items": { "type": "object" } },
+          "elapsed_ms": { "type": "integer", "minimum": 0 },
+          "index_status": { "type": "string", "const": "stale" }
+        },
+        "additionalProperties": false
+      },
+      "errors": [
+        "PROJECT_NOT_FOUND", "INDEX_BASELINE_MISSING",
+        "INDEX_GENERATION_CONFLICT", "INDEX_HINT_INVALID",
+        "INDEX_HINT_DIRECTORY", "PROJECT_PATH_INVALID",
+        "PROJECT_PATH_NOT_DIRECTORY", "PROJECT_PATH_ESCAPE",
+        "PROJECT_FILE_UNREADABLE", "INDEX_METADATA_OVERFLOW",
+        "VALIDATION_FAILED",
+        "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
+      ]
+    },
+    {
       "id": "project.index.reconcile",
       "version": 1,
       "stability": "phase3",
@@ -649,7 +695,8 @@
       },
       "errors": [
         "PROJECT_NOT_FOUND", "INDEX_BASELINE_MISSING",
-        "INDEX_CONTINUITY_LOST", "INDEX_GENERATION_CONFLICT",
+        "INDEX_CONTINUITY_LOST", "INDEX_RECONCILIATION_REQUIRED",
+        "INDEX_GENERATION_CONFLICT",
         "INDEX_DELTA_TOO_LARGE", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
       ]
     },
@@ -694,6 +741,7 @@
       "errors": [
         "PROJECT_NOT_FOUND", "PROJECT_PATH_INVALID", "PROJECT_PATH_ESCAPE",
         "INDEX_BASELINE_MISSING", "INDEX_GENERATION_CONFLICT",
+        "INDEX_RECONCILIATION_REQUIRED",
         "INDEX_FILE_NOT_FOUND", "INDEX_SOURCE_CHANGED",
         "VALIDATION_FAILED", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
       ]
@@ -729,7 +777,8 @@
       },
       "errors": [
         "PROJECT_NOT_FOUND", "PROJECT_PATH_INVALID", "PROJECT_PATH_ESCAPE",
-        "INDEX_BASELINE_MISSING", "INDEX_EDGE_LIMIT_EXCEEDED",
+        "INDEX_BASELINE_MISSING", "INDEX_RECONCILIATION_REQUIRED",
+        "INDEX_EDGE_LIMIT_EXCEEDED",
         "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
       ]
     },
@@ -755,6 +804,10 @@
         "required": ["project_id", "baseline_state", "capabilities"],
         "properties": {
           "project_id": { "type": "string" },
+          "index_status": {
+            "type": "string",
+            "enum": ["missing", "ready", "stale", "unavailable"]
+          },
           "baseline_state": {
             "type": "string",
             "enum": ["missing", "ready", "unavailable"]

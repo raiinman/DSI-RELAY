@@ -277,11 +277,127 @@ fn project_edges_and_deltas_survive_hard_restart_without_scope_leakage() {
         .unwrap()
         .is_empty());
 
+    fs::create_dir_all(root_a.join("nested")).unwrap();
+    let directory_hint = call(
+        &state,
+        request(
+            "REQ-alpha-directory-hint",
+            "project.index.apply_hints",
+            json!({ "project_id": "PRJ-alpha", "hints": ["nested"] }),
+            Some("IDEMP-alpha-directory-hint"),
+        ),
+    );
+    assert_eq!(directory_hint.error.unwrap().code, "INDEX_HINT_DIRECTORY");
+    let ready = call(
+        &state,
+        request(
+            "REQ-alpha-ready-after-error",
+            "project.capabilities",
+            json!({ "project_id": "PRJ-alpha" }),
+            None,
+        ),
+    );
+    assert_eq!(ready.result.unwrap()["index_status"], "ready");
+
+    fs::write(root_a.join("hinted.txt"), b"hinted addition").unwrap();
+    fs::write(
+        root_a.join("source-renamed.txt"),
+        b"source A changed without a hint",
+    )
+    .unwrap();
+    let hinted = call(
+        &state,
+        request(
+            "REQ-alpha-apply-hints",
+            "project.index.apply_hints",
+            json!({ "project_id": "PRJ-alpha", "hints": ["hinted.txt"] }),
+            Some("IDEMP-alpha-apply-hints"),
+        ),
+    );
+    assert!(hinted.ok, "{:?}", hinted.error);
+    let hinted = hinted.result.unwrap();
+    assert_eq!(hinted["generation"], 4);
+    assert_eq!(hinted["files_hashed"], 1);
+    assert_eq!(hinted["index_status"], "stale");
+    assert_eq!(hinted["changes"][0]["relative_path"], "hinted.txt");
+    let stale_delta = call(
+        &state,
+        request(
+            "REQ-alpha-stale-delta",
+            "project.changes",
+            json!({ "project_id": "PRJ-alpha", "after_generation": 3 }),
+            None,
+        ),
+    );
+    assert_eq!(
+        stale_delta.error.unwrap().code,
+        "INDEX_RECONCILIATION_REQUIRED"
+    );
+    let stale_edges = call(
+        &state,
+        request(
+            "REQ-alpha-stale-edges",
+            "project.dependencies.list",
+            json!({ "project_id": "PRJ-alpha" }),
+            None,
+        ),
+    );
+    assert_eq!(
+        stale_edges.error.unwrap().code,
+        "INDEX_RECONCILIATION_REQUIRED"
+    );
+
+    second.kill().unwrap();
+    second.wait().unwrap();
+    let (mut third, state) = spawn_host(&state_dir);
+    let caps = call(
+        &state,
+        request(
+            "REQ-alpha-stale-capabilities",
+            "project.capabilities",
+            json!({ "project_id": "PRJ-alpha" }),
+            None,
+        ),
+    );
+    assert_eq!(caps.result.unwrap()["index_status"], "stale");
+    let recovered = call(
+        &state,
+        request(
+            "REQ-alpha-recover-missed-hint",
+            "project.index.reconcile",
+            json!({ "project_id": "PRJ-alpha" }),
+            Some("IDEMP-alpha-recover-missed-hint"),
+        ),
+    );
+    assert!(recovered.ok);
+    let recovered = recovered.result.unwrap();
+    assert_eq!(recovered["files_hashed"], 1);
+    assert_eq!(
+        recovered["changes"][0]["relative_path"],
+        "source-renamed.txt"
+    );
+    let final_delta = call(
+        &state,
+        request(
+            "REQ-alpha-final-delta",
+            "project.changes",
+            json!({ "project_id": "PRJ-alpha", "after_generation": 3 }),
+            None,
+        ),
+    );
+    assert_eq!(
+        final_delta.result.unwrap()["changes"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+
     let stopped = call(
         &state,
         request("REQ-shutdown", "system.shutdown", json!({}), None),
     );
     assert!(stopped.ok);
-    assert!(second.wait().unwrap().success());
+    assert!(third.wait().unwrap().success());
     fs::remove_dir_all(dir).unwrap();
 }

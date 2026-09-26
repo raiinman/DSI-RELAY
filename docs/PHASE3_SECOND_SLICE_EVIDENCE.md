@@ -2,6 +2,8 @@
 
 Status: PASS on the synthetic Windows fixture, 2026-09-26. Phase 3 remains active.
 
+This is the schema-5 evidence snapshot from second-slice commit `8db8db5`. Later hint-update work is recorded separately.
+
 This slice adds a bounded, generic delta read and a derived internal-file dependency-edge store. It does not parse any project language or run an adapter.
 
 ## Commands and storage

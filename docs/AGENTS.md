@@ -50,6 +50,7 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `PHASE3_FIRST_SLICE.md` — acceptance contract for the first generic multi-project discovery/baseline/changed-only indexing vertical.
 - `PHASE3_FIRST_SLICE_EVIDENCE.md` — accepted synthetic two-project verification, migration, restart, isolation, and resource evidence.
 - `PHASE3_SECOND_SLICE_EVIDENCE.md` — accepted schema-5 change-delta, dependency-edge, migration, isolation, and restart evidence.
+- `PHASE3_THIRD_SLICE_EVIDENCE.md` — accepted provisional targeted hint-update, stale-state, recovery, and scale-fixture evidence.
 - `ROADMAP.md` — staged delivery plan and milestone exit criteria.
 - `RESEARCH_PLAN.md` — academic/technical research and benchmark program.
 - `PHASE0_ADVERSARIAL_REVIEW.md` — adversarial challenge to current assumptions and required architecture changes.

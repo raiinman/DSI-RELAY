@@ -8,8 +8,9 @@ use crate::policy::{
     ExecutionAuthority,
 };
 use crate::storage::{
-    CredentialHandleRecord, DependencyReplacement, EgressLedgerInput, NewTransaction,
-    RelayStorage, StorageError, StorageHealth, UsageMetricInput,
+    CredentialHandleRecord, DependencyReplacement, EgressLedgerInput, IndexCommitMode,
+    NewTransaction, ProjectIndexCommit, RelayStorage, StorageError, StorageHealth,
+    UsageMetricInput,
 };
 use relay_contracts::registry::{self, ResolveError};
 use relay_contracts::{
@@ -864,6 +865,9 @@ impl RelayCore {
             "project.index.build" => {
                 self.project_index_build(&request.arguments)
             }
+            "project.index.apply_hints" => {
+                self.project_index_apply_hints(&request.arguments)
+            }
             "project.index.reconcile" => {
                 self.project_index_reconcile(&request.arguments)
             }
@@ -1147,6 +1151,79 @@ impl RelayCore {
         }))
     }
 
+    fn project_index_apply_hints(
+        &self,
+        arguments: &Value,
+    ) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"]
+            .as_str()
+            .expect("registry validation requires project_id");
+        let raw_hints = arguments["hints"]
+            .as_array()
+            .expect("registry validation requires hints");
+        if raw_hints.is_empty() || raw_hints.len() > 500 {
+            return Err(CoreCommandError::new(
+                "VALIDATION_FAILED",
+                "hint-only updates require 1 to 500 paths",
+            ));
+        }
+        let raw_hints: Vec<String> = raw_hints
+            .iter()
+            .map(|value| {
+                value
+                    .as_str()
+                    .expect("registry validation requires string hints")
+                    .to_string()
+            })
+            .collect();
+        let hints = indexing::validate_hints(&raw_hints)
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        let (project, index_state, previous) = self.with_storage(|storage| {
+            let project = storage.get_project(project_id)?.ok_or_else(|| {
+                StorageError::new("PROJECT_NOT_FOUND", "project not found")
+            })?;
+            let state = storage.get_project_index_state(project_id)?.ok_or_else(|| {
+                StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing")
+            })?;
+            let files = storage.project_files_for_paths(project_id, &hints)?;
+            Ok((project, state, files))
+        })?;
+        let root = indexing::canonical_project_root(&project.root_uri)
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        let plan = indexing::apply_hints(
+            &root,
+            &previous,
+            &hints,
+            index_state.file_count,
+            index_state.total_bytes,
+        )
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        let file_count = usize::try_from(plan.file_count).map_err(|_| {
+            CoreCommandError::new("INDEX_METADATA_OVERFLOW", "file count exceeds platform limits")
+        })?;
+        let state = self.with_storage(|storage| {
+            storage.apply_project_reconciliation(ProjectIndexCommit {
+                project_id,
+                expected_generation: index_state.generation,
+                touched_files: &plan.touched_files,
+                changes: &plan.changes,
+                file_count,
+                total_bytes: plan.stats.total_bytes,
+                mode: IndexCommitMode::HintsOnly,
+            })
+        })?;
+        Ok(json!({
+            "project_id": project_id,
+            "generation": state.generation,
+            "file_count": state.file_count,
+            "files_hashed": plan.stats.files_hashed,
+            "hint_count": plan.stats.hint_count,
+            "changes": plan.changes,
+            "elapsed_ms": plan.stats.elapsed_ms,
+            "index_status": "stale"
+        }))
+    }
+
     fn project_index_reconcile(
         &self,
         arguments: &Value,
@@ -1192,14 +1269,15 @@ impl RelayCore {
         let plan = indexing::reconcile(&root, &previous, &hints)
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
         let state = self.with_storage(|storage| {
-            storage.apply_project_reconciliation(
+            storage.apply_project_reconciliation(ProjectIndexCommit {
                 project_id,
-                index_state.generation,
-                &plan.touched_files,
-                &plan.changes,
-                plan.files.len(),
-                plan.stats.total_bytes,
-            )
+                expected_generation: index_state.generation,
+                touched_files: &plan.touched_files,
+                changes: &plan.changes,
+                file_count: plan.files.len(),
+                total_bytes: plan.stats.total_bytes,
+                mode: IndexCommitMode::Authoritative,
+            })
         })?;
 
         Ok(json!({
@@ -1243,9 +1321,14 @@ impl RelayCore {
             .as_ref()
             .map(|state| state.status == "ready")
             .unwrap_or(false);
+        let index_status = if !root_available {
+            "unavailable"
+        } else {
+            state.as_ref().map(|state| state.status.as_str()).unwrap_or("missing")
+        };
         let baseline_state = if !root_available {
             "unavailable"
-        } else if baseline_ready {
+        } else if state.is_some() {
             "ready"
         } else {
             "missing"
@@ -1268,6 +1351,8 @@ impl RelayCore {
                 "project root is unavailable"
             } else if baseline_ready {
                 "durable baseline exists"
+            } else if state.is_some() {
+                "durable baseline exists but requires authoritative reconciliation"
             } else {
                 "baseline can be built when the project root is available"
             }
@@ -1279,6 +1364,8 @@ impl RelayCore {
                 "project root is unavailable"
             } else if baseline_ready {
                 "metadata reconciliation hashes only new or metadata-changed files"
+            } else if state.is_some() {
+                "hint-only changes are provisional until authoritative reconciliation"
             } else {
                 "requires a healthy baseline"
             }
@@ -1299,6 +1386,15 @@ impl RelayCore {
             "detail": "project-scoped derived edges can be supplied for indexed files with generation and source-hash checks"
         }));
         capabilities.push(json!({
+            "id": "index.continuity",
+            "state": if !root_available { "unavailable" } else if baseline_ready { "available" } else { "unknown" },
+            "detail": if index_status == "stale" {
+                "hint-only update awaits authoritative reconciliation"
+            } else {
+                "authoritative reconciliation is current for the stored generation"
+            }
+        }));
+        capabilities.push(json!({
             "id": "dependency_graph",
             "state": "unknown",
             "detail": "automatic dependency extraction requires a compatible parser or adapter"
@@ -1307,6 +1403,7 @@ impl RelayCore {
         Ok(json!({
             "project_id": project_id,
             "baseline_state": baseline_state,
+            "index_status": index_status,
             "capabilities": capabilities
         }))
     }
@@ -1326,6 +1423,12 @@ impl RelayCore {
             let state = storage.get_project_index_state(project_id)?.ok_or_else(|| {
                 StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing")
             })?;
+            if state.status != "ready" {
+                return Err(StorageError::new(
+                    "INDEX_RECONCILIATION_REQUIRED",
+                    "hint-only index changes require authoritative reconciliation",
+                ));
+            }
             let after_generation = arguments
                 .get("after_generation")
                 .and_then(Value::as_i64)
@@ -1454,6 +1557,12 @@ impl RelayCore {
             let state = storage.get_project_index_state(project_id)?.ok_or_else(|| {
                 StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing")
             })?;
+            if state.status != "ready" {
+                return Err(StorageError::new(
+                    "INDEX_RECONCILIATION_REQUIRED",
+                    "dependency edges require authoritative reconciliation",
+                ));
+            }
             let edges = storage.list_project_dependency_edges(
                 project_id, source_path.as_deref(), limit + 1,
             )?;
@@ -2576,6 +2685,14 @@ mod tests {
         );
         replace.idempotency_key = Some("IDEMP-deny-dependency-replace".to_string());
         let denied = core.execute_authorized(replace, &runtime, &authority);
+        assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
+        let mut hinted = request(
+            "REQ-deny-hint-update",
+            "project.index.apply_hints",
+            json!({ "project_id": "PRJ-b", "hints": ["same.txt"] }),
+        );
+        hinted.idempotency_key = Some("IDEMP-deny-hint-update".to_string());
+        let denied = core.execute_authorized(hinted, &runtime, &authority);
         assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
 
         drop(core);

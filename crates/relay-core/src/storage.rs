@@ -114,6 +114,21 @@ pub struct DependencyReplacement<'a> {
     pub targets: &'a [String],
 }
 
+pub enum IndexCommitMode {
+    Authoritative,
+    HintsOnly,
+}
+
+pub struct ProjectIndexCommit<'a> {
+    pub project_id: &'a str,
+    pub expected_generation: i64,
+    pub touched_files: &'a [IndexedFileSnapshot],
+    pub changes: &'a [IndexChange],
+    pub file_count: usize,
+    pub total_bytes: u64,
+    pub mode: IndexCommitMode,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResultRecord {
     pub id: String,
@@ -943,6 +958,40 @@ impl RelayStorage {
         Ok(files)
     }
 
+    pub fn project_files_for_paths(
+        &self,
+        project_id: &str,
+        relative_paths: &[String],
+    ) -> Result<Vec<IndexedFileSnapshot>, StorageError> {
+        let mut statement = self.conn.prepare(
+            "SELECT relative_path, size_bytes, modified_unix_ns, content_sha256
+             FROM project_files
+             WHERE project_id = ?1 AND relative_path = ?2",
+        ).map_err(|error| {
+            StorageError::sqlite("prepare hinted file lookup", error)
+        })?;
+        let mut files = Vec::new();
+        for relative_path in relative_paths {
+            let file = statement.query_row(
+                params![project_id, relative_path],
+                |row| {
+                    Ok(IndexedFileSnapshot {
+                        relative_path: row.get(0)?,
+                        size_bytes: row.get::<_, i64>(1)?.max(0) as u64,
+                        modified_unix_ns: row.get::<_, i64>(2)?.max(0) as u64,
+                        content_sha256: row.get(3)?,
+                    })
+                },
+            ).optional().map_err(|error| {
+                StorageError::sqlite("read hinted file", error)
+            })?;
+            if let Some(file) = file {
+                files.push(file);
+            }
+        }
+        Ok(files)
+    }
+
     pub fn replace_project_baseline(
         &self,
         project_id: &str,
@@ -1062,13 +1111,21 @@ impl RelayStorage {
 
     pub fn apply_project_reconciliation(
         &self,
-        project_id: &str,
-        expected_generation: i64,
-        touched_files: &[IndexedFileSnapshot],
-        changes: &[IndexChange],
-        file_count: usize,
-        total_bytes: u64,
+        commit: ProjectIndexCommit<'_>,
     ) -> Result<ProjectIndexState, StorageError> {
+        let ProjectIndexCommit {
+            project_id,
+            expected_generation,
+            touched_files,
+            changes,
+            file_count,
+            total_bytes,
+            mode,
+        } = commit;
+        let status = match mode {
+            IndexCommitMode::Authoritative => "ready",
+            IndexCommitMode::HintsOnly => "stale",
+        };
         let now = sqlite_now(&self.conn)?;
         let tx = self.conn.unchecked_transaction().map_err(|error| {
             StorageError::sqlite("begin project reconciliation", error)
@@ -1199,17 +1256,19 @@ impl RelayStorage {
         tx.execute(
             "UPDATE project_index_state
              SET generation = ?2,
-                 status = 'ready',
+                 status = ?5,
                  file_count = ?3,
                  total_bytes = ?4,
-                 last_reconciled_at = ?5,
-                 updated_at = ?5
+                 last_reconciled_at = CASE
+                   WHEN ?5 = 'ready' THEN ?6 ELSE last_reconciled_at END,
+                 updated_at = ?6
              WHERE project_id = ?1",
             params![
                 project_id,
                 next_generation,
                 i64::try_from(file_count).unwrap_or(i64::MAX),
                 sql_i64(total_bytes),
+                status,
                 now,
             ],
         )
@@ -1336,19 +1395,25 @@ impl RelayStorage {
         let tx = self.conn.unchecked_transaction().map_err(|error| {
             StorageError::sqlite("begin dependency replacement", error)
         })?;
-        let generation: Option<i64> = tx.query_row(
-            "SELECT generation FROM project_index_state WHERE project_id = ?1",
+        let index_state: Option<(i64, String)> = tx.query_row(
+            "SELECT generation, status FROM project_index_state WHERE project_id = ?1",
             [project_id],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         ).optional().map_err(|error| {
             StorageError::sqlite("read dependency index generation", error)
         })?;
-        let Some(generation) = generation else {
+        let Some((generation, status)) = index_state else {
             return Err(StorageError::new(
                 "INDEX_BASELINE_MISSING",
                 "project baseline is missing",
             ));
         };
+        if status != "ready" {
+            return Err(StorageError::new(
+                "INDEX_RECONCILIATION_REQUIRED",
+                "dependency edges require authoritative reconciliation",
+            ));
+        }
         if generation != expected_generation {
             return Err(StorageError::new(
                 "INDEX_GENERATION_CONFLICT",
@@ -2664,14 +2729,15 @@ mod tests {
             after_sha256: Some("d".repeat(64)),
         }];
         let next = storage
-            .apply_project_reconciliation(
-                "PRJ-index-a",
-                1,
-                &touched,
-                &changes,
-                2,
-                31,
-            )
+            .apply_project_reconciliation(ProjectIndexCommit {
+                project_id: "PRJ-index-a",
+                expected_generation: 1,
+                touched_files: &touched,
+                changes: &changes,
+                file_count: 2,
+                total_bytes: 31,
+                mode: IndexCommitMode::Authoritative,
+            })
             .unwrap();
         assert_eq!(next.generation, 2);
         assert_eq!(
@@ -2690,14 +2756,15 @@ mod tests {
         assert_eq!(history[0].generation, 2);
 
         let error = storage
-            .apply_project_reconciliation(
-                "PRJ-index-a",
-                1,
-                &[],
-                &[],
-                2,
-                31,
-            )
+            .apply_project_reconciliation(ProjectIndexCommit {
+                project_id: "PRJ-index-a",
+                expected_generation: 1,
+                touched_files: &[],
+                changes: &[],
+                file_count: 2,
+                total_bytes: 31,
+                mode: IndexCommitMode::Authoritative,
+            })
             .expect_err("stale generation must fail");
         assert_eq!(error.code, "INDEX_GENERATION_CONFLICT");
 

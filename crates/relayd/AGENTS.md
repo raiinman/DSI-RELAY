@@ -28,6 +28,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 - Synthetic Phase 3 change-delta, dependency-edge, provisional hint-update, stale-state, isolation, and hard-restart coverage through `tests/phase3_second_slice.rs`.
 - Explicit full-content verification after a metadata-invisible edit through `tests/phase3_second_slice.rs`.
 - Live OS notifications, shared-root handling, distinct-root isolation, directory uncertainty, idle resource sample, and hard-restart continuity through `tests/phase3_watcher.rs`.
+- Ignored, manually invoked 15,000-file two-project scale fixture in `tests/phase3_watcher.rs`; record host class and avoid treating one run as a tier budget.
 
 # Child DOX Index
 

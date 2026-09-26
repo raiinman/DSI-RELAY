@@ -209,7 +209,7 @@ Exit criteria:
 
 ## Phase 3 — Project discovery and indexing
 
-Status: Active — the generic two-project baseline, schema-5 bounded delta/dependency-edge foundation, provisional targeted hint-update path, explicit full-content continuity recovery, and bounded Windows OS watcher delivery are accepted on synthetic fixtures. Evidence: the five `PHASE3_*_SLICE_EVIDENCE.md` records. Automatic foreground-safe recovery scheduling, dependency extraction, hardware-tier budgets, and closure review remain open.
+Status: Active — the generic two-project baseline, schema-5 bounded delta/dependency-edge foundation, provisional targeted hint-update path, explicit full-content continuity recovery, and bounded Windows OS watcher delivery are accepted on synthetic fixtures. Evidence: the five `PHASE3_*_SLICE_EVIDENCE.md` records. A 15,000-file single-host sample is recorded in `PHASE3_SCALE_BENCHMARK_EVIDENCE.md`; `PHASE3_CLOSURE_REVIEW.md` is NOT READY. Automatic foreground-safe recovery scheduling, dependency extraction, and hardware-tier budgets remain open.
 
 Build:
 

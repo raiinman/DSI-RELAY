@@ -6,7 +6,7 @@ Phase 3 — Project discovery and indexing — is active.
 
 Phase 2 is closed. The accepted production foundation is the Rust workspace containing `relay-contracts`, `relay-core`, `relayd`, `relay`, and `relay-adapter`.
 
-Phase 3 promotes project discovery/indexing behavior into that production workspace. The generic two-project baseline, bounded change/dependency-edge foundation, provisional hint-update path, explicit content-verification recovery, and bounded Windows watcher delivery are accepted; see the five Phase 3 slice evidence records. Do not reopen Phase 1 stack selections or Phase 2 Core contracts without contradictory evidence.
+Phase 3 promotes project discovery/indexing behavior into that production workspace. The generic two-project baseline, bounded change/dependency-edge foundation, provisional hint-update path, explicit content-verification recovery, and bounded Windows watcher delivery are accepted; see the five Phase 3 slice evidence records. The 15,000-file single-host sample and NOT READY gate verdict are in `PHASE3_SCALE_BENCHMARK_EVIDENCE.md` and `PHASE3_CLOSURE_REVIEW.md`. Do not reopen Phase 1 stack selections or Phase 2 Core contracts without contradictory evidence.
 
 ## Goal
 
@@ -102,4 +102,4 @@ Phase 3 closes only when:
 
 For a fresh conversation:
 
-> Take over DSI RELAY Phase 3 from `phase3/project-discovery`. Read root `AGENTS.md`, `docs/AGENTS.md`, `docs/PHASE3_START_HERE.md`, and the five Phase 3 slice evidence records before editing. Phase 1 and Phase 2 are closed; the synthetic baseline, schema-5 change/dependency foundation, provisional targeted hint update, explicit content-verification recovery, and bounded Windows watcher delivery are accepted. Preserve the Rust Core/command/authority/adapter contracts. Continue automatic foreground-safe reconciliation after continuity loss, dependency extraction through a generic adapter boundary, hardware-tier resource evidence, and the Phase 3 closure review. Keep project files authoritative and UEFN-specific behavior outside Core.
+> Take over DSI RELAY Phase 3 from `phase3/project-discovery`. Read root `AGENTS.md`, `docs/AGENTS.md`, `docs/PHASE3_START_HERE.md`, the five Phase 3 slice evidence records, `PHASE3_SCALE_BENCHMARK_EVIDENCE.md`, and `PHASE3_CLOSURE_REVIEW.md` before editing. Phase 1 and Phase 2 are closed; the synthetic baseline, schema-5 change/dependency foundation, provisional targeted hint update, explicit content-verification recovery, and bounded Windows watcher delivery are accepted. Preserve the Rust Core/command/authority/adapter contracts. Continue automatic foreground-safe reconciliation after continuity loss, dependency extraction through a generic adapter boundary, and hardware-tier resource evidence. Revisit the NOT READY closure review only when those gates have passing proof. Keep project files authoritative and UEFN-specific behavior outside Core.

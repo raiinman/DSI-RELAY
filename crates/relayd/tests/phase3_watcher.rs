@@ -426,3 +426,160 @@ fn os_notifications_remain_project_scoped_across_distinct_roots() {
     assert!(host.0.wait().unwrap().success());
     fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+#[ignore = "manual production-scale resource sample; creates 15,000 fixture files"]
+fn benchmark_two_watched_projects_at_fifteen_thousand_files() {
+    const FILES_PER_PROJECT: usize = 7_500;
+    let dir = fixture_dir();
+    let state_dir = dir.join("state");
+    let root_a = dir.join("bench-alpha");
+    let root_b = dir.join("bench-bravo");
+    for root in [&root_a, &root_b] {
+        for group in 0..75 {
+            let folder = root.join(format!("set-{group:02}"));
+            fs::create_dir_all(&folder).unwrap();
+            for offset in 0..100 {
+                let path = folder.join(format!("file-{offset:03}.txt"));
+                fs::write(path, b"generic project fixture content for indexing").unwrap();
+            }
+        }
+    }
+    let (mut host, state) = spawn_host(&state_dir);
+    let mut baseline_ms = Vec::new();
+    for (project_id, root) in [("PRJ-bench-alpha", &root_a), ("PRJ-bench-bravo", &root_b)] {
+        let imported = call(
+            &state,
+            request(
+                &format!("bench-import-{project_id}"),
+                "project.import",
+                json!({ "id": project_id, "name": project_id, "root_path": root.to_string_lossy() }),
+                true,
+            ),
+        );
+        assert!(imported.ok, "{:?}", imported.error);
+        let built = call(
+            &state,
+            request(
+                &format!("bench-build-{project_id}"),
+                "project.index.build",
+                json!({ "project_id": project_id }),
+                true,
+            ),
+        );
+        assert!(built.ok, "{:?}", built.error);
+        let built = built.result.unwrap();
+        assert_eq!(built["file_count"], FILES_PER_PROJECT);
+        baseline_ms.push(built["elapsed_ms"].as_u64().unwrap());
+    }
+    thread::sleep(Duration::from_millis(500));
+    let mut metadata_ms = Vec::new();
+    for project_id in ["PRJ-bench-alpha", "PRJ-bench-bravo"] {
+        let reconciled = call(
+            &state,
+            request(
+                &format!("bench-attach-{project_id}"),
+                "project.index.reconcile",
+                json!({ "project_id": project_id }),
+                true,
+            ),
+        );
+        assert!(reconciled.ok, "{:?}", reconciled.error);
+        metadata_ms.push(reconciled.result.unwrap()["elapsed_ms"].as_u64().unwrap());
+    }
+    let (_, cpu_before) = process_sample(&host.0);
+    thread::sleep(Duration::from_millis(1_000));
+    let (rss_bytes, cpu_after) = process_sample(&host.0);
+    let changed_start = Instant::now();
+    fs::write(
+        root_a.join("set-00/file-000.txt"),
+        b"one changed generic project file",
+    )
+    .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut watcher_stale_ms = None;
+    while Instant::now() < deadline {
+        let caps = call(
+            &state,
+            request(
+                "bench-caps",
+                "project.capabilities",
+                json!({ "project_id": "PRJ-bench-alpha" }),
+                false,
+            ),
+        );
+        if caps.result.unwrap()["index_status"] == "stale" {
+            watcher_stale_ms = Some(changed_start.elapsed().as_millis() as u64);
+            break;
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+    let watcher_stale_ms = watcher_stale_ms.expect("watcher did not observe one changed file");
+    let bravo = call(
+        &state,
+        request(
+            "bench-bravo-caps",
+            "project.capabilities",
+            json!({ "project_id": "PRJ-bench-bravo" }),
+            false,
+        ),
+    );
+    assert_eq!(bravo.result.unwrap()["index_status"], "ready");
+    let after_hint = call(
+        &state,
+        request(
+            "bench-after-hint",
+            "project.index.reconcile",
+            json!({ "project_id": "PRJ-bench-alpha" }),
+            true,
+        ),
+    );
+    assert!(after_hint.ok, "{:?}", after_hint.error);
+    let after_hint = after_hint.result.unwrap();
+    assert!(after_hint["changes"].as_array().unwrap().is_empty());
+    let full = call(
+        &state,
+        request(
+            "bench-full-verify",
+            "project.index.reconcile",
+            json!({ "project_id": "PRJ-bench-alpha", "verify_content": true }),
+            true,
+        ),
+    );
+    assert!(full.ok, "{:?}", full.error);
+    let full = full.result.unwrap();
+    assert_eq!(full["files_hashed"], FILES_PER_PROJECT);
+    let db_bytes: u64 = ["relay.sqlite3", "relay.sqlite3-wal", "relay.sqlite3-shm"]
+        .iter()
+        .map(|name| {
+            fs::metadata(state_dir.join(name))
+                .map(|metadata| metadata.len())
+                .unwrap_or(0)
+        })
+        .sum();
+    println!(
+        "PHASE3_WATCHER_SCALE_METRICS={}",
+        json!({
+            "project_count": 2,
+            "total_fixture_files": 2 * FILES_PER_PROJECT,
+            "baseline_ms": baseline_ms,
+            "metadata_reconcile_ms": metadata_ms,
+            "watcher_one_file_stale_wall_ms": watcher_stale_ms,
+            "post_hint_reconcile_ms": after_hint["elapsed_ms"],
+            "post_hint_files_hashed": after_hint["files_hashed"],
+            "full_content_verify_ms": full["elapsed_ms"],
+            "full_content_files_hashed": full["files_hashed"],
+            "idle_rss_bytes": rss_bytes,
+            "idle_cpu_delta_ms": cpu_after.saturating_sub(cpu_before),
+            "idle_sample_ms": 1_000,
+            "sqlite_main_wal_shm_bytes": db_bytes
+        })
+    );
+    let stopped = call(
+        &state,
+        request("bench-stop", "system.shutdown", json!({}), false),
+    );
+    assert!(stopped.ok);
+    assert!(host.0.wait().unwrap().success());
+    fs::remove_dir_all(dir).unwrap();
+}

@@ -9,6 +9,7 @@
 5. ROADMAP.md — implementation order and milestone exit criteria.
 
 The Phase 3 baseline, dependency-edge, provisional hint-update, content-verification, and OS-watcher results are in PHASE3_FIRST_SLICE.md and the five PHASE3_*_SLICE_EVIDENCE.md records.
+The larger indexing sample and current NOT READY closure verdict are in PHASE3_SCALE_BENCHMARK_EVIDENCE.md and PHASE3_CLOSURE_REVIEW.md.
 
 ## Core design
 

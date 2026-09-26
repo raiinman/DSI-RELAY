@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const STORAGE_SCHEMA_VERSION: i64 = 4;
+pub const STORAGE_SCHEMA_VERSION: i64 = 5;
 static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,6 +72,7 @@ pub struct ProjectRecord {
 pub struct ProjectIndexState {
     pub project_id: String,
     pub generation: i64,
+    pub baseline_generation: i64,
     pub status: String,
     pub file_count: u64,
     pub total_bytes: u64,
@@ -90,6 +91,27 @@ pub struct ProjectChangeRecord {
     pub before_sha256: Option<String>,
     pub after_sha256: Option<String>,
     pub detected_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DependencyEdgeRecord {
+    pub project_id: String,
+    pub source_path: String,
+    pub target_path: String,
+    pub source_sha256: String,
+    pub producer_id: String,
+    pub producer_version: String,
+    pub indexed_generation: i64,
+}
+
+pub struct DependencyReplacement<'a> {
+    pub project_id: &'a str,
+    pub expected_generation: i64,
+    pub source_path: &'a str,
+    pub expected_source_sha256: &'a str,
+    pub producer_id: &'a str,
+    pub producer_version: &'a str,
+    pub targets: &'a [String],
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -388,6 +410,9 @@ impl RelayStorage {
         if self.schema_version()? < 4 {
             self.apply_schema_four()?;
         }
+        if self.schema_version()? < 5 {
+            self.apply_schema_five()?;
+        }
         Ok(())
     }
 
@@ -677,6 +702,50 @@ impl RelayStorage {
         })
     }
 
+    fn apply_schema_five(&mut self) -> Result<(), StorageError> {
+        let applied_at = sqlite_now(&self.conn)?;
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| {
+                StorageError::sqlite("begin schema-5 migration", error)
+            })?;
+        tx.execute_batch(
+            "ALTER TABLE project_index_state
+               ADD COLUMN baseline_generation INTEGER NOT NULL DEFAULT 1;
+             UPDATE project_index_state
+               SET baseline_generation = generation;
+             CREATE TABLE project_dependency_edges (
+               project_id TEXT NOT NULL
+                 REFERENCES projects(id) ON DELETE CASCADE,
+               source_path TEXT NOT NULL,
+               target_path TEXT NOT NULL,
+               source_sha256 TEXT NOT NULL,
+               producer_id TEXT NOT NULL,
+               producer_version TEXT NOT NULL,
+               indexed_generation INTEGER NOT NULL,
+               updated_at TEXT NOT NULL,
+               PRIMARY KEY(project_id, source_path, target_path, producer_id)
+             );
+             CREATE INDEX project_dependency_edges_target
+               ON project_dependency_edges(project_id, target_path);",
+        )
+        .map_err(|error| {
+            StorageError::sqlite("create schema-5 dependency tables", error)
+        })?;
+        tx.execute(
+            "INSERT INTO schema_migrations(version, applied_at)
+             VALUES (?1, ?2)",
+            params![5i64, applied_at],
+        )
+        .map_err(|error| {
+            StorageError::sqlite("record schema migration 5", error)
+        })?;
+        tx.commit().map_err(|error| {
+            StorageError::sqlite("commit schema migration 5", error)
+        })
+    }
+
     pub fn db_path(&self) -> &Path {
         &self.db_path
     }
@@ -813,19 +882,20 @@ impl RelayStorage {
     ) -> Result<Option<ProjectIndexState>, StorageError> {
         self.conn
             .query_row(
-                "SELECT project_id, generation, status, file_count,
-                        total_bytes, last_reconciled_at, updated_at
+                "SELECT project_id, generation, baseline_generation, status,
+                        file_count, total_bytes, last_reconciled_at, updated_at
                  FROM project_index_state WHERE project_id = ?1",
                 [project_id],
                 |row| {
                     Ok(ProjectIndexState {
                         project_id: row.get(0)?,
                         generation: row.get(1)?,
-                        status: row.get(2)?,
-                        file_count: row.get::<_, i64>(3)?.max(0) as u64,
-                        total_bytes: row.get::<_, i64>(4)?.max(0) as u64,
-                        last_reconciled_at: row.get(5)?,
-                        updated_at: row.get(6)?,
+                        baseline_generation: row.get(2)?,
+                        status: row.get(3)?,
+                        file_count: row.get::<_, i64>(4)?.max(0) as u64,
+                        total_bytes: row.get::<_, i64>(5)?.max(0) as u64,
+                        last_reconciled_at: row.get(6)?,
+                        updated_at: row.get(7)?,
                     })
                 },
             )
@@ -927,6 +997,13 @@ impl RelayStorage {
         .map_err(|error| {
             StorageError::sqlite("clear prior project changes", error)
         })?;
+        tx.execute(
+            "DELETE FROM project_dependency_edges WHERE project_id = ?1",
+            [project_id],
+        )
+        .map_err(|error| {
+            StorageError::sqlite("clear prior project dependencies", error)
+        })?;
 
         for file in files {
             tx.execute(
@@ -950,11 +1027,12 @@ impl RelayStorage {
 
         tx.execute(
             "INSERT INTO project_index_state(
-                project_id, generation, status, file_count,
+                project_id, generation, baseline_generation, status, file_count,
                 total_bytes, last_reconciled_at, updated_at
-             ) VALUES (?1, ?2, 'ready', ?3, ?4, ?5, ?5)
+             ) VALUES (?1, ?2, ?2, 'ready', ?3, ?4, ?5, ?5)
              ON CONFLICT(project_id) DO UPDATE SET
                generation=excluded.generation,
+               baseline_generation=excluded.baseline_generation,
                status=excluded.status,
                file_count=excluded.file_count,
                total_bytes=excluded.total_bytes,
@@ -1025,6 +1103,20 @@ impl RelayStorage {
         let next_generation = current_generation.saturating_add(1);
 
         for change in changes {
+            for path in [Some(change.relative_path.as_str()), change.previous_path.as_deref()]
+                .into_iter()
+                .flatten()
+            {
+                tx.execute(
+                    "DELETE FROM project_dependency_edges
+                     WHERE project_id = ?1
+                       AND (source_path = ?2 OR target_path = ?2)",
+                    params![project_id, path],
+                )
+                .map_err(|error| {
+                    StorageError::sqlite("invalidate changed dependency edges", error)
+                })?;
+            }
             match change.change_kind.as_str() {
                 "deleted" => {
                     tx.execute(
@@ -1177,6 +1269,195 @@ impl RelayStorage {
             })?);
         }
         Ok(records)
+    }
+
+    pub fn list_project_changes_since(
+        &self,
+        project_id: &str,
+        after_generation: i64,
+        limit: usize,
+    ) -> Result<Vec<ProjectChangeRecord>, StorageError> {
+        let mut statement = self.conn.prepare(
+            "SELECT id, project_id, generation, change_kind,
+                    relative_path, previous_path,
+                    before_sha256, after_sha256, detected_at
+             FROM project_changes
+             WHERE project_id = ?1 AND generation > ?2
+             ORDER BY generation, relative_path, id
+             LIMIT ?3",
+        ).map_err(|error| {
+            StorageError::sqlite("prepare project changes since", error)
+        })?;
+        let rows = statement.query_map(
+            params![
+                project_id,
+                after_generation,
+                i64::try_from(limit).unwrap_or(i64::MAX)
+            ],
+            |row| {
+                Ok(ProjectChangeRecord {
+                    id: row.get(0)?,
+                    project_id: row.get(1)?,
+                    generation: row.get(2)?,
+                    change_kind: row.get(3)?,
+                    relative_path: row.get(4)?,
+                    previous_path: row.get(5)?,
+                    before_sha256: row.get(6)?,
+                    after_sha256: row.get(7)?,
+                    detected_at: row.get(8)?,
+                })
+            },
+        ).map_err(|error| {
+            StorageError::sqlite("query project changes since", error)
+        })?;
+        let mut records = Vec::new();
+        for row in rows {
+            records.push(row.map_err(|error| {
+                StorageError::sqlite("decode project change since", error)
+            })?);
+        }
+        Ok(records)
+    }
+
+    pub fn replace_project_dependencies(
+        &self,
+        replacement: DependencyReplacement<'_>,
+    ) -> Result<usize, StorageError> {
+        let DependencyReplacement {
+            project_id,
+            expected_generation,
+            source_path,
+            expected_source_sha256,
+            producer_id,
+            producer_version,
+            targets,
+        } = replacement;
+        let now = sqlite_now(&self.conn)?;
+        let tx = self.conn.unchecked_transaction().map_err(|error| {
+            StorageError::sqlite("begin dependency replacement", error)
+        })?;
+        let generation: Option<i64> = tx.query_row(
+            "SELECT generation FROM project_index_state WHERE project_id = ?1",
+            [project_id],
+            |row| row.get(0),
+        ).optional().map_err(|error| {
+            StorageError::sqlite("read dependency index generation", error)
+        })?;
+        let Some(generation) = generation else {
+            return Err(StorageError::new(
+                "INDEX_BASELINE_MISSING",
+                "project baseline is missing",
+            ));
+        };
+        if generation != expected_generation {
+            return Err(StorageError::new(
+                "INDEX_GENERATION_CONFLICT",
+                format!("expected generation {expected_generation}, found {generation}"),
+            ));
+        }
+        let source_sha256: Option<String> = tx.query_row(
+            "SELECT content_sha256 FROM project_files
+             WHERE project_id = ?1 AND relative_path = ?2",
+            params![project_id, source_path],
+            |row| row.get(0),
+        ).optional().map_err(|error| {
+            StorageError::sqlite("read dependency source", error)
+        })?;
+        let Some(source_sha256) = source_sha256 else {
+            return Err(StorageError::new(
+                "INDEX_FILE_NOT_FOUND",
+                "dependency source is not indexed",
+            ));
+        };
+        if source_sha256 != expected_source_sha256 {
+            return Err(StorageError::new(
+                "INDEX_SOURCE_CHANGED",
+                "dependency source hash does not match the indexed file",
+            ));
+        }
+        for target in targets {
+            let found: i64 = tx.query_row(
+                "SELECT COUNT(*) FROM project_files
+                 WHERE project_id = ?1 AND relative_path = ?2",
+                params![project_id, target],
+                |row| row.get(0),
+            ).map_err(|error| {
+                StorageError::sqlite("verify dependency target", error)
+            })?;
+            if found == 0 {
+                return Err(StorageError::new(
+                    "INDEX_FILE_NOT_FOUND",
+                    "dependency target is not indexed",
+                ));
+            }
+        }
+
+        tx.execute(
+            "DELETE FROM project_dependency_edges
+             WHERE project_id = ?1 AND source_path = ?2 AND producer_id = ?3",
+            params![project_id, source_path, producer_id],
+        ).map_err(|error| {
+            StorageError::sqlite("clear prior source dependency edges", error)
+        })?;
+        for target in targets {
+            tx.execute(
+                "INSERT INTO project_dependency_edges(
+                    project_id, source_path, target_path, source_sha256,
+                    producer_id, producer_version, indexed_generation, updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    project_id, source_path, target, source_sha256,
+                    producer_id, producer_version, generation, now
+                ],
+            ).map_err(|error| {
+                StorageError::sqlite("insert dependency edge", error)
+            })?;
+        }
+        tx.commit().map_err(|error| {
+            StorageError::sqlite("commit dependency replacement", error)
+        })?;
+        Ok(targets.len())
+    }
+
+    pub fn list_project_dependency_edges(
+        &self,
+        project_id: &str,
+        source_path: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<DependencyEdgeRecord>, StorageError> {
+        let mut statement = self.conn.prepare(
+            "SELECT project_id, source_path, target_path, source_sha256,
+                    producer_id, producer_version, indexed_generation
+             FROM project_dependency_edges
+             WHERE project_id = ?1 AND (?2 IS NULL OR source_path = ?2)
+             ORDER BY source_path, target_path, producer_id
+             LIMIT ?3",
+        ).map_err(|error| {
+            StorageError::sqlite("prepare dependency edge list", error)
+        })?;
+        let rows = statement.query_map(
+            params![project_id, source_path, i64::try_from(limit).unwrap_or(i64::MAX)],
+            |row| {
+                Ok(DependencyEdgeRecord {
+                    project_id: row.get(0)?,
+                    source_path: row.get(1)?,
+                    target_path: row.get(2)?,
+                    source_sha256: row.get(3)?,
+                    producer_id: row.get(4)?,
+                    producer_version: row.get(5)?,
+                    indexed_generation: row.get(6)?,
+                })
+            },
+        ).map_err(|error| {
+            StorageError::sqlite("query dependency edges", error)
+        })?;
+        let mut edges = Vec::new();
+        for row in rows {
+            edges.push(row.map_err(|error| {
+                StorageError::sqlite("decode dependency edge", error)
+            })?);
+        }
+        Ok(edges)
     }
 
     pub fn put_result(
@@ -2039,12 +2320,12 @@ mod tests {
     }
 
     #[test]
-    fn fresh_store_uses_schema_four_and_typed_records() {
+    fn fresh_store_uses_schema_five_and_typed_records() {
         let dir = temp_dir("fresh");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 4);
+        assert_eq!(storage.schema_version().unwrap(), 5);
         let project = storage
             .register_project(
                 Some("PRJ-production"),
@@ -2097,7 +2378,7 @@ mod tests {
         create_schema_one_fixture(&path);
 
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 4);
+        assert_eq!(storage.schema_version().unwrap(), 5);
         let project = storage.get_project("PRJ-phase1").unwrap().unwrap();
         assert_eq!(project.name, "Phase 1 Fixture");
 
@@ -2114,14 +2395,14 @@ mod tests {
         fs::remove_dir_all(dir).unwrap();
     }
     #[test]
-    fn schema_two_fixture_migrates_to_four_without_replay_loss() {
+    fn schema_two_fixture_migrates_to_five_without_replay_loss() {
         let dir = temp_dir("schema2");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
         create_schema_two_fixture(&path);
 
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 4);
+        assert_eq!(storage.schema_version().unwrap(), 5);
         let result = storage.get_result("RES-phase1").unwrap().unwrap();
         assert_eq!(result.payload["value"], 42);
         assert_eq!(result.trust, "local");
@@ -2139,7 +2420,7 @@ mod tests {
     }
 
     #[test]
-    fn schema_three_fixture_migrates_to_four_without_authority_loss() {
+    fn schema_three_fixture_migrates_to_five_without_authority_loss() {
         let dir = temp_dir("schema3-to-schema4");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
@@ -2231,7 +2512,7 @@ mod tests {
         drop(schema_three);
 
         let migrated = RelayStorage::open(&path).unwrap();
-        assert_eq!(migrated.schema_version().unwrap(), 4);
+        assert_eq!(migrated.schema_version().unwrap(), 5);
         assert_eq!(migrated.get_project("PRJ-phase1").unwrap().unwrap().name, "Phase 1 Fixture");
         assert_eq!(migrated.get_result("RES-phase1").unwrap().unwrap().payload["value"], 42);
         assert!(migrated.get_job("JOB-phase1").unwrap().is_some());
@@ -2254,7 +2535,70 @@ mod tests {
     }
 
     #[test]
-    fn schema_four_project_index_round_trip_and_generation_guard() {
+    fn schema_four_index_migrates_to_five_with_conservative_delta_boundary() {
+        let dir = temp_dir("schema4-to-schema5");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("relay.sqlite3");
+        let conn = Connection::open(&path).unwrap();
+        let mut schema_four = RelayStorage {
+            db_path: path.clone(),
+            conn,
+        };
+        schema_four.configure().unwrap();
+        schema_four.conn.execute_batch(
+            "CREATE TABLE schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL
+            );",
+        ).unwrap();
+        schema_four.apply_schema_one().unwrap();
+        schema_four.apply_schema_two().unwrap();
+        schema_four.apply_schema_three().unwrap();
+        schema_four.apply_schema_four().unwrap();
+        assert_eq!(schema_four.schema_version().unwrap(), 4);
+        schema_four.conn.execute(
+            "INSERT INTO projects(id, name, root_uri, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?4)",
+            params!["PRJ-schema4", "Schema 4", "file:///fixture", "fixture"],
+        ).unwrap();
+        schema_four.conn.execute(
+            "INSERT INTO project_index_state(
+                project_id, generation, status, file_count,
+                total_bytes, last_reconciled_at, updated_at
+             ) VALUES (?1, 3, 'ready', 1, 4, 'fixture', 'fixture')",
+            ["PRJ-schema4"],
+        ).unwrap();
+        schema_four.conn.execute(
+            "INSERT INTO project_files(
+                project_id, relative_path, size_bytes,
+                modified_unix_ns, content_sha256, indexed_at
+             ) VALUES (?1, ?2, 4, 42, ?3, 'fixture')",
+            params!["PRJ-schema4", "src/a.txt", "a".repeat(64)],
+        ).unwrap();
+        schema_four.conn.execute(
+            "INSERT INTO project_changes(
+                id, project_id, generation, change_kind,
+                relative_path, previous_path, before_sha256,
+                after_sha256, detected_at
+             ) VALUES (?1, ?2, 3, 'added', ?3, NULL, NULL, ?4, 'fixture')",
+            params!["CHG-schema4", "PRJ-schema4", "src/a.txt", "a".repeat(64)],
+        ).unwrap();
+        drop(schema_four);
+
+        let migrated = RelayStorage::open(&path).unwrap();
+        assert_eq!(migrated.schema_version().unwrap(), 5);
+        let state = migrated.get_project_index_state("PRJ-schema4").unwrap().unwrap();
+        assert_eq!(state.generation, 3);
+        assert_eq!(state.baseline_generation, 3);
+        assert_eq!(migrated.list_project_files("PRJ-schema4").unwrap().len(), 1);
+        assert_eq!(migrated.list_project_changes("PRJ-schema4", 10).unwrap().len(), 1);
+        assert!(migrated.list_project_dependency_edges("PRJ-schema4", None, 10).unwrap().is_empty());
+        drop(migrated);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn schema_five_project_index_round_trip_and_generation_guard() {
         let dir = temp_dir("schema4-index");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
@@ -2359,7 +2703,7 @@ mod tests {
 
         drop(storage);
         let reopened = RelayStorage::open(&path).unwrap();
-        assert_eq!(reopened.schema_version().unwrap(), 4);
+        assert_eq!(reopened.schema_version().unwrap(), 5);
         assert_eq!(
             reopened
                 .get_project_index_state("PRJ-index-a")
@@ -2411,7 +2755,7 @@ mod tests {
         fs::remove_dir_all(dir).unwrap();
     }
     #[test]
-    fn schema_four_transaction_usage_credential_and_egress_round_trip() {
+    fn schema_five_transaction_usage_credential_and_egress_round_trip() {
         let dir = temp_dir("schema3");
         fs::create_dir_all(&dir).unwrap();
         let storage =

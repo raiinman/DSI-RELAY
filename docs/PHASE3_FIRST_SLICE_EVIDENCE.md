@@ -2,6 +2,8 @@
 
 Status: PASS on the synthetic Windows fixture, 2026-09-26. Phase 3 remains active.
 
+This is the schema-4 evidence snapshot from first-slice commit `50a2f20`. Later Phase 3 storage evolution is recorded separately.
+
 ## Scope and command path
 
 The production `relay-contracts` registry contains four new version-1 commands: `project.import`, `project.index.build`, `project.index.reconcile`, and `project.capabilities`. The existing `project.register` and `project.list` commands remain. The daemon and canonical CLI client use the same validated command envelopes and Core dispatch. The live fixture calls through the CLI client's named-pipe path to the daemon; it does not spawn the CLI executable.

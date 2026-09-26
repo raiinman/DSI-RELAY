@@ -24,6 +24,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 - damaged operational storage starts Degraded without replacement.
 - current-user pipe security verification.
 - Synthetic Phase 3 two-project import, baseline, reconciliation, privacy, resource, graceful-restart, and hard-restart coverage through `tests/phase3_first_slice.rs`.
+- Synthetic Phase 3 change-delta and dependency-edge invalidation/isolation/restart coverage through `tests/phase3_second_slice.rs`.
 
 # Child DOX Index
 

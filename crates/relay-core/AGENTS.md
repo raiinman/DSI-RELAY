@@ -16,12 +16,14 @@ Own production RELAY Core deterministic local business logic and durable state.
 - Validation happens before business logic; incompatible command versions fail explicitly.
 - Durable result/job outputs carry provenance/trust metadata.
 - Phase 3 project baselines and change rows are project-scoped, derived state. Canonical roots stay local; machine-facing index paths are project-relative. Reconciliation treats watcher paths as hints and hashes changed candidates after authoritative metadata enumeration.
+- Schema-5 delta reads and dependency edges are bounded, project-scoped derived state. Edge replacement requires the current index generation and source content hash; source/target changes invalidate edges, and rebuild resets the delta boundary.
 
 # Verification
 
 - Unit tests for registry, storage migration, idempotency, diagnostics, malformed input, and damaged storage.
 - Integration tests through the public Core service surface.
 - Schema-3-to-4 migration preserves Phase 2 authority state; project index tests cover generation guards, isolation, missed hints, and rebuildability.
+- Schema-4-to-5 migration preserves index records and marks a conservative baseline generation; delta and edge tests cover stale input, bounds, restart, and cross-project authority.
 
 # Child DOX Index
 

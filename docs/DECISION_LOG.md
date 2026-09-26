@@ -1361,3 +1361,15 @@ Baseline build hashes project files. Reconciliation accepts watcher paths only a
 The accepted 120-file-per-project fixture demonstrated one-file hashing, two-project isolation, graceful and hard restart, schema-3 authority-state migration, and low idle cost. Metadata enumeration still scales with tree size; same-size/same-mtime unhinted edits, active OS watcher delivery, dependency-edge extraction, and hardware-tier budgets remain open Phase 3 work. This decision preserves D-149 rather than replacing it.
 
 Evidence: `docs/PHASE3_FIRST_SLICE_EVIDENCE.md`.
+
+## D-162 — Project change deltas and dependency edges are bounded derived state
+
+Status: Phase 3 second slice accepted
+
+Schema 5 makes the baseline generation explicit and stores project-scoped dependency edges between indexed project-relative files. A schema-4 store advances transactionally without losing its prior inventory or change history; its prior generation becomes a conservative delta boundary.
+
+The version-1 `project.changes` command returns a bounded delta or a structured continuity/size error. The version-1 `project.dependencies.replace` and `project.dependencies.list` commands accept/query verified indexed source and target identities. Replacement requires the current index generation and source SHA-256, and changed/renamed/deleted files invalidate affected edges. Rebuild clears edges and change history only for the rebuilt project.
+
+Edges remain caller-supplied derived observations until a compatible parser or adapter exists. Producer metadata does not grant trust or permission. Project source files remain authoritative; D-149 watcher/reconciliation and Phase 2 project-scope enforcement remain intact.
+
+Evidence: `docs/PHASE3_SECOND_SLICE_EVIDENCE.md`.

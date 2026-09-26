@@ -404,16 +404,26 @@ fn normalize_relative(path: &Path) -> Result<String, IndexError> {
 fn validate_hints(hints: &[String]) -> Result<Vec<String>, IndexError> {
     let mut normalized = BTreeSet::new();
     for hint in hints {
-        let path = Path::new(hint);
-        if path.is_absolute() {
+        if Path::new(hint).is_absolute() {
             return Err(IndexError::new(
                 "INDEX_HINT_INVALID",
                 "watcher hints must be project-relative paths",
             ));
         }
-        normalized.insert(normalize_relative(path)?);
+        normalized.insert(normalize_project_relative_path(hint)?);
     }
     Ok(normalized.into_iter().collect())
+}
+
+pub fn normalize_project_relative_path(input: &str) -> Result<String, IndexError> {
+    let path = Path::new(input);
+    if path.is_absolute() {
+        return Err(IndexError::new(
+            "PROJECT_PATH_INVALID",
+            "path must be project-relative",
+        ));
+    }
+    normalize_relative(path)
 }
 
 fn hash_file(path: &Path) -> Result<String, IndexError> {

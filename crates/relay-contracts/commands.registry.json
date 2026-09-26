@@ -618,6 +618,122 @@
       ]
     },
     {
+      "id": "project.changes",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Read a bounded, project-scoped change delta since an index generation.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "after_generation": { "type": "integer", "minimum": 0 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 500 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["project_id", "baseline_generation", "current_generation", "changes"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "baseline_generation": { "type": "integer", "minimum": 1 },
+          "current_generation": { "type": "integer", "minimum": 1 },
+          "changes": { "type": "array", "items": { "type": "object" } }
+        },
+        "additionalProperties": false
+      },
+      "errors": [
+        "PROJECT_NOT_FOUND", "INDEX_BASELINE_MISSING",
+        "INDEX_CONTINUITY_LOST", "INDEX_GENERATION_CONFLICT",
+        "INDEX_DELTA_TOO_LARGE", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
+      ]
+    },
+    {
+      "id": "project.dependencies.replace",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Replace derived dependency edges for one indexed source and producer.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": [
+          "project_id", "expected_generation", "source_path",
+          "source_sha256", "producer_id", "producer_version", "targets"
+        ],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "expected_generation": { "type": "integer", "minimum": 1 },
+          "source_path": { "type": "string", "minLength": 1 },
+          "source_sha256": { "type": "string", "minLength": 64 },
+          "producer_id": { "type": "string", "minLength": 1 },
+          "producer_version": { "type": "string", "minLength": 1 },
+          "targets": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["project_id", "generation", "source_path", "producer_id", "edge_count"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "generation": { "type": "integer", "minimum": 1 },
+          "source_path": { "type": "string" },
+          "producer_id": { "type": "string" },
+          "edge_count": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": false
+      },
+      "errors": [
+        "PROJECT_NOT_FOUND", "PROJECT_PATH_INVALID", "PROJECT_PATH_ESCAPE",
+        "INDEX_BASELINE_MISSING", "INDEX_GENERATION_CONFLICT",
+        "INDEX_FILE_NOT_FOUND", "INDEX_SOURCE_CHANGED",
+        "VALIDATION_FAILED", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
+      ]
+    },
+    {
+      "id": "project.dependencies.list",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Read bounded project-scoped derived dependency edges.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "source_path": { "type": "string", "minLength": 1 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 500 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["project_id", "generation", "edges"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "generation": { "type": "integer", "minimum": 1 },
+          "edges": { "type": "array", "items": { "type": "object" } }
+        },
+        "additionalProperties": false
+      },
+      "errors": [
+        "PROJECT_NOT_FOUND", "PROJECT_PATH_INVALID", "PROJECT_PATH_ESCAPE",
+        "INDEX_BASELINE_MISSING", "INDEX_EDGE_LIMIT_EXCEEDED",
+        "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
+      ]
+    },
+    {
       "id": "project.capabilities",
       "version": 1,
       "stability": "phase3",

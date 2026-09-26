@@ -8,7 +8,7 @@ use crate::policy::{
     ExecutionAuthority,
 };
 use crate::storage::{
-    CredentialHandleRecord, EgressLedgerInput, NewTransaction,
+    CredentialHandleRecord, DependencyReplacement, EgressLedgerInput, NewTransaction,
     RelayStorage, StorageError, StorageHealth, UsageMetricInput,
 };
 use relay_contracts::registry::{self, ResolveError};
@@ -18,6 +18,7 @@ use relay_contracts::{
 };
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
@@ -869,6 +870,15 @@ impl RelayCore {
             "project.capabilities" => {
                 self.project_capabilities(&request.arguments)
             }
+            "project.changes" => {
+                self.project_changes(&request.arguments)
+            }
+            "project.dependencies.replace" => {
+                self.project_dependencies_replace(&request.arguments)
+            }
+            "project.dependencies.list" => {
+                self.project_dependencies_list(&request.arguments)
+            }
             "result.put" => self.result_put(request),
             "result.get" => self.result_get(&request.arguments, authority),
             "job.checkpoint" => self.job_checkpoint(request),
@@ -1284,15 +1294,181 @@ impl RelayCore {
             "detail": "filesystem metadata reconciliation is authoritative"
         }));
         capabilities.push(json!({
+            "id": "dependency_edges",
+            "state": if !root_available { "unavailable" } else if baseline_ready { "available" } else { "unknown" },
+            "detail": "project-scoped derived edges can be supplied for indexed files with generation and source-hash checks"
+        }));
+        capabilities.push(json!({
             "id": "dependency_graph",
             "state": "unknown",
-            "detail": "dependency-edge promotion is a later Phase 3 slice"
+            "detail": "automatic dependency extraction requires a compatible parser or adapter"
         }));
 
         Ok(json!({
             "project_id": project_id,
             "baseline_state": baseline_state,
             "capabilities": capabilities
+        }))
+    }
+
+    fn project_changes(
+        &self,
+        arguments: &Value,
+    ) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"]
+            .as_str()
+            .expect("registry validation requires project_id");
+        let limit = arguments.get("limit").and_then(Value::as_u64).unwrap_or(100) as usize;
+        let (state, changes) = self.with_storage(|storage| {
+            if storage.get_project(project_id)?.is_none() {
+                return Err(StorageError::new("PROJECT_NOT_FOUND", "project not found"));
+            }
+            let state = storage.get_project_index_state(project_id)?.ok_or_else(|| {
+                StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing")
+            })?;
+            let after_generation = arguments
+                .get("after_generation")
+                .and_then(Value::as_i64)
+                .unwrap_or(state.baseline_generation);
+            if after_generation < state.baseline_generation {
+                return Err(StorageError::new(
+                    "INDEX_CONTINUITY_LOST",
+                    "requested generation precedes the current baseline",
+                ));
+            }
+            if after_generation > state.generation {
+                return Err(StorageError::new(
+                    "INDEX_GENERATION_CONFLICT",
+                    "requested generation is newer than the current index",
+                ));
+            }
+            let changes = storage.list_project_changes_since(
+                project_id, after_generation, limit + 1,
+            )?;
+            Ok((state, changes))
+        })?;
+        if changes.len() > limit {
+            return Err(CoreCommandError::new(
+                "INDEX_DELTA_TOO_LARGE",
+                "change delta exceeds the bounded result; rebuild or request a closer generation",
+            ));
+        }
+        Ok(json!({
+            "project_id": project_id,
+            "baseline_generation": state.baseline_generation,
+            "current_generation": state.generation,
+            "changes": changes
+        }))
+    }
+
+    fn project_dependencies_replace(
+        &self,
+        arguments: &Value,
+    ) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"]
+            .as_str()
+            .expect("registry validation requires project_id");
+        let expected_generation = arguments["expected_generation"]
+            .as_i64()
+            .expect("registry validation requires expected_generation");
+        let raw_source = arguments["source_path"]
+            .as_str()
+            .expect("registry validation requires source_path");
+        let source_path = indexing::normalize_project_relative_path(raw_source)
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        let source_sha256 = arguments["source_sha256"]
+            .as_str()
+            .expect("registry validation requires source_sha256");
+        let producer_id = arguments["producer_id"]
+            .as_str()
+            .expect("registry validation requires producer_id");
+        let producer_version = arguments["producer_version"]
+            .as_str()
+            .expect("registry validation requires producer_version");
+        let raw_targets = arguments["targets"]
+            .as_array()
+            .expect("registry validation requires targets");
+        if source_path.len() > 4096
+            || source_sha256.len() != 64
+            || !source_sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
+            || producer_id.len() > 128
+            || producer_version.len() > 64
+            || raw_targets.len() > 500
+        {
+            return Err(CoreCommandError::new(
+                "VALIDATION_FAILED",
+                "dependency replacement exceeds bounded field limits",
+            ));
+        }
+        let mut targets = BTreeSet::new();
+        for raw_target in raw_targets {
+            let target = indexing::normalize_project_relative_path(
+                raw_target.as_str().expect("registry validates targets"),
+            ).map_err(|error| CoreCommandError::new(error.code, error.message))?;
+            if target.len() > 4096 || target == source_path || !targets.insert(target) {
+                return Err(CoreCommandError::new(
+                    "VALIDATION_FAILED",
+                    "dependency targets must be distinct project-relative files other than the source",
+                ));
+            }
+        }
+        let targets: Vec<String> = targets.into_iter().collect();
+        let edge_count = self.with_storage(|storage| {
+            storage.replace_project_dependencies(DependencyReplacement {
+                project_id,
+                expected_generation,
+                source_path: &source_path,
+                expected_source_sha256: source_sha256,
+                producer_id,
+                producer_version,
+                targets: &targets,
+            })
+        })?;
+        Ok(json!({
+            "project_id": project_id,
+            "generation": expected_generation,
+            "source_path": source_path,
+            "producer_id": producer_id,
+            "edge_count": edge_count
+        }))
+    }
+
+    fn project_dependencies_list(
+        &self,
+        arguments: &Value,
+    ) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"]
+            .as_str()
+            .expect("registry validation requires project_id");
+        let source_path = arguments
+            .get("source_path")
+            .and_then(Value::as_str)
+            .map(indexing::normalize_project_relative_path)
+            .transpose()
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        let limit = arguments.get("limit").and_then(Value::as_u64).unwrap_or(100) as usize;
+        let (state, edges) = self.with_storage(|storage| {
+            if storage.get_project(project_id)?.is_none() {
+                return Err(StorageError::new("PROJECT_NOT_FOUND", "project not found"));
+            }
+            let state = storage.get_project_index_state(project_id)?.ok_or_else(|| {
+                StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing")
+            })?;
+            let edges = storage.list_project_dependency_edges(
+                project_id, source_path.as_deref(), limit + 1,
+            )?;
+            Ok((state, edges))
+        })?;
+        if edges.len() > limit {
+            return Err(CoreCommandError::new(
+                "INDEX_EDGE_LIMIT_EXCEEDED",
+                "dependency edge result exceeds the bounded limit; filter by source path",
+            ));
+        }
+        Ok(json!({
+            "project_id": project_id,
+            "generation": state.generation,
+            "edges": edges
         }))
     }
 
@@ -2366,21 +2542,226 @@ mod tests {
 
         let mut authority = ExecutionAuthority::local_user("CLIENT-scoped");
         authority.project_ids = Some(["PRJ-a".to_string()].into_iter().collect());
-        for command in ["project.capabilities", "project.index.build", "project.index.reconcile"] {
+        for command in [
+            "project.capabilities",
+            "project.changes",
+            "project.dependencies.list",
+            "project.index.build",
+            "project.index.reconcile",
+        ] {
             let mut attempt = request(
                 &format!("REQ-deny-{command}"),
                 command,
                 json!({ "project_id": "PRJ-b" }),
             );
-            if command != "project.capabilities" {
+            if matches!(command, "project.index.build" | "project.index.reconcile") {
                 attempt.idempotency_key = Some(format!("IDEMP-deny-{command}"));
             }
             let denied = core.execute_authorized(attempt, &runtime, &authority);
             assert!(!denied.ok, "{command} crossed project scope");
             assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
         }
+        let mut replace = request(
+            "REQ-deny-dependency-replace",
+            "project.dependencies.replace",
+            json!({
+                "project_id": "PRJ-b",
+                "expected_generation": 1,
+                "source_path": "same.txt",
+                "source_sha256": "0".repeat(64),
+                "producer_id": "fixture",
+                "producer_version": "1",
+                "targets": []
+            }),
+        );
+        replace.idempotency_key = Some("IDEMP-deny-dependency-replace".to_string());
+        let denied = core.execute_authorized(replace, &runtime, &authority);
+        assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
 
         drop(core);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn change_deltas_and_dependency_edges_follow_index_generation() {
+        let dir = temp_dir("phase3-dependencies");
+        let root = dir.join("project");
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src/a.txt"), b"alpha").unwrap();
+        fs::write(root.join("src/b.txt"), b"bravo").unwrap();
+        let state_dir = dir.join("state");
+        let core = RelayCore::open(CoreConfig::new(&state_dir));
+        let runtime = runtime();
+
+        let mut import = request(
+            "REQ-dep-import",
+            "project.import",
+            json!({
+                "id": "PRJ-dependencies",
+                "name": "Dependencies",
+                "root_path": root.to_string_lossy()
+            }),
+        );
+        import.idempotency_key = Some("IDEMP-dep-import".to_string());
+        assert!(core.execute(import, &runtime).ok);
+        let mut build = request(
+            "REQ-dep-build",
+            "project.index.build",
+            json!({ "project_id": "PRJ-dependencies" }),
+        );
+        build.idempotency_key = Some("IDEMP-dep-build".to_string());
+        let built = core.execute(build, &runtime);
+        assert!(built.ok);
+        assert_eq!(built.result.unwrap()["generation"], 1);
+
+        let storage = RelayStorage::open(state_dir.join("relay.sqlite3")).unwrap();
+        let files = storage.list_project_files("PRJ-dependencies").unwrap();
+        let source_sha = files.iter()
+            .find(|file| file.relative_path == "src/a.txt")
+            .unwrap()
+            .content_sha256
+            .clone();
+        drop(storage);
+
+        let make_replace = |id: &str, generation: i64, sha: &str, targets: Value| {
+            let mut request = request(
+                id,
+                "project.dependencies.replace",
+                json!({
+                    "project_id": "PRJ-dependencies",
+                    "expected_generation": generation,
+                    "source_path": "src/a.txt",
+                    "source_sha256": sha,
+                    "producer_id": "fixture.parser",
+                    "producer_version": "1",
+                    "targets": targets
+                }),
+            );
+            request.idempotency_key = Some(format!("IDEMP-{id}"));
+            request
+        };
+
+        let wrong_hash = core.execute(
+            make_replace("REQ-dep-wrong-hash", 1, &"0".repeat(64), json!(["src/b.txt"])),
+            &runtime,
+        );
+        assert_eq!(wrong_hash.error.unwrap().code, "INDEX_SOURCE_CHANGED");
+        let missing_target = core.execute(
+            make_replace("REQ-dep-missing", 1, &source_sha, json!(["src/missing.txt"])),
+            &runtime,
+        );
+        assert_eq!(missing_target.error.unwrap().code, "INDEX_FILE_NOT_FOUND");
+        let escaped = core.execute(
+            make_replace("REQ-dep-escaped", 1, &source_sha, json!(["../outside.txt"])),
+            &runtime,
+        );
+        assert_eq!(escaped.error.unwrap().code, "PROJECT_PATH_ESCAPE");
+
+        let replaced = core.execute(
+            make_replace("REQ-dep-replace", 1, &source_sha, json!(["src/b.txt"])),
+            &runtime,
+        );
+        assert!(replaced.ok, "{replaced:?}");
+        assert_eq!(replaced.result.unwrap()["edge_count"], 1);
+        let listed = core.execute(
+            request(
+                "REQ-dep-list",
+                "project.dependencies.list",
+                json!({ "project_id": "PRJ-dependencies" }),
+            ),
+            &runtime,
+        );
+        assert!(listed.ok);
+        assert_eq!(listed.result.unwrap()["edges"][0]["target_path"], "src/b.txt");
+
+        let stale_generation = core.execute(
+            make_replace("REQ-dep-stale", 0, &source_sha, json!([])),
+            &runtime,
+        );
+        assert_eq!(stale_generation.error.unwrap().code, "VALIDATION_FAILED");
+
+        fs::write(root.join("src/b.txt"), b"bravo changed and longer").unwrap();
+        fs::write(root.join("src/c.txt"), b"charlie").unwrap();
+        let mut reconcile = request(
+            "REQ-dep-reconcile",
+            "project.index.reconcile",
+            json!({ "project_id": "PRJ-dependencies" }),
+        );
+        reconcile.idempotency_key = Some("IDEMP-dep-reconcile".to_string());
+        let reconciled = core.execute(reconcile, &runtime);
+        assert!(reconciled.ok);
+        assert_eq!(reconciled.result.unwrap()["generation"], 2);
+        let listed = core.execute(
+            request(
+                "REQ-dep-list-after-change",
+                "project.dependencies.list",
+                json!({ "project_id": "PRJ-dependencies" }),
+            ),
+            &runtime,
+        );
+        assert!(listed.result.unwrap()["edges"].as_array().unwrap().is_empty());
+        let delta = core.execute(
+            request(
+                "REQ-dep-delta",
+                "project.changes",
+                json!({ "project_id": "PRJ-dependencies", "after_generation": 1 }),
+            ),
+            &runtime,
+        );
+        assert!(delta.ok);
+        let delta = delta.result.unwrap();
+        assert_eq!(delta["changes"].as_array().unwrap().len(), 2);
+        assert_eq!(delta["changes"][0]["relative_path"], "src/b.txt");
+        let bounded = core.execute(
+            request(
+                "REQ-dep-bounded-delta",
+                "project.changes",
+                json!({
+                    "project_id": "PRJ-dependencies",
+                    "after_generation": 1,
+                    "limit": 1
+                }),
+            ),
+            &runtime,
+        );
+        assert_eq!(bounded.error.unwrap().code, "INDEX_DELTA_TOO_LARGE");
+
+        let stale = core.execute(
+            make_replace("REQ-dep-stale-after-change", 1, &source_sha, json!(["src/b.txt"])),
+            &runtime,
+        );
+        assert_eq!(stale.error.unwrap().code, "INDEX_GENERATION_CONFLICT");
+
+        let mut rebuild = request(
+            "REQ-dep-rebuild",
+            "project.index.build",
+            json!({ "project_id": "PRJ-dependencies" }),
+        );
+        rebuild.idempotency_key = Some("IDEMP-dep-rebuild".to_string());
+        assert!(core.execute(rebuild, &runtime).ok);
+        let lost = core.execute(
+            request(
+                "REQ-dep-old-delta",
+                "project.changes",
+                json!({ "project_id": "PRJ-dependencies", "after_generation": 1 }),
+            ),
+            &runtime,
+        );
+        assert_eq!(lost.error.unwrap().code, "INDEX_CONTINUITY_LOST");
+
+        drop(core);
+        let reopened = RelayCore::open(CoreConfig::new(&state_dir));
+        let current = reopened.execute(
+            request(
+                "REQ-dep-after-restart",
+                "project.changes",
+                json!({ "project_id": "PRJ-dependencies" }),
+            ),
+            &runtime,
+        );
+        assert!(current.ok);
+        assert_eq!(current.result.unwrap()["baseline_generation"], 3);
+        drop(reopened);
         fs::remove_dir_all(dir).unwrap();
     }
 

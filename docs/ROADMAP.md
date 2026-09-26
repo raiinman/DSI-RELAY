@@ -209,7 +209,7 @@ Exit criteria:
 
 ## Phase 3 — Project discovery and indexing
 
-Status: Active — the generic two-project first slice is accepted on a synthetic Windows fixture. Schema-4 migration, project isolation, baseline/restart persistence, hint-driven changed-only hashing, missed-hint reconciliation, capability reporting, and resource samples are recorded in `PHASE3_FIRST_SLICE_EVIDENCE.md`. OS watcher integration, stronger continuity handling, dependency edges, and hardware-tier budgets remain open.
+Status: Active — the generic two-project baseline slice and schema-5 bounded delta/dependency-edge foundation are accepted on synthetic Windows fixtures. Evidence: `PHASE3_FIRST_SLICE_EVIDENCE.md` and `PHASE3_SECOND_SLICE_EVIDENCE.md`. OS watcher integration, stronger continuity handling, automatic dependency extraction, hardware-tier budgets, and closure review remain open.
 
 Build:
 

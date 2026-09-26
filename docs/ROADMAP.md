@@ -209,7 +209,7 @@ Exit criteria:
 
 ## Phase 3 — Project discovery and indexing
 
-Status: Active — the generic two-project baseline, schema-5 bounded delta/dependency-edge foundation, provisional targeted hint-update path, schema-6 continuity recovery and idle scheduler, bounded Windows OS watcher, schema-7 project configuration, and sandboxed parser dispatch with an explicit installation grant are accepted on synthetic fixtures. Evidence: the nine `PHASE3_*_SLICE_EVIDENCE.md` records, `PHASE3_WATCHER_LOAD_EVIDENCE.md`, and the one-host repeatable scale report. `PHASE3_CLOSURE_REVIEW.md` remains NOT READY. Supported-tier budgets, prolonged creator-app interference, and installed-parser operational cost and diagnostics remain open.
+Status: Active — the generic two-project baseline, schema-5 bounded delta/dependency-edge foundation, provisional targeted hint-update path, schema-6 continuity recovery and idle scheduler, bounded Windows OS watcher, schema-7 project configuration, installed sandboxed parser dispatch, and live parser health are accepted on synthetic fixtures. Evidence: the ten `PHASE3_*_SLICE_EVIDENCE.md` records, `PHASE3_WATCHER_LOAD_EVIDENCE.md`, `PHASE3_PARSER_RESOURCE_EVIDENCE.md`, and the one-host repeatable scale report. `PHASE3_CLOSURE_REVIEW.md` remains NOT READY. Supported-tier budgets, prolonged creator-app interference, public parser installation, and real-adapter proof remain open. `PUBLIC_PREVIEW_PATH.md` describes a separate synthetic measurement preview path without claiming a product release.
 
 Build:
 

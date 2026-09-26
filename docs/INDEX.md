@@ -12,6 +12,10 @@ The Phase 3 baseline, dependency-edge, provisional hint-update, content-verifica
 The larger indexing sample and current NOT READY closure verdict are in PHASE3_SCALE_BENCHMARK_EVIDENCE.md and PHASE3_CLOSURE_REVIEW.md.
 Live burst, prolonged watcher activity, and recovery callback-race observations are in PHASE3_WATCHER_LOAD_EVIDENCE.md.
 The repeatable resource measurement method and one-host five-run sample are in PHASE3_RESOURCE_BUDGET_METHOD.md and PHASE3_SCALE_FIVE_RUN_2026-09-26.json.
+Parser health and recovery evidence is in PHASE3_TENTH_SLICE_EVIDENCE.md. One-host parser cost evidence and its raw three-run report are in PHASE3_PARSER_RESOURCE_EVIDENCE.md and PHASE3_PARSER_RESOURCE_THREE_RUN_2026-09-26.json.
+PHASE3_PORTABLE_BENCHMARK_DRAFT.md records the local no-Cargo synthetic benchmark draft and remaining package gates.
+PUBLIC_PREVIEW_PATH.md separates a synthetic measurement preview from a public RELAY beta and lists the release controls needed before distributing binaries.
+The current Rust release dependency and license-expression inventory is in RELEASE_DEPENDENCY_LICENSE_INVENTORY.md.
 
 ## Core design
 

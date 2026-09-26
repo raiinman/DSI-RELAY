@@ -183,6 +183,41 @@ fn process_sample(host: &Child) -> (u64, u64) {
 }
 
 #[test]
+fn four_distinct_watched_roots_are_quiet_when_inactive() {
+    let fixture = Fixture::new();
+    let mut generations = Vec::new();
+    for index in 0..4 {
+        let id = format!("PRJ-idle-{index}");
+        let root = fixture.root(&format!("idle-{index}"));
+        fs::write(root.join("base.txt"), format!("project-{index}")).unwrap();
+        fixture.add_project(&id, &root);
+        generations.push((id.clone(), fixture.generation(&id)));
+    }
+
+    let sample_ms = 5_000_u64;
+    let (rss_before, cpu_before) = process_sample(&fixture.host);
+    thread::sleep(Duration::from_millis(sample_ms));
+    let (rss_after, cpu_after) = process_sample(&fixture.host);
+    for (id, generation) in &generations {
+        assert_eq!(fixture.capabilities(id)["index_status"], "ready");
+        assert_eq!(fixture.generation(id), *generation);
+    }
+    println!(
+        "PHASE3_WATCHER_MULTI_ROOT_IDLE_METRICS={}",
+        json!({
+            "watched_projects": 4,
+            "distinct_roots": 4,
+            "sample_ms": sample_ms,
+            "rss_before_bytes": rss_before,
+            "rss_after_bytes": rss_after,
+            "cpu_delta_ms": cpu_after.saturating_sub(cpu_before),
+            "generations_unchanged": true
+        })
+    );
+    fixture.stop();
+}
+
+#[test]
 fn live_burst_uncertainty_recovers_without_cross_project_changes() {
     const BURST_FILES: usize = 96;
     let fixture = Fixture::new();
@@ -441,6 +476,91 @@ fn callback_during_full_recovery_keeps_verification_required() {
             "generation_after_callback_hints": generation_after_edit,
             "verification_required_during_observation": true,
             "verified_files_hashed": verified["files_hashed"]
+        })
+    );
+    fixture.stop();
+}
+
+#[test]
+#[ignore = "manual foreground-write interruption and 30-second recovery retry"]
+fn foreground_write_interrupts_scan_and_idle_retry_restores_ready() {
+    let fixture = Fixture::new();
+    let recovery_root = fixture.root("recovery");
+    let foreground_root = fixture.root("foreground");
+    fs::write(recovery_root.join("base.txt"), b"baseline").unwrap();
+    let block = vec![b'r'; 64 * 1024 * 1024];
+    for index in 0..4 {
+        fs::write(
+            recovery_root.join(format!("padding-{index:02}.bin")),
+            &block,
+        )
+        .unwrap();
+    }
+    for index in 0..2 {
+        fs::write(
+            foreground_root.join(format!("padding-{index:02}.bin")),
+            &block,
+        )
+        .unwrap();
+    }
+    fixture.add_project("PRJ-foreground-recovery", &recovery_root);
+    fixture.add_project("PRJ-foreground-work", &foreground_root);
+    let generation = fixture.generation("PRJ-foreground-recovery");
+    let started = Instant::now();
+    fs::create_dir(recovery_root.join("uncertain")).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while fixture.capabilities("PRJ-foreground-recovery")["content_verification_required"] != true {
+        assert!(
+            Instant::now() < deadline,
+            "uncertain event was not observed"
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
+    let (_, cpu_before) = process_sample(&fixture.host);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let (_, cpu_now) = process_sample(&fixture.host);
+        if cpu_now.saturating_sub(cpu_before) >= 100 {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "background recovery did not start hashing"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+    let scan_observed_ms = started.elapsed().as_millis();
+    assert_eq!(fixture.generation("PRJ-foreground-recovery"), generation);
+    let foreground_start = Instant::now();
+    let foreground = fixture.checked(
+        "foreground-verify",
+        "project.index.reconcile",
+        json!({ "project_id": "PRJ-foreground-work", "verify_content": true }),
+        true,
+    );
+    let foreground_ms = foreground_start.elapsed().as_millis();
+    assert_eq!(foreground["file_count"], 2);
+    let after_write = fixture.capabilities("PRJ-foreground-recovery");
+    assert_eq!(after_write["index_status"], "stale");
+    assert_eq!(after_write["content_verification_required"], true);
+    assert_eq!(fixture.generation("PRJ-foreground-recovery"), generation);
+    let retry_ms = fixture
+        .wait_ready("PRJ-foreground-recovery", Duration::from_secs(45))
+        .as_millis();
+    assert_eq!(
+        fixture.capabilities("PRJ-foreground-recovery")["index_status"],
+        "ready"
+    );
+    println!(
+        "PHASE3_WATCHER_FOREGROUND_RETRY_METRICS={}",
+        json!({
+            "recovery_fixture_bytes": 4_u64 * 64 * 1024 * 1024,
+            "foreground_fixture_bytes": 2_u64 * 64 * 1024 * 1024,
+            "scan_observed_after_uncertainty_ms": scan_observed_ms,
+            "foreground_write_ms": foreground_ms,
+            "stale_after_foreground_write": true,
+            "retry_wait_after_foreground_ms": retry_ms,
+            "total_since_uncertainty_ms": started.elapsed().as_millis()
         })
     );
     fixture.stop();

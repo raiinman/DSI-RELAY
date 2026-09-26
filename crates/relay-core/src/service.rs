@@ -18,6 +18,7 @@ use relay_contracts::{
     PROTOCOL_MAX, PROTOCOL_MIN,
 };
 use serde_json::{json, Map, Value};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -52,6 +53,28 @@ pub struct RuntimeContext {
     pub ipc_healthy: bool,
     pub ipc_security: Value,
     pub capabilities: Vec<String>,
+    pub host_components: Vec<HostComponentHealth>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HostComponentState {
+    NotConfigured,
+    Healthy,
+    Degraded,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct HostComponentHealth {
+    pub id: String,
+    pub state: HostComponentState,
+    pub error_code: Option<String>,
+    pub installed_count: u32,
+    pub declared_count: u32,
+    pub unavailable_count: u32,
+    pub quarantined_count: u32,
+    pub failure_count: u64,
+    pub success_count: u64,
 }
 
 impl RuntimeContext {
@@ -66,6 +89,7 @@ impl RuntimeContext {
                 "scope": "current-process"
             }),
             capabilities: registry::capability_ids(),
+            host_components: Vec::new(),
         }
     }
 }
@@ -89,6 +113,44 @@ pub struct ParserProjectSnapshot {
 }
 
 impl RelayCore {
+    /// Local host health input; exposes no project roots or source paths.
+    pub fn parser_declared_bindings(&self) -> Result<Vec<(String, String, String)>, String> {
+        self.with_storage(|storage| {
+            let mut bindings = Vec::new();
+            for project in storage.list_projects()? {
+                if let Some(configuration) = storage.get_project_configuration(&project.id)?
+                    && let (Some(adapter_id), Some(adapter_version)) =
+                        (configuration.adapter_id, configuration.adapter_version)
+                {
+                    bindings.push((project.id, adapter_id, adapter_version));
+                }
+            }
+            Ok(bindings)
+        }).map_err(|error| error.message)
+    }
+
+    /// Append only fixed daemon event labels and codes; never source or worker text.
+    pub fn record_host_component_event(
+        &self,
+        component: &'static str,
+        code: &'static str,
+        recovered: bool,
+    ) {
+        if let Some(logger) = &self.diagnostics
+            && let Ok(mut logger) = logger.lock()
+        {
+            let mut event = DiagnosticEvent::new(
+                if recovered { "relay.host.component.recovered" } else { "relay.host.component.failed" },
+                if recovered { Severity::Info } else { Severity::Warn },
+                "host.component",
+                if recovered { "Host component recovered" } else { "Host component needs attention" },
+            );
+            event.attributes.insert("component".to_string(), json!(component));
+            event.attributes.insert("error_code".to_string(), json!(code));
+            let _ = logger.append(event);
+        }
+    }
+
     pub fn parser_ready_projects(&self) -> Result<Vec<ParserProjectSnapshot>, String> {
         self.with_storage(|storage| {
             let mut ready = Vec::new();
@@ -1071,7 +1133,9 @@ impl RelayCore {
     ) -> Result<Value, CoreCommandError> {
         let storage = self.storage_health();
         let diagnostics = self.diagnostics_health();
-        let healthy = storage.ok && diagnostics.ok && runtime.ipc_healthy;
+        let host_healthy = runtime.host_components.iter().all(|component|
+            component.state != HostComponentState::Degraded);
+        let healthy = storage.ok && diagnostics.ok && runtime.ipc_healthy && host_healthy;
         Ok(json!({
             "process_health": "running",
             "recovery_state": if healthy { "Healthy" } else { "Degraded" },
@@ -1087,6 +1151,7 @@ impl RelayCore {
             "ipc_security": runtime.ipc_security,
             "storage": storage,
             "diagnostics": diagnostics,
+            "host_components": runtime.host_components,
             "uptime_ms": runtime.uptime_ms
         }))
     }
@@ -1096,8 +1161,10 @@ impl RelayCore {
     ) -> Result<Value, CoreCommandError> {
         let storage = self.storage_health();
         let diagnostics = self.diagnostics_health();
-        let healthy = storage.ok && diagnostics.ok && runtime.ipc_healthy;
-        Ok(json!({
+        let host_healthy = runtime.host_components.iter().all(|component|
+            component.state != HostComponentState::Degraded);
+        let healthy = storage.ok && diagnostics.ok && runtime.ipc_healthy && host_healthy;
+        let mut report = json!({
             "healthy": healthy,
             "summary": if healthy {
                 "RELAY Core, storage, diagnostics, and local transport are healthy."
@@ -1105,6 +1172,8 @@ impl RelayCore {
                 "RELAY Core is reachable, but operational storage needs attention."
             } else if !diagnostics.ok {
                 "RELAY Core is reachable, but diagnostics capture needs attention."
+            } else if !host_healthy {
+                "A local host component needs attention."
             } else {
                 "RELAY Core is healthy, but local transport needs attention."
             },
@@ -1158,13 +1227,25 @@ impl RelayCore {
                     "Restore diagnostics capture before treating support evidence as complete."
                         .to_string()
                 )
+            } else if !host_healthy {
+                Value::String("Inspect the host component error code and repair its installation or input.".to_string())
             } else {
                 Value::String(
                     "Inspect local transport security/connectivity."
                         .to_string()
                 )
             }
-        }))
+        });
+        if let Some(checks) = report["checks"].as_array_mut() {
+            for component in &runtime.host_components {
+                checks.push(json!({
+                    "id": component.id,
+                    "status": if component.state == HostComponentState::Degraded { "fail" } else { "pass" },
+                    "detail": component.error_code.as_deref().unwrap_or("component available")
+                }));
+            }
+        }
+        Ok(report)
     }
 
     fn registry_list(

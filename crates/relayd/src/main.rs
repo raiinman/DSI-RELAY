@@ -79,6 +79,9 @@ fn host_capabilities() -> Vec<String> {
 fn runtime_context(
     started: Instant,
     ipc_security: &IpcSecurityState,
+    core: &RelayCore,
+    parser_health: &parser::ParserHealth,
+    include_host_health: bool,
 ) -> RuntimeContext {
     RuntimeContext {
         pid: std::process::id(),
@@ -92,6 +95,11 @@ fn runtime_context(
             "ipc.named-pipe.current-user@1".to_string(),
             "diagnostics.structured-jsonl@1".to_string(),
         ],
+        host_components: if include_host_health {
+            vec![parser_health.snapshot(core)]
+        } else {
+            Vec::new()
+        },
     }
 }
 
@@ -147,14 +155,23 @@ fn run() -> Result<(), String> {
     };
 
     let core = Arc::new(RelayCore::open(CoreConfig::new(&state_dir)));
-    let parser_installations = parser::load_installations(&state_dir)?;
+    let (parser_installations, parser_load_failed) = match parser::load_installations(&state_dir) {
+        Ok(installations) => (installations, false),
+        Err(_) => (Default::default(), true),
+    };
+    let parser_health = parser::ParserHealth::new(&parser_installations, parser_load_failed);
+    if parser_load_failed {
+        core.record_host_component_event(
+            "adapter.dependencies.parse", "PARSER_INSTALLATION_INVALID", false,
+        );
+    }
     let watcher_enabled = std::env::var("RELAY_TEST_DISABLE_WATCHER").as_deref() != Ok("1");
     if watcher_enabled {
         for (project_id, _) in core.index_watch_targets().unwrap_or_default() {
             let _ = core.mark_index_stale(&project_id);
         }
     }
-    let initial_runtime = runtime_context(started, &ipc_security);
+    let initial_runtime = runtime_context(started, &ipc_security, &core, &parser_health, true);
     let initial_status = core.execute(
         CommandRequest {
             request_id: "BOOT-status".to_string(),
@@ -215,6 +232,7 @@ fn run() -> Result<(), String> {
         initial_runtime.clone(),
         Arc::clone(&foreground_active),
         parser_installations,
+        parser_health.clone(),
     );
     let mut watcher = watcher_enabled.then(|| {
         watcher::WatcherRuntime::start(
@@ -315,7 +333,17 @@ fn run() -> Result<(), String> {
             .iter()
             .find(|command| command.id == request.command)
             .is_none_or(|command| command.effect_class != "observe");
-        let runtime = runtime_context(started, &ipc_security);
+        let include_host_health = matches!(
+            request.command.as_str(),
+            "system.status" | "system.doctor"
+        );
+        let runtime = runtime_context(
+            started,
+            &ipc_security,
+            &core,
+            &parser_health,
+            include_host_health,
+        );
         if foreground_work {
             foreground_active.store(true, Ordering::SeqCst);
         }

@@ -6,7 +6,7 @@ The product exists to make AI-assisted development cheaper, more reliable, and e
 
 ## Status
 
-Phase 0 is complete. Phase 1 technical spike and stack selection is active; implementation begins with minimal benchmark-driven prototypes.
+Phases 0–2 are complete. Phase 3 project discovery and indexing is active on `phase3/project-discovery`. The generic daemon, CLI, project index, watcher recovery, and synthetic parser dispatch are implemented and tested. The [Phase 3 closure review](docs/PHASE3_CLOSURE_REVIEW.md) remains **NOT READY** because supported hardware-tier, creator-app interference, and other operational release evidence are still open. This repository is not yet a public installer or production release.
 
 ## Core product rules
 
@@ -56,9 +56,9 @@ AI clients / humans
 
 ## Documentation
 
-Start with docs/PHASE1_START_HERE.md.
+Start with docs/PHASE3_START_HERE.md for current development and docs/INDEX.md for the full map.
 
-- docs/PHASE1_START_HERE.md — active Phase 1 execution order and fresh-chat handoff
+- docs/PHASE3_START_HERE.md — active Phase 3 work and fresh-task handoff
 - docs/INDEX.md — documentation map
 - docs/PRODUCT_VISION.md — product intent and boundaries
 - docs/SYSTEM_ARCHITECTURE.md — target technical architecture

@@ -204,6 +204,28 @@ fn wait_edges(state: &LocalHostState, project_id: &str, expected: &[&str]) {
     );
 }
 
+fn parser_status(state: &LocalHostState) -> Value {
+    let id = format!("parser-health-{}", READ_ID.fetch_add(1, Ordering::Relaxed));
+    let response = call(state, &id, "system.status", json!({}), false);
+    assert!(response.ok, "{:?}", response.error);
+    response.result.unwrap()
+}
+
+fn wait_parser_state(state: &LocalHostState, expected: &str) -> Value {
+    let deadline = Instant::now() + Duration::from_secs(25);
+    while Instant::now() < deadline {
+        let status = parser_status(state);
+        if status["host_components"][0]["state"] == expected {
+            return status;
+        }
+        thread::sleep(Duration::from_millis(200));
+    }
+    panic!(
+        "parser health did not reach {expected}; found {:?}",
+        parser_status(state)["host_components"]
+    );
+}
+
 #[test]
 fn installed_parser_extracts_and_reparses_only_authorized_project() {
     let dir = fixture_dir();
@@ -330,7 +352,7 @@ fn installed_parser_extracts_and_reparses_only_authorized_project() {
 }
 
 #[test]
-fn installation_grant_rejects_worker_digest_mismatch_before_daemon_readiness() {
+fn invalid_installation_is_visible_and_recovers_after_restart() {
     let dir = fixture_dir();
     let state_dir = dir.join("state");
     install_fixture(&state_dir, &dir);
@@ -338,12 +360,232 @@ fn installation_grant_rejects_worker_digest_mismatch_before_daemon_readiness() {
     let mut grant: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
     grant["installations"][0]["worker_sha256"] = json!("0".repeat(64));
     fs::write(&path, serde_json::to_vec(&grant).unwrap()).unwrap();
-    let output = Command::new(env!("CARGO_BIN_EXE_relayd"))
-        .env("RELAY_STATE_DIR", &state_dir)
-        .env("RELAY_INSTANCE", "parser-digest-reject")
-        .output()
-        .unwrap();
-    assert!(!output.status.success());
-    assert!(!state_dir.join("host.json").exists());
+    let (mut first, state) = spawn_host(&state_dir);
+    let degraded = wait_parser_state(&state, "degraded");
+    assert_eq!(degraded["recovery_state"], "Degraded");
+    assert_eq!(
+        degraded["host_components"][0]["error_code"],
+        "PARSER_INSTALLATION_INVALID"
+    );
+    let doctor = call(
+        &state,
+        "doctor-install-invalid",
+        "system.doctor",
+        json!({}),
+        false,
+    );
+    assert!(!doctor.result.unwrap()["healthy"].as_bool().unwrap());
+    let stopped = call(
+        &state,
+        "stop-install-invalid",
+        "system.shutdown",
+        json!({}),
+        false,
+    );
+    assert!(stopped.ok);
+    assert!(first.wait().unwrap().success());
+
+    grant["installations"][0]["worker_sha256"] =
+        json!(sha256_file(&dir.join("installed-parser/relay-adapter-fixture.exe")).unwrap());
+    fs::write(&path, serde_json::to_vec(&grant).unwrap()).unwrap();
+    let (mut second, state) = spawn_host(&state_dir);
+    let recovered = wait_parser_state(&state, "healthy");
+    assert_eq!(recovered["host_components"][0]["installed_count"], 1);
+    let stopped = call(
+        &state,
+        "stop-install-recovered",
+        "system.shutdown",
+        json!({}),
+        false,
+    );
+    assert!(stopped.ok);
+    assert!(second.wait().unwrap().success());
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn missing_installation_is_visible_and_recovers_after_install_and_restart() {
+    let dir = fixture_dir();
+    let state_dir = dir.join("state");
+    let root = dir.join("project");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("source.json"), br#"{"targets":["target.txt"]}"#).unwrap();
+    fs::write(root.join("target.txt"), b"target").unwrap();
+    let (mut first, state) = spawn_host(&state_dir);
+    let imported = call(
+        &state,
+        "missing-import",
+        "project.import",
+        json!({
+            "id": "PRJ-parser-alpha", "name": "Missing parser fixture",
+            "root_path": root.to_string_lossy()
+        }),
+        true,
+    );
+    assert!(imported.ok, "{:?}", imported.error);
+    let configured = call(
+        &state,
+        "missing-config",
+        "project.configuration.put",
+        json!({
+            "project_id": "PRJ-parser-alpha", "expected_revision": 0, "format_version": 1,
+            "project_type": "synthetic.project", "adapter_id": "fixture.parser", "adapter_version": "1.0.0"
+        }),
+        true,
+    );
+    assert!(configured.ok, "{:?}", configured.error);
+    let built = call(
+        &state,
+        "missing-build",
+        "project.index.build",
+        json!({
+            "project_id": "PRJ-parser-alpha"
+        }),
+        true,
+    );
+    assert!(built.ok, "{:?}", built.error);
+    let missing = wait_parser_state(&state, "degraded");
+    assert_eq!(
+        missing["host_components"][0]["error_code"],
+        "PARSER_NOT_INSTALLED"
+    );
+    assert_eq!(missing["host_components"][0]["unavailable_count"], 1);
+    assert!(edges(&state, "PRJ-parser-alpha").is_empty());
+    let stopped = call(&state, "missing-stop", "system.shutdown", json!({}), false);
+    assert!(stopped.ok);
+    assert!(first.wait().unwrap().success());
+
+    install_fixture(&state_dir, &dir);
+    let (mut second, state) = spawn_host(&state_dir);
+    wait_edges(&state, "PRJ-parser-alpha", &["target.txt"]);
+    let healthy = wait_parser_state(&state, "healthy");
+    assert_eq!(healthy["host_components"][0]["unavailable_count"], 0);
+    let stopped = call(
+        &state,
+        "missing-recovered-stop",
+        "system.shutdown",
+        json!({}),
+        false,
+    );
+    assert!(stopped.ok);
+    assert!(second.wait().unwrap().success());
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn quarantined_parser_reports_failure_and_recovers_after_source_repair() {
+    let dir = fixture_dir();
+    let state_dir = dir.join("state");
+    let root = dir.join("project");
+    fs::create_dir_all(&root).unwrap();
+    install_fixture(&state_dir, &dir);
+    let malformed = br#"{"targets":"invalid-target-list"}"#;
+    fs::write(root.join("source.json"), malformed).unwrap();
+    fs::write(root.join("target.txt"), b"target").unwrap();
+    let (mut host, state) = spawn_host(&state_dir);
+    let imported = call(
+        &state,
+        "health-import",
+        "project.import",
+        json!({
+            "id": "PRJ-parser-alpha", "name": "Parser health fixture",
+            "root_path": root.to_string_lossy()
+        }),
+        true,
+    );
+    assert!(imported.ok, "{:?}", imported.error);
+    let configured = call(
+        &state,
+        "health-config",
+        "project.configuration.put",
+        json!({
+            "project_id": "PRJ-parser-alpha", "expected_revision": 0, "format_version": 1,
+            "project_type": "synthetic.project", "adapter_id": "fixture.parser", "adapter_version": "1.0.0"
+        }),
+        true,
+    );
+    assert!(configured.ok, "{:?}", configured.error);
+    let built = call(
+        &state,
+        "health-build",
+        "project.index.build",
+        json!({
+            "project_id": "PRJ-parser-alpha"
+        }),
+        true,
+    );
+    assert!(built.ok, "{:?}", built.error);
+
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let quarantined = loop {
+        let status = parser_status(&state);
+        if status["host_components"][0]["quarantined_count"] == 1 {
+            break status;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "parser did not quarantine: {:?}",
+            status["host_components"]
+        );
+        thread::sleep(Duration::from_millis(200));
+    };
+    assert_eq!(quarantined["recovery_state"], "Degraded");
+    assert_eq!(
+        quarantined["host_components"][0]["error_code"],
+        "ADAPTER_QUARANTINED"
+    );
+    assert!(
+        quarantined["host_components"][0]["failure_count"]
+            .as_u64()
+            .unwrap()
+            >= 2
+    );
+    let doctor = call(
+        &state,
+        "doctor-quarantined",
+        "system.doctor",
+        json!({}),
+        false,
+    );
+    let report = doctor.result.unwrap();
+    assert_eq!(report["healthy"], false);
+    assert!(
+        report["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check["id"] == "adapter.dependencies.parse" && check["status"] == "fail")
+    );
+
+    fs::write(root.join("source.json"), br#"{"targets":["target.txt"]}"#).unwrap();
+    let reconciled = call(
+        &state,
+        "health-reconcile",
+        "project.index.reconcile",
+        json!({
+            "project_id": "PRJ-parser-alpha"
+        }),
+        true,
+    );
+    assert!(reconciled.ok, "{:?}", reconciled.error);
+    wait_edges(&state, "PRJ-parser-alpha", &["target.txt"]);
+    let healthy = wait_parser_state(&state, "healthy");
+    assert_eq!(healthy["host_components"][0]["quarantined_count"], 0);
+    assert_eq!(healthy["host_components"][0]["error_code"], Value::Null);
+    assert!(
+        healthy["host_components"][0]["success_count"]
+            .as_u64()
+            .unwrap()
+            >= 1
+    );
+    let stopped = call(&state, "health-stop", "system.shutdown", json!({}), false);
+    assert!(stopped.ok);
+    assert!(host.wait().unwrap().success());
+    let diagnostics =
+        fs::read_to_string(state_dir.join("diagnostics/relay-diagnostics.jsonl")).unwrap();
+    assert!(diagnostics.contains("relay.host.component.failed"));
+    assert!(diagnostics.contains("relay.host.component.recovered"));
+    assert!(!diagnostics.contains("invalid-target-list"));
+    assert!(!diagnostics.contains(&root.to_string_lossy().to_string()));
     fs::remove_dir_all(dir).unwrap();
 }

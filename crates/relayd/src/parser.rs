@@ -2,7 +2,9 @@ use relay_adapter::{AdapterBroker, AdapterManifest, BrokerPolicy};
 use relay_contracts::{CommandRequest, RequestContext};
 use relay_core::indexing;
 use relay_core::policy::ExecutionAuthority;
-use relay_core::service::{ParserProjectSnapshot, RelayCore, RuntimeContext};
+use relay_core::service::{
+    HostComponentHealth, HostComponentState, ParserProjectSnapshot, RelayCore, RuntimeContext,
+};
 use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -10,8 +12,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use windows_sys::Win32::System::SystemInformation::GetTickCount;
@@ -50,6 +52,156 @@ pub struct Installation {
     adapter_version: String,
     source_extensions: BTreeSet<String>,
     broker: AdapterBroker,
+}
+
+#[derive(Clone)]
+pub struct ParserHealth {
+    inner: Arc<Mutex<ParserHealthState>>,
+}
+
+struct ParserHealthState {
+    installed: BTreeMap<String, (String, String)>,
+    installation_error: bool,
+    projects: BTreeMap<String, ProjectParserHealth>,
+}
+
+#[derive(Default)]
+struct ProjectParserHealth {
+    error_code: Option<&'static str>,
+    quarantined: bool,
+    failures: u64,
+    successes: u64,
+}
+
+impl ParserHealth {
+    pub fn new(installations: &BTreeMap<String, Installation>, installation_error: bool) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(ParserHealthState {
+                installed: installations
+                    .iter()
+                    .map(|(project_id, installation)| {
+                        (
+                            project_id.clone(),
+                            (
+                                installation.adapter_id.clone(),
+                                installation.adapter_version.clone(),
+                            ),
+                        )
+                    })
+                    .collect(),
+                installation_error,
+                projects: BTreeMap::new(),
+            })),
+        }
+    }
+
+    pub fn snapshot(&self, core: &RelayCore) -> HostComponentHealth {
+        let declared = core.parser_declared_bindings().unwrap_or_default();
+        let state = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut unavailable_count = 0u32;
+        let mut mismatch_count = 0u32;
+        let mut active_projects = BTreeSet::new();
+        for (project_id, adapter_id, adapter_version) in &declared {
+            match state.installed.get(project_id) {
+                None => unavailable_count = unavailable_count.saturating_add(1),
+                Some((id, version)) if id != adapter_id || version != adapter_version => {
+                    mismatch_count = mismatch_count.saturating_add(1);
+                }
+                Some(_) => {
+                    active_projects.insert(project_id);
+                }
+            }
+        }
+        unavailable_count = unavailable_count.saturating_add(mismatch_count);
+        let quarantined_count = state
+            .projects
+            .iter()
+            .filter(|(project_id, project)| {
+                active_projects.contains(project_id) && project.quarantined
+            })
+            .count()
+            .min(u32::MAX as usize) as u32;
+        let active_error = state
+            .projects
+            .iter()
+            .filter(|(project_id, _)| active_projects.contains(project_id))
+            .find_map(|(_, project)| project.error_code);
+        let error_code = if state.installation_error {
+            Some("PARSER_INSTALLATION_INVALID")
+        } else if quarantined_count > 0 {
+            Some("ADAPTER_QUARANTINED")
+        } else if let Some(code) = active_error {
+            Some(code)
+        } else if mismatch_count > 0 {
+            Some("PARSER_VERSION_MISMATCH")
+        } else if unavailable_count > 0 {
+            Some("PARSER_NOT_INSTALLED")
+        } else {
+            None
+        };
+        let component_state = if error_code.is_some() {
+            HostComponentState::Degraded
+        } else if declared.is_empty() && state.installed.is_empty() {
+            HostComponentState::NotConfigured
+        } else {
+            HostComponentState::Healthy
+        };
+        HostComponentHealth {
+            id: "adapter.dependencies.parse".to_string(),
+            state: component_state,
+            error_code: error_code.map(str::to_string),
+            installed_count: state.installed.len().min(u32::MAX as usize) as u32,
+            declared_count: declared.len().min(u32::MAX as usize) as u32,
+            unavailable_count,
+            quarantined_count,
+            failure_count: state
+                .projects
+                .values()
+                .fold(0u64, |sum, project| sum.saturating_add(project.failures)),
+            success_count: state
+                .projects
+                .values()
+                .fold(0u64, |sum, project| sum.saturating_add(project.successes)),
+        }
+    }
+
+    fn failed(&self, core: &RelayCore, project_id: &str, code: &'static str, quarantined: bool) {
+        let changed = if let Ok(mut state) = self.inner.lock() {
+            let entry = state.projects.entry(project_id.to_string()).or_default();
+            let changed = entry.error_code != Some(code) || entry.quarantined != quarantined;
+            entry.error_code = Some(code);
+            entry.quarantined = quarantined;
+            entry.failures = entry.failures.saturating_add(1);
+            changed
+        } else {
+            false
+        };
+        if changed {
+            core.record_host_component_event("adapter.dependencies.parse", code, false);
+        }
+    }
+
+    fn succeeded(&self, core: &RelayCore, project_id: &str) {
+        let recovered = if let Ok(mut state) = self.inner.lock() {
+            let entry = state.projects.entry(project_id.to_string()).or_default();
+            let recovered = entry.error_code.take().is_some() || entry.quarantined;
+            entry.quarantined = false;
+            entry.successes = entry.successes.saturating_add(1);
+            recovered
+        } else {
+            false
+        };
+        if recovered {
+            core.record_host_component_event(
+                "adapter.dependencies.parse",
+                "PARSER_RECOVERED",
+                true,
+            );
+        }
+    }
 }
 
 /// Local-user managed installation grants are read at startup. A declaration in project
@@ -180,6 +332,12 @@ struct CachedProject {
     indexed: BTreeMap<String, String>,
 }
 
+struct AttemptRecord {
+    at: Instant,
+    source_sha256: String,
+    generation: i64,
+}
+
 pub struct ParserRuntime {
     stop_requested: Arc<AtomicBool>,
     join: Option<JoinHandle<()>>,
@@ -191,6 +349,7 @@ impl ParserRuntime {
         runtime: RuntimeContext,
         foreground_active: Arc<AtomicBool>,
         installations: BTreeMap<String, Installation>,
+        health: ParserHealth,
     ) -> Option<Self> {
         if installations.is_empty() {
             return None;
@@ -199,7 +358,7 @@ impl ParserRuntime {
         let stop = Arc::clone(&stop_requested);
         let join = thread::spawn(move || {
             let mut parsed: BTreeMap<(String, String), ParsedSource> = BTreeMap::new();
-            let mut attempted = BTreeMap::new();
+            let mut attempted: BTreeMap<(String, String), AttemptRecord> = BTreeMap::new();
             let mut snapshots: BTreeMap<String, CachedProject> = BTreeMap::new();
             let mut complete = BTreeSet::new();
             while !stop.load(Ordering::SeqCst) {
@@ -273,6 +432,7 @@ impl ParserRuntime {
                             &mut parsed,
                             &mut attempted,
                             &mut complete,
+                            &health,
                         );
                     }
                 }
@@ -327,8 +487,9 @@ fn process_one<'a>(
     installations: &BTreeMap<String, Installation>,
     projects: impl Iterator<Item = &'a CachedProject>,
     parsed: &mut BTreeMap<(String, String), ParsedSource>,
-    attempted: &mut BTreeMap<(String, String), Instant>,
+    attempted: &mut BTreeMap<(String, String), AttemptRecord>,
     complete: &mut BTreeSet<String>,
+    health: &ParserHealth,
 ) {
     for cached in projects {
         let project = &cached.snapshot;
@@ -368,15 +529,32 @@ fn process_one<'a>(
             }) {
                 continue;
             }
-            if attempted
-                .get(&key)
-                .is_some_and(|at| at.elapsed() < RETRY_DELAY)
-            {
+            if attempted.get(&key).is_some_and(|attempt| {
+                attempt.generation == project.generation
+                    && attempt.source_sha256 == file.content_sha256
+                    && attempt.at.elapsed() < RETRY_DELAY
+            }) {
                 retry_pending = true;
                 continue;
             }
-            attempted.insert(key.clone(), Instant::now());
-            if let Some(observation) = parse_and_replace(
+            if attempted
+                .get(&key)
+                .is_some_and(|attempt| attempt.source_sha256 != file.content_sha256)
+                && installation.broker.is_quarantined(&installation.adapter_id)
+            {
+                installation
+                    .broker
+                    .clear_quarantine(&installation.adapter_id);
+            }
+            attempted.insert(
+                key.clone(),
+                AttemptRecord {
+                    at: Instant::now(),
+                    source_sha256: file.content_sha256.clone(),
+                    generation: project.generation,
+                },
+            );
+            match parse_and_replace(
                 core,
                 runtime,
                 installation,
@@ -385,7 +563,22 @@ fn process_one<'a>(
                 &file.content_sha256,
                 indexed,
             ) {
-                parsed.insert(key, observation);
+                Ok(Some(observation)) => {
+                    attempted.remove(&key);
+                    parsed.insert(key, observation);
+                    health.succeeded(core, &project.project_id);
+                }
+                Ok(None) => {
+                    attempted.remove(&key);
+                }
+                Err(code) => {
+                    health.failed(
+                        core,
+                        &project.project_id,
+                        code,
+                        installation.broker.is_quarantined(&installation.adapter_id),
+                    );
+                }
             }
             return;
         }
@@ -403,17 +596,28 @@ fn parse_and_replace(
     source_path: &str,
     source_sha256: &str,
     indexed: &BTreeMap<String, String>,
-) -> Option<ParsedSource> {
-    let root = indexing::canonical_project_root(&project.root_uri).ok()?;
-    let path = fs::canonicalize(root.join(source_path)).ok()?;
+) -> Result<Option<ParsedSource>, &'static str> {
+    let root = indexing::canonical_project_root(&project.root_uri)
+        .map_err(|_| "PARSER_PROJECT_UNAVAILABLE")?;
+    let path = match fs::canonicalize(root.join(source_path)) {
+        Ok(path) => path,
+        Err(_) => return Ok(None),
+    };
     if !path.starts_with(&root) || !path.is_file() {
-        return None;
+        return Err("PARSER_SOURCE_SCOPE_INVALID");
     }
-    let mut reader = fs::File::open(&path).ok()?.take(MAX_SOURCE_BYTES + 1);
+    let mut reader = fs::File::open(&path)
+        .map_err(|_| "PARSER_SOURCE_UNREADABLE")?
+        .take(MAX_SOURCE_BYTES + 1);
     let mut content = Vec::new();
-    reader.read_to_end(&mut content).ok()?;
-    if content.len() as u64 > MAX_SOURCE_BYTES || digest(&content) != source_sha256 {
-        return None;
+    reader
+        .read_to_end(&mut content)
+        .map_err(|_| "PARSER_SOURCE_UNREADABLE")?;
+    if content.len() as u64 > MAX_SOURCE_BYTES {
+        return Err("PARSER_INPUT_UNSUPPORTED");
+    }
+    if digest(&content) != source_sha256 {
+        return Ok(None);
     }
     if !core.parser_source_selected(
         &project.project_id,
@@ -424,9 +628,9 @@ fn parse_and_replace(
         source_path,
         source_sha256,
     ) {
-        return None;
+        return Ok(None);
     }
-    let content_utf8 = String::from_utf8(content).ok()?;
+    let content_utf8 = String::from_utf8(content).map_err(|_| "PARSER_INPUT_UNSUPPORTED")?;
     let outcome = installation
         .broker
         .invoke_dependency_parser(
@@ -436,20 +640,27 @@ fn parse_and_replace(
             &project.configuration.project_type,
             &content_utf8,
         )
-        .ok()?;
+        .map_err(|error| error.code)?;
     // Recheck source bytes after sandbox work; Core also checks ready state, generation,
     // indexed digest, and indexed targets atomically when replacement commits.
-    let mut reader = fs::File::open(&path).ok()?.take(MAX_SOURCE_BYTES + 1);
+    let mut reader = match fs::File::open(&path) {
+        Ok(reader) => reader.take(MAX_SOURCE_BYTES + 1),
+        Err(_) => return Ok(None),
+    };
     let mut current = Vec::new();
-    reader.read_to_end(&mut current).ok()?;
-    if current.len() as u64 > MAX_SOURCE_BYTES || digest(&current) != source_sha256 {
-        return None;
+    if reader.read_to_end(&mut current).is_err() {
+        return Ok(None);
     }
-    let targets = outcome.response["result"]["targets"].as_array()?;
+    if current.len() as u64 > MAX_SOURCE_BYTES || digest(&current) != source_sha256 {
+        return Ok(None);
+    }
+    let targets = outcome.response["result"]["targets"]
+        .as_array()
+        .ok_or("PARSER_OBSERVATION_INVALID")?;
     let mut target_sha256 = BTreeMap::new();
     for target in targets {
-        let path = target.as_str()?;
-        let sha = indexed.get(path)?;
+        let path = target.as_str().ok_or("PARSER_OBSERVATION_INVALID")?;
+        let sha = indexed.get(path).ok_or("PARSER_TARGET_NOT_INDEXED")?;
         target_sha256.insert(path.to_string(), sha.clone());
     }
     let sequence = PARSE_ID.fetch_add(1, Ordering::Relaxed);
@@ -477,13 +688,25 @@ fn parse_and_replace(
         runtime,
         &ExecutionAuthority::local_user("relayd-parser".to_string()),
     );
-    response.ok.then(|| ParsedSource {
+    if !response.ok {
+        return match response.error.as_ref().map(|error| error.code.as_str()) {
+            Some(
+                "INDEX_GENERATION_CONFLICT"
+                | "INDEX_RECONCILIATION_REQUIRED"
+                | "INDEX_SOURCE_CHANGED"
+                | "PROJECT_CONFIG_CONFLICT",
+            ) => Ok(None),
+            Some("INDEX_FILE_NOT_FOUND") => Err("PARSER_TARGET_NOT_INDEXED"),
+            _ => Err("PARSER_EDGE_REJECTED"),
+        };
+    }
+    Ok(Some(ParsedSource {
         source_sha256: source_sha256.to_string(),
         configuration_revision: project.configuration.revision,
         adapter_id: installation.adapter_id.clone(),
         adapter_version: installation.adapter_version.clone(),
         target_sha256,
-    })
+    }))
 }
 
 fn digest(bytes: &[u8]) -> String {

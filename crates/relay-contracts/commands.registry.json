@@ -60,6 +60,25 @@
           "capabilities": { "type": "array", "items": { "type": "string" } },
           "ipc_security": { "type": "object" },
           "storage": { "type": "object" },
+          "host_components": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "state", "error_code", "installed_count", "declared_count", "unavailable_count", "quarantined_count", "failure_count", "success_count"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "state": { "type": "string", "enum": ["not_configured", "healthy", "degraded"] },
+                "error_code": { "type": ["string", "null"] },
+                "installed_count": { "type": "integer", "minimum": 0 },
+                "declared_count": { "type": "integer", "minimum": 0 },
+                "unavailable_count": { "type": "integer", "minimum": 0 },
+                "quarantined_count": { "type": "integer", "minimum": 0 },
+                "failure_count": { "type": "integer", "minimum": 0 },
+                "success_count": { "type": "integer", "minimum": 0 }
+              },
+              "additionalProperties": false
+            }
+          },
           "uptime_ms": { "type": "integer", "minimum": 0 }
         },
         "additionalProperties": true

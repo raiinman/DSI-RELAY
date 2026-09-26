@@ -58,10 +58,16 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `PHASE3_SEVENTH_SLICE_EVIDENCE.md` — schema-7 project configuration and declared adapter version metadata evidence.
 - `PHASE3_EIGHTH_SLICE_EVIDENCE.md` — sandboxed generic dependency parser operation and bounded observation validation evidence.
 - `PHASE3_NINTH_SLICE_EVIDENCE.md` — installed and authorized parser dispatch, guarded edge replacement, and stale-edge invalidation evidence.
+- `PHASE3_TENTH_SLICE_EVIDENCE.md` — live parser health, code-only diagnostics, and installation/quarantine recovery evidence.
 - `PHASE3_WATCHER_LOAD_EVIDENCE.md` — live burst, prolonged event activity, and recovery callback-race observations and limits.
 - `PHASE3_RESOURCE_BUDGET_METHOD.md` — repeatable scale measurements, release-gate method, and hardware-tier proof plan.
 - `PHASE3_SCALE_FIVE_RUN_2026-09-26.json` — machine-readable five-run scale sample from one workstation.
+- `PHASE3_PARSER_RESOURCE_EVIDENCE.md` — one-host installed-parser latency, idle cost, and measurement limitations.
+- `PHASE3_PARSER_RESOURCE_THREE_RUN_2026-09-26.json` — machine-readable three-run parser resource sample.
+- `PHASE3_PORTABLE_BENCHMARK_DRAFT.md` — local synthetic benchmark runner draft for testers without Rust/Cargo.
 - `PHASE3_CLOSURE_REVIEW.md` — active Phase 3 exit-gate review with explicit open and partial items.
+- `PUBLIC_PREVIEW_PATH.md` — scoped measurement-preview and public-beta release path, privacy-preserving report contract, and distribution gates.
+- `RELEASE_DEPENDENCY_LICENSE_INVENTORY.md` — lockfile-based Windows CLI/daemon crate versions, license expressions, and unresolved notice review.
 - `ROADMAP.md` — staged delivery plan and milestone exit criteria.
 - `RESEARCH_PLAN.md` — academic/technical research and benchmark program.
 - `PHASE0_ADVERSARIAL_REVIEW.md` — adversarial challenge to current assumptions and required architecture changes.

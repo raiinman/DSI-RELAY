@@ -8,7 +8,7 @@
 4. SYSTEM_ARCHITECTURE.md — technical boundaries and data flow.
 5. ROADMAP.md — implementation order and milestone exit criteria.
 
-The accepted Phase 3 baseline, dependency-edge, and provisional hint-update results are in PHASE3_FIRST_SLICE.md and the three PHASE3_*_SLICE_EVIDENCE.md records.
+The Phase 3 baseline, dependency-edge, provisional hint-update, and content-verification results are in PHASE3_FIRST_SLICE.md and the four PHASE3_*_SLICE_EVIDENCE.md records.
 
 ## Core design
 

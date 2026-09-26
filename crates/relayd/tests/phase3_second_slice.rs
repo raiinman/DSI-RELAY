@@ -3,7 +3,7 @@
 use relay::client;
 use relay_contracts::{CommandRequest, CommandResponse, LocalHostState, RequestContext};
 use relay_core::storage::RelayStorage;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -157,10 +157,12 @@ fn project_edges_and_deltas_survive_hard_restart_without_scope_leakage() {
             .len(),
         1
     );
-    assert!(bravo_edges.result.unwrap()["edges"]
-        .as_array()
-        .unwrap()
-        .is_empty());
+    assert!(
+        bravo_edges.result.unwrap()["edges"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 
     fs::write(root_a.join("target.txt"), b"target A changed").unwrap();
     let reconciled = call(
@@ -183,10 +185,12 @@ fn project_edges_and_deltas_survive_hard_restart_without_scope_leakage() {
             None,
         ),
     );
-    assert!(alpha_edges.result.unwrap()["edges"]
-        .as_array()
-        .unwrap()
-        .is_empty());
+    assert!(
+        alpha_edges.result.unwrap()["edges"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 
     let replaced_again = call(
         &state,
@@ -228,10 +232,12 @@ fn project_edges_and_deltas_survive_hard_restart_without_scope_leakage() {
             None,
         ),
     );
-    assert!(alpha_edges.result.unwrap()["edges"]
-        .as_array()
-        .unwrap()
-        .is_empty());
+    assert!(
+        alpha_edges.result.unwrap()["edges"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 
     first.kill().unwrap();
     first.wait().unwrap();
@@ -272,10 +278,12 @@ fn project_edges_and_deltas_survive_hard_restart_without_scope_leakage() {
             None,
         ),
     );
-    assert!(bravo_delta.result.unwrap()["changes"]
-        .as_array()
-        .unwrap()
-        .is_empty());
+    assert!(
+        bravo_delta.result.unwrap()["changes"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 
     fs::create_dir_all(root_a.join("nested")).unwrap();
     let directory_hint = call(
@@ -391,6 +399,53 @@ fn project_edges_and_deltas_survive_hard_restart_without_scope_leakage() {
             .unwrap()
             .len(),
         2
+    );
+
+    let preserved_path = root_a.join("hinted.txt");
+    let previous_modified = fs::metadata(&preserved_path).unwrap().modified().unwrap();
+    fs::write(&preserved_path, b"hinted revision").unwrap();
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&preserved_path)
+        .unwrap()
+        .set_times(fs::FileTimes::new().set_modified(previous_modified))
+        .unwrap();
+    let preserved_metadata = fs::metadata(&preserved_path).unwrap();
+    assert_eq!(preserved_metadata.len(), 15);
+    assert_eq!(preserved_metadata.modified().unwrap(), previous_modified);
+    let metadata_only = call(
+        &state,
+        request(
+            "REQ-alpha-metadata-only",
+            "project.index.reconcile",
+            json!({ "project_id": "PRJ-alpha" }),
+            Some("IDEMP-alpha-metadata-only"),
+        ),
+    );
+    assert!(metadata_only.ok);
+    let metadata_only = metadata_only.result.unwrap();
+    assert_eq!(metadata_only["files_hashed"], 0);
+    assert!(metadata_only["changes"].as_array().unwrap().is_empty());
+    let content_verified = call(
+        &state,
+        request(
+            "REQ-alpha-content-verified",
+            "project.index.reconcile",
+            json!({ "project_id": "PRJ-alpha", "verify_content": true }),
+            Some("IDEMP-alpha-content-verified"),
+        ),
+    );
+    assert!(content_verified.ok, "{:?}", content_verified.error);
+    let content_verified = content_verified.result.unwrap();
+    assert_eq!(content_verified["verify_content"], true);
+    assert_eq!(
+        content_verified["files_hashed"],
+        content_verified["file_count"]
+    );
+    assert_eq!(content_verified["changes"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        content_verified["changes"][0]["relative_path"],
+        "hinted.txt"
     );
 
     let stopped = call(

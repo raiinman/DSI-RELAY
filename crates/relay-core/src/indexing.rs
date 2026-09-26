@@ -172,6 +172,7 @@ pub fn reconcile(
     root: &Path,
     previous: &[IndexedFileSnapshot],
     hints: &[String],
+    verify_content: bool,
 ) -> Result<IndexPlan, IndexError> {
     let started = Instant::now();
     let normalized_hints = validate_hints(hints)?;
@@ -201,6 +202,7 @@ pub fn reconcile(
             Some(old)
                 if old.size_bytes == item.size_bytes
                     && old.modified_unix_ns == item.modified_unix_ns
+                    && !verify_content
                     && !normalized_hints.contains(&item.relative_path) =>
             {
                 files_unchanged += 1;
@@ -775,7 +777,7 @@ mod tests {
         assert_eq!(baseline.stats.files_hashed, 3);
 
         write(&dir.join("nested/b.txt"), "bravo changed and longer");
-        let plan = reconcile(&dir, &baseline.files, &["nested/b.txt".to_string()]).unwrap();
+        let plan = reconcile(&dir, &baseline.files, &["nested/b.txt".to_string()], false).unwrap();
 
         assert_eq!(plan.stats.files_hashed, 1);
         assert_eq!(plan.stats.files_unchanged, 2);
@@ -814,7 +816,8 @@ mod tests {
         assert_eq!(hinted.changes.len(), 1);
         assert_eq!(hinted.changes[0].relative_path, "a.txt");
 
-        let reconciled = reconcile(&dir, &committed_hints(&baseline.files, &hinted), &[]).unwrap();
+        let reconciled =
+            reconcile(&dir, &committed_hints(&baseline.files, &hinted), &[], false).unwrap();
         assert_eq!(reconciled.stats.files_hashed, 1);
         assert_eq!(reconciled.changes.len(), 1);
         assert_eq!(reconciled.changes[0].relative_path, "b.txt");
@@ -876,12 +879,17 @@ mod tests {
             baseline.stats.total_bytes,
         )
         .unwrap();
-        let confirmed = reconcile(&dir, &committed_hints(&baseline.files, &hinted), &[]).unwrap();
+        let confirmed =
+            reconcile(&dir, &committed_hints(&baseline.files, &hinted), &[], false).unwrap();
+        let content_verified =
+            reconcile(&dir, &committed_hints(&baseline.files, &hinted), &[], true).unwrap();
         assert_eq!(hinted.stats.files_seen, 1);
         assert_eq!(hinted.stats.files_hashed, 1);
         assert_eq!(confirmed.stats.files_seen, 1_000);
         assert_eq!(confirmed.stats.files_hashed, 0);
         assert!(confirmed.changes.is_empty());
+        assert_eq!(content_verified.stats.files_hashed, 1_000);
+        assert!(content_verified.changes.is_empty());
         println!(
             "PHASE3_HINT_METRICS={}",
             serde_json::json!({
@@ -892,7 +900,9 @@ mod tests {
                 "hint_files_hashed": hinted.stats.files_hashed,
                 "full_metadata_reconcile_ms": confirmed.stats.elapsed_ms,
                 "full_metadata_files_seen": confirmed.stats.files_seen,
-                "full_reconcile_files_hashed": confirmed.stats.files_hashed
+                "full_reconcile_files_hashed": confirmed.stats.files_hashed,
+                "content_verify_ms": content_verified.stats.elapsed_ms,
+                "content_verify_files_hashed": content_verified.stats.files_hashed
             })
         );
         fs::remove_dir_all(dir).unwrap();
@@ -906,7 +916,7 @@ mod tests {
         let baseline = build_baseline(&dir).unwrap();
 
         write(&dir.join("a.txt"), "alpha changed with more bytes");
-        let plan = reconcile(&dir, &baseline.files, &[]).unwrap();
+        let plan = reconcile(&dir, &baseline.files, &[], false).unwrap();
 
         assert_eq!(plan.stats.hint_count, 0);
         assert_eq!(plan.stats.files_hashed, 1);
@@ -929,7 +939,7 @@ mod tests {
         fs::remove_file(dir.join("delete-me.txt")).unwrap();
         write(&dir.join("added.txt"), "new-content");
 
-        let plan = reconcile(&dir, &baseline.files, &[]).unwrap();
+        let plan = reconcile(&dir, &baseline.files, &[], false).unwrap();
         let kinds: BTreeSet<_> = plan
             .changes
             .iter()
@@ -954,12 +964,17 @@ mod tests {
         write(&dir.join("a.txt"), "alpha");
         let baseline = build_baseline(&dir).unwrap();
 
-        let error = reconcile(&dir, &baseline.files, &["../outside.txt".to_string()])
-            .expect_err("parent traversal watcher hint must fail");
+        let error = reconcile(
+            &dir,
+            &baseline.files,
+            &["../outside.txt".to_string()],
+            false,
+        )
+        .expect_err("parent traversal watcher hint must fail");
         assert_eq!(error.code, "PROJECT_PATH_ESCAPE");
 
         let absolute = dir.join("a.txt").to_string_lossy().to_string();
-        let error = reconcile(&dir, &baseline.files, &[absolute])
+        let error = reconcile(&dir, &baseline.files, &[absolute], false)
             .expect_err("absolute watcher hint must fail");
         assert_eq!(error.code, "INDEX_HINT_INVALID");
 

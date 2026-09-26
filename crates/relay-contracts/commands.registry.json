@@ -616,7 +616,7 @@
       "id": "project.index.reconcile",
       "version": 1,
       "stability": "phase3",
-      "summary": "Reconcile watcher hints against authoritative filesystem state and update changed files only.",
+      "summary": "Reconcile filesystem metadata or explicitly verify all file content after uncertain continuity.",
       "effect_class": "relay_state_write",
       "permission": "state_write",
       "idempotency": "keyed",
@@ -626,6 +626,7 @@
         "required": ["project_id"],
         "properties": {
           "project_id": { "type": "string", "minLength": 1 },
+          "verify_content": { "type": "boolean" },
           "hints": {
             "type": "array",
             "items": { "type": "string", "minLength": 1 }
@@ -651,6 +652,7 @@
           "hint_hits": { "type": "integer", "minimum": 0 },
           "changes": { "type": "array", "items": { "type": "object" } },
           "elapsed_ms": { "type": "integer", "minimum": 0 },
+          "verify_content": { "type": "boolean" },
           "mode": { "type": "string", "const": "reconcile" }
         },
         "additionalProperties": false

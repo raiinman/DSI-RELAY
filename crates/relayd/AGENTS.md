@@ -25,6 +25,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 - current-user pipe security verification.
 - Synthetic Phase 3 two-project import, baseline, reconciliation, privacy, resource, graceful-restart, and hard-restart coverage through `tests/phase3_first_slice.rs`.
 - Synthetic Phase 3 change-delta, dependency-edge, provisional hint-update, stale-state, isolation, and hard-restart coverage through `tests/phase3_second_slice.rs`.
+- Explicit full-content verification after a metadata-invisible edit through `tests/phase3_second_slice.rs`.
 
 # Child DOX Index
 

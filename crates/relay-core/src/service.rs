@@ -1242,6 +1242,10 @@ impl RelayCore {
                     .collect()
             })
             .unwrap_or_default();
+        let verify_content = arguments
+            .get("verify_content")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
 
         let (project, index_state, previous) = self.with_storage(|storage| {
             let project = storage
@@ -1266,7 +1270,7 @@ impl RelayCore {
 
         let root = indexing::canonical_project_root(&project.root_uri)
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
-        let plan = indexing::reconcile(&root, &previous, &hints)
+        let plan = indexing::reconcile(&root, &previous, &hints, verify_content)
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
         let state = self.with_storage(|storage| {
             storage.apply_project_reconciliation(ProjectIndexCommit {
@@ -1291,6 +1295,7 @@ impl RelayCore {
             "hint_hits": plan.stats.hint_hits,
             "changes": plan.changes,
             "elapsed_ms": plan.stats.elapsed_ms,
+            "verify_content": verify_content,
             "mode": "reconcile"
         }))
     }
@@ -1378,7 +1383,7 @@ impl RelayCore {
         capabilities.push(json!({
             "id": "reconciliation",
             "state": if root_available { "available" } else { "unavailable" },
-            "detail": "filesystem metadata reconciliation is authoritative"
+            "detail": "metadata reconciliation checks the full tree; verify_content also hashes every file after uncertain continuity"
         }));
         capabilities.push(json!({
             "id": "dependency_edges",
@@ -1391,7 +1396,7 @@ impl RelayCore {
             "detail": if index_status == "stale" {
                 "hint-only update awaits authoritative reconciliation"
             } else {
-                "authoritative reconciliation is current for the stored generation"
+                "full-tree metadata was reconciled for the stored generation; content verification is available separately"
             }
         }));
         capabilities.push(json!({

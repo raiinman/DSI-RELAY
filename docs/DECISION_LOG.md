@@ -1385,3 +1385,15 @@ Hint-only changes are useful for low-latency local updates but are not proof tha
 The 1,000-file synthetic fixture checked one path in the hint step versus 1,000 files in the confirming metadata scan. Active OS notification delivery, drop/overflow handling, same-size/same-mtime recovery, and hardware-tier budgets remain Phase 3 gates.
 
 Evidence: `docs/PHASE3_THIRD_SLICE_EVIDENCE.md`.
+
+## D-164 — Explicit content verification closes metadata-invisible continuity gaps
+
+Status: Phase 3 fourth slice accepted; automatic recovery scheduling remains open
+
+The version-1 `project.index.reconcile` command gains an additive optional `verify_content` flag. Its default remains changed-candidate hashing after full-tree metadata enumeration. When selected for uncertain continuity, the command hashes every regular project file, compares content digests, and applies changes through the existing project-scoped generation transaction. The response reports the chosen mode. No schema migration or source-file mutation is involved.
+
+A live fixture rewrote a file with different same-length bytes and restored its prior timestamp. Metadata-only reconciliation did not see the change; explicit content verification did. A 1,000-file fixture showed the full pass hashes 1,000 files versus one for a targeted hint and zero for clean metadata reconciliation. This expensive mode is a recovery tool, not the default for ordinary small edits. The `ready` marker means a full-tree reconciliation completed for the stored generation; it does not guarantee detection of an edit invisible to metadata unless content verification ran.
+
+OS watcher delivery, automatic continuity-loss signaling and foreground-safe recovery scheduling, dependency extraction, hardware-tier budgets, and closure review remain Phase 3 work. D-149 and Phase 2 authority assumptions remain unchanged.
+
+Evidence: `docs/PHASE3_FOURTH_SLICE_EVIDENCE.md`.

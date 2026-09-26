@@ -623,9 +623,15 @@ Configuration must be inspectable from CLI/dashboard without requiring users to 
 
 ## Diagnostics interface
 
-RELAY Core should expose a normalized diagnostic/health command set that the CLI and dashboard can render consistently.
+RELAY Core exposes one normalized diagnostic/health surface that CLI and dashboard render without duplicating diagnostic logic.
 
-A future relay doctor operation should aggregate subsystem health without implementing separate diagnostic logic in the UI.
+Phase 1 D-159 selects bounded structured JSONL as the normal local diagnostic record. The envelope carries stable event identity/time/severity/component, project/job/result references, correlation/causation, source/trust, completeness/sampling, capture mode, and structured attributes.
+
+Normal capture is bounded and deterministically redacted before persistence. High-detail capture is explicit, temporary, and separately size-limited. Rotation/retention records eviction rather than implying complete history. Partial trailing records are recovered explicitly after restart.
+
+Diagnostic capture has its own health state and contributes to live recovery/doctor truth. A failed logger may not be hidden by otherwise healthy IPC/storage state.
+
+Default support summaries expose health and aggregates, not unrestricted raw history. ETW remains an optional Windows deep-trace hook rather than the portable durable support record.
 
 
 ## License and terms compatibility metadata

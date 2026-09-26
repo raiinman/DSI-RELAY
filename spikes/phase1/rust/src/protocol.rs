@@ -1,3 +1,4 @@
+use crate::diagnostics::{DiagnosticHealth, JsonlDiagnostics};
 use crate::registry::{self, ResolveError};
 use crate::storage::{RelayStorage, StorageError, StorageHealth};
 use crate::{capabilities, PROTOCOL_MAX, PROTOCOL_MIN, RELAY_VERSION, SCHEMA_VERSION};
@@ -16,6 +17,8 @@ pub struct HostContext {
     pub acl_ace_count: u32,
     pub storage: Option<Arc<Mutex<RelayStorage>>>,
     pub storage_health: StorageHealth,
+    pub diagnostics: Option<Arc<Mutex<JsonlDiagnostics>>>,
+    pub diagnostics_fallback: DiagnosticHealth,
 }
 
 pub fn negotiate(client_min: u32, client_max: u32) -> Option<u32> {
@@ -109,6 +112,18 @@ fn storage_result(request_id: &str, result: Result<Value, StorageError>) -> Valu
     }
 }
 
+fn diagnostics_health(context: &HostContext) -> DiagnosticHealth {
+    match &context.diagnostics {
+        Some(logger) => logger
+            .lock()
+            .map(|logger| logger.health())
+            .unwrap_or_else(|_| {
+                DiagnosticHealth::unavailable("diagnostics lock is unavailable")
+            }),
+        None => context.diagnostics_fallback.clone(),
+    }
+}
+
 pub fn dispatch_command(
     request_id: &str,
     command: &str,
@@ -150,44 +165,52 @@ pub fn dispatch_command(
     }
 
     let response = match command {
-        "system.status" => success(
-            request_id,
-            json!({
-                "process_health": "running",
-                "recovery_state": if context.storage_health.ok { "Healthy" } else { "Degraded" },
-                "pid": std::process::id(),
-                "version": RELAY_VERSION,
-                "runtime": "rust",
-                "protocol": {
-                    "min": PROTOCOL_MIN,
-                    "max": PROTOCOL_MAX,
-                    "negotiated": PROTOCOL_MAX
-                },
-                "capabilities": capabilities(),
-                "ipc_security": {
-                    "transport": "windows_named_pipe",
-                    "explicit_dacl": context.explicit_dacl,
-                    "kernel_acl_verified": context.kernel_acl_verified,
-                    "owner_current_user": context.acl_owner_current_user,
-                    "acl_ace_count": context.acl_ace_count,
-                    "scope": "current_user",
-                    "auth_token": true
-                },
-                "storage": &context.storage_health,
-                "uptime_ms": context.started.elapsed().as_millis() as u64
-            }),
-        ),
-        "system.doctor" => {
-            let security_ok = context.explicit_dacl && context.kernel_acl_verified;
-            let storage_ok = context.storage_health.ok;
+        "system.status" => {
+            let diagnostic_health = diagnostics_health(context);
             success(
                 request_id,
                 json!({
-                    "healthy": security_ok && storage_ok,
-                    "summary": if security_ok && storage_ok {
-                        "RELAY host, kernel-verified current-user pipe DACL, protocol, and durable storage checks passed."
+                    "process_health": "running",
+                    "recovery_state": if context.storage_health.ok && diagnostic_health.ok { "Healthy" } else { "Degraded" },
+                    "pid": std::process::id(),
+                    "version": RELAY_VERSION,
+                    "runtime": "rust",
+                    "protocol": {
+                        "min": PROTOCOL_MIN,
+                        "max": PROTOCOL_MAX,
+                        "negotiated": PROTOCOL_MAX
+                    },
+                    "capabilities": capabilities(),
+                    "ipc_security": {
+                        "transport": "windows_named_pipe",
+                        "explicit_dacl": context.explicit_dacl,
+                        "kernel_acl_verified": context.kernel_acl_verified,
+                        "owner_current_user": context.acl_owner_current_user,
+                        "acl_ace_count": context.acl_ace_count,
+                        "scope": "current_user",
+                        "auth_token": true
+                    },
+                    "storage": &context.storage_health,
+                    "diagnostics": diagnostic_health,
+                    "uptime_ms": context.started.elapsed().as_millis() as u64
+                }),
+            )
+        },
+        "system.doctor" => {
+            let security_ok = context.explicit_dacl && context.kernel_acl_verified;
+            let storage_ok = context.storage_health.ok;
+            let diagnostic_health = diagnostics_health(context);
+            let diagnostics_ok = diagnostic_health.ok;
+            success(
+                request_id,
+                json!({
+                    "healthy": security_ok && storage_ok && diagnostics_ok,
+                    "summary": if security_ok && storage_ok && diagnostics_ok {
+                        "RELAY host, IPC security, durable storage, and diagnostics checks passed."
                     } else if !storage_ok {
                         "RELAY host is reachable, but durable storage needs attention."
+                    } else if !diagnostics_ok {
+                        "RELAY host is reachable, but diagnostics capture needs attention."
                     } else {
                         "RELAY host is running, but its explicit pipe security verification did not pass."
                     },
@@ -213,12 +236,31 @@ pub fn dispatch_command(
                             } else {
                                 context.storage_health.error.clone().unwrap_or_else(|| "Storage unavailable".to_string())
                             }
+                        },
+                        {
+                            "id": "diagnostics.capture",
+                            "status": if diagnostics_ok { "pass" } else { "fail" },
+                            "detail": if diagnostics_ok {
+                                format!(
+                                    "Structured diagnostics active; {} current bytes, {} rotated file(s), {} evicted event(s).",
+                                    diagnostic_health.current_bytes,
+                                    diagnostic_health.rotated_files,
+                                    diagnostic_health.evicted_events
+                                )
+                            } else {
+                                diagnostic_health
+                                    .last_error
+                                    .clone()
+                                    .unwrap_or_else(|| "Diagnostics unavailable".to_string())
+                            }
                         }
                     ],
-                    "next_action": if storage_ok {
-                        Value::Null
-                    } else {
+                    "next_action": if !storage_ok {
                         Value::String("Protect the damaged store, inspect recovery options, and avoid writes until storage is repaired or restored.".to_string())
+                    } else if !diagnostics_ok {
+                        Value::String("Inspect diagnostics storage/permissions and restore structured capture before treating support evidence as complete.".to_string())
+                    } else {
+                        Value::Null
                     }
                 }),
             )
@@ -382,6 +424,10 @@ mod tests {
             acl_ace_count: 1,
             storage: None,
             storage_health: StorageHealth::unavailable("fixture storage unavailable"),
+            diagnostics: None,
+            diagnostics_fallback: DiagnosticHealth::unavailable(
+                "fixture diagnostics unavailable",
+            ),
         }
     }
 

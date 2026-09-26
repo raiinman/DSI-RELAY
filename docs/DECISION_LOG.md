@@ -1268,10 +1268,54 @@ Evidence: `spikes/phase1/results/2026-09-25-spike13-packaging-update-windows.jso
 
 Status: Phase 1 selected logging/diagnostic foundation
 
-Spike 14 selects bounded structured JSONL for the default local diagnostic record. SQLite remains the operational-state store, not the default raw-log store. ETW remains an optional temporary Windows deep-trace path.
+Spike 14 selects a bounded append-only JSONL diagnostic record for the normal per-user support path.
 
-Selected normal-mode behavior is bounded rotating JSONL with a 16-event sync window plus explicit flush/shutdown sync, partial-tail recovery, completeness/sampling metadata, temporary bounded detail mode, independent diagnostics health, and aggregate-only support summaries by default.
+The selected foundation is:
 
-Final Spike 14 measurements: JSONL sustained 3,984.77 events/s at 0.0211 ms p50 write latency; its 16-event sync measured 3.5707 ms p50. Syncing every event fell to 267.24 events/s. SQLite sustained 27,725.64 events/s, but the matched retention path required 91.1948 ms of prune/checkpoint/VACUUM maintenance and retained more bytes. JSONL used 4,710,400 bytes idle RSS versus SQLite's 5,738,496 bytes. ETW retained zero bytes without a consumer, and the non-elevated durable session attempt was access denied. Rust verification reported 54 passing tests with no new resolved Cargo package.
+- one versioned structured event envelope with stable event ID, timestamp, severity, component, project/job/result references, correlation/causation IDs, source/trust metadata, declared completeness/sampling state, capture mode, and structured attributes
+- deterministic redaction of credential/secret/token/path keys plus path-looking string values before persistence
+- normal capture with bounded strings/collections and a 4 KiB event ceiling
+- explicit temporary detail mode, capped to 15 minutes and a 32 KiB event ceiling
+- append-only current JSONL plus bounded rotated files; retention eviction is counted rather than presented as complete history
+- periodic `sync_data` durability with a Phase 1 normal window of 16 events, plus explicit flush on shutdown/support boundaries
+- partial-tail restart recovery that removes only the incomplete trailing record and reports the recovered byte count
+- aggregate/health support summaries by default; unrestricted raw history and private event attributes are not included in the default support export
+- diagnostic capture has its own health state. A logging failure marks live host recovery/doctor state Degraded rather than allowing otherwise healthy storage/IPC state to hide missing evidence
+- normal command instrumentation records command identity/version/outcome/error code and correlation ID only; it does not persist command arguments or results
+
+The neutral Windows benchmark used the same 10,000-event synthetic envelope for JSONL, SQLite, and ETW.
+
+Default JSONL with a 16-event durability window measured:
+
+- 3,685.9 events/second
+- 0.0196 ms p50 append latency
+- 3.8777 ms p50 durability-sync boundary latency
+- 3,735,997 retained bytes after bounded rotation in the 4 x 1 MiB benchmark fixture
+- 5,289 events / 4 files explicitly recorded as retention-evicted
+- 19.707 ms aggregate-read cost
+- 5,197,824 bytes idle RSS and 0 sampled CPU ms over five seconds
+
+The sync-every-event control measured 4.1647 ms p50 and 239.4 events/second. This makes the durability/throughput trade explicit rather than implying every normal event is power-loss durable immediately.
+
+SQLite was substantially faster at the same 16-event durability window:
+
+- 24,350.6 events/second
+- 0.0030 ms p50 insert latency
+- 0.4272 ms p50 16-event commit latency
+- 4,247,552 retained bytes after retaining 4,096 rows
+- 108.608 ms combined prune/checkpoint/VACUUM/post-VACUUM-checkpoint maintenance in the measured run
+- 6,242,304 bytes idle RSS and 0 sampled CPU ms
+
+SQLite is therefore not rejected for performance. It remains selected for operational state under D-153. It is not selected as the default raw diagnostic record because JSONL already exceeds the expected diagnostic event rate by a wide margin while keeping raw support evidence directly inspectable/salvageable, bounded by simple file rotation, and outside the operational SQLite/WAL/checkpoint/VACUUM failure and maintenance domain.
+
+ETW with no active consumer measured effectively zero write-call latency and 0 retained bytes; the provider was disabled and the path was non-durable. Attempting to start a durable ETW consumer session as the normal non-elevated user returned Access Denied. ETW therefore remains an optional Windows deep-tracing hook for explicit diagnostic sessions, not the default support record. If a later product path enables ETW sessions, provider/session loss counters must be surfaced as diagnostic completeness degradation.
+
+Temporary detail mode increased bytes/event by 4.187x and p50 write latency by 1.106x in the synthetic fixture while remaining below the declared 32 KiB event ceiling. A deliberately partial JSONL tail recovered 11 bytes, preserved the prior complete event, and left zero invalid lines.
+
+The candidate added no direct Rust dependency and no resolved Cargo package. The existing `windows-sys` dependency only enabled the ETW feature surface. The clean optimized core/probe build measured 37.447 seconds, and the release core measured 2,360,832 bytes in this final run. The benchmark/prototype diagnostics source contains the platform ETW unsafe calls; the normal JSONL storage implementation itself does not require a new native/unsafe boundary.
+
+The Phase 1 module defaults (512 KiB current/rotated-file target, four retained files, 16-event sync window) are prototype defaults, not public retention policy. Hardware-tier tuning, final user-facing support-bundle archive format, encryption-at-rest policy, remote telemetry/analytics, and elevated ETW session benchmarking remain later work.
+
+No UEFN, Fortnite, Blender, Krita, or real adapter behavior was implemented in Spike 14.
 
 Evidence: `spikes/phase1/results/2026-09-25-spike14-diagnostics-foundation-windows.json`.

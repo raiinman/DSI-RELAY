@@ -78,7 +78,7 @@ Exit criteria:
 
 ## Phase 1 — Technical spike and stack selection
 
-Status: Active
+Status: Complete — Phase 1 closed on 2026-09-25
 
 Gate: Passed — Phase 0 is closed. Stack choices become durable only after Phase 1 prototypes and benchmarks justify them.
 
@@ -99,7 +99,9 @@ Completed prototype evidence:
 - Spike 11: synthetic adversarial Windows sandbox benchmark; D-156 selects AppContainer/process isolation semantics with explicit filesystem grants, default-deny egress, broker-allowlisted capabilities, minimized environment, and outer Job Object limits. The measured experimental processmodel backend remains provisional rather than a release API commitment.
 - Spike 12: stable documented AppContainer/LPAC benchmark; D-157 selects mailbox-only direct writes, brokered egress, measured-build allowlisting, and fail-closed unsupported tiers while keeping the experimental backend reference-only.
 - Spike 13: packaging/update benchmark; D-158 selects signed per-user side-by-side bundles with verify → stage → atomic activation → schema-aware rollback as the default personal/direct Windows path, while retaining MSIX/App Installer as an optional trusted-signing/Store channel.
-- Current next work: Spike 14 — logging/diagnostic foundation, followed by a Phase 1 closure review against every completion gate.
+- Spike 14: logging/diagnostic benchmark; D-159 selects bounded structured JSONL as the default local diagnostic record, with ETW optional deep tracing and independent diagnostics health surfaced in `status` / `doctor`.
+- Phase 1 closure review: PASS. Required stack decisions, CLI/host round trip, persistent result round trip, automated tests, startup/restart baselines, and idle CPU/RAM baselines are present.
+- Current next work: Phase 2 first core slice.
 
 Research/prototype:
 
@@ -164,6 +166,8 @@ Exit criteria:
 - idle CPU/RAM baseline with one and multiple projects
 
 ## Phase 2 — Core and command system
+
+Status: Active — Phase 1 stack selection is closed; production-shaped promotion is underway.
 
 Build:
 

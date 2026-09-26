@@ -284,3 +284,33 @@ Artifact: `2026-09-25-spike13-packaging-update-windows.json`
 Current implication: D-158 selects the signed side-by-side updater model for the default personal/direct path. MSIX/App Installer remains useful for Store or managed/trusted-signing distribution, but its lifecycle was not claimed as physically proven on this self-signed non-admin fixture.
 
 See D-158 in `docs/DECISION_LOG.md`.
+
+
+## Spike 14 — Logging/diagnostic foundation
+
+Artifact: `2026-09-25-spike14-diagnostics-foundation-windows.json`
+
+- selected default candidate: bounded structured JSONL
+- optional Windows deep-trace hook: ETW; not the default durable support record
+- SQLite remains selected for operational state but is not selected as the default raw diagnostic store
+- event envelope includes stable ID/time/severity/component, project/job/result references, correlation/causation, source/trust, completeness/sampling, capture mode, and structured attributes
+- deterministic sensitive-key/path redaction occurs before persistence
+- normal capture ceiling: 4 KiB/event; explicit detail mode ceiling: 32 KiB/event and maximum 15-minute window
+- benchmark JSONL retention: 4 x 1 MiB; Phase 1 module defaults remain 4 x 512 KiB
+- default JSONL (sync every 16): 3,685.9 events/s, 0.0196 ms append p50, 3.8777 ms durability-boundary p50
+- strict JSONL sync-every-event control: 239.4 events/s / 4.1647 ms p50
+- bounded JSONL retained 3,735,997 bytes after 10,000 input events and explicitly recorded 5,289 evicted events
+- JSONL aggregate read: 19.707 ms
+- SQLite with the same 16-event durability window: 24,350.6 events/s / 0.0030 ms insert p50 / 0.4272 ms commit-boundary p50
+- SQLite retained 4,247,552 bytes after pruning to 4,096 rows; measured retention maintenance was 108.608 ms across prune/checkpoint/VACUUM/post-VACUUM checkpoint
+- idle sample: JSONL 5,197,824 bytes RSS; SQLite 6,242,304; ETW 5,087,232; all sampled 0 CPU ms over five seconds
+- ETW without a consumer retained 0 bytes; non-elevated durable `logman` session creation returned Access Denied
+- temporary detail mode amplified bytes/event by 4.187x and p50 latency by 1.106x while remaining within the detail ceiling
+- partial-tail recovery removed 11 incomplete bytes, preserved the prior complete event, and left zero invalid lines
+- live-host tests prove command arguments/results are not logged and diagnostic failure independently degrades `status` / `doctor`
+- no new direct dependency or resolved Cargo package; existing `windows-sys` only enabled its ETW feature surface
+- clean optimized core/probe build: 37.447 s; core EXE 2,360,832 bytes; diagnostic probe 2,091,008 bytes
+
+Current implication: D-159 selects bounded JSONL for normal local diagnostics/support evidence, with explicit periodic durability and retention completeness metadata. ETW stays optional for deliberate deep tracing; elevated ETW loss/export behavior remains later work.
+
+See D-159 in `docs/DECISION_LOG.md`.

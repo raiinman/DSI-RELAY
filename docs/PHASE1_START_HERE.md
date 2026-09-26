@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 1 — Technical spike and stack selection — is active.
+Phase 1 — Technical spike and stack selection — is complete. Phase 1 closed on 2026-09-25 after Spike 14 and the final closure review passed. Phase 2 is now active; use `docs/PHASE2_START_HERE.md` as the implementation authority.
 
 Phase 0 is closed as the approved architecture/research baseline. Phase 1 must test the assumptions rather than quietly replacing them.
 
@@ -21,8 +21,10 @@ Current prototype progress:
 - Spike 11 complete: D-156 selects the strong adapter-isolation semantics—AppContainer/process sandbox, explicit filesystem grants, default-deny egress, broker capability allowlist, minimized environment, and outer Job Object limits. Microsoft's experimental CreateProcessInSandbox backend proved those semantics on the measured host but is not release-locked.
 - Spike 12 complete: D-157 selects Microsoft's documented AppContainer/LPAC + brokered-egress path as the release-candidate Windows sandbox on qualified builds. The experimental backend is reference-only, unmeasured/unsupported builds fail closed, and the worker receives exactly one direct write grant: an ephemeral broker mailbox.
 - Spike 13 complete: D-158 selects signed per-user side-by-side bundles with verify → stage → atomic activation → schema-aware rollback as the default personal/direct Windows packaging model. MSIX/App Installer remains an optional Windows-managed/Store channel once a trusted signing path exists.
-- Current next spike: Spike 14 — logging/diagnostic foundation. This is the remaining Phase 1 stack-selection gate before a Phase 1 closure review.
-- Benchmark artifacts live under `spikes/phase1/results/`; current Phase 1 stack consequences are recorded through D-158.
+- Spike 14 complete: D-159 selects bounded structured JSONL as the default local diagnostic record, with ETW optional for deliberate deep tracing; logging health is independent and can degrade live `status` / `doctor` truth.
+- Phase 1 closure review: PASS. All published stack-selection and deliverable gates are satisfied on the reconciled exact source tree.
+- Benchmark artifacts live under `spikes/phase1/results/`; Phase 1 stack consequences are recorded through D-159.
+- Current next work: Phase 2 first core slice in `docs/PHASE2_START_HERE.md` and `docs/PHASE2_FIRST_SLICE.md`.
 
 ## Phase 1 goal
 
@@ -382,4 +384,4 @@ And Phase 1 must deliver:
 
 For a fresh ChatGPT/Codex conversation, use this request:
 
-> Take over DSI RELAY Phase 1. Work in `raiinman/DSI-RELAY`. Start with `AGENTS.md`, `docs/AGENTS.md`, and `docs/PHASE1_START_HERE.md`, then follow the read order there. Phase 0 remains the architecture baseline. Spikes 1–13 are complete; D-153 selects Rust + bundled SQLite as the local core, D-154 selects the JSON command registry contract source, D-155 selects the out-of-process manifest/broker + Job Object containment foundation, D-156 selects the strong adapter-isolation semantics, D-157 selects stable AppContainer/LPAC + brokered egress on qualified Windows builds, and D-158 selects signed per-user side-by-side packaging/update as the default personal/direct path while retaining MSIX/App Installer as an optional trusted-signing/Store channel. Begin with Spike 14: logging/diagnostic foundation, then perform a Phase 1 closure review. Keep the spike synthetic, narrow, and benchmark-driven; do not jump ahead into UEFN product features.
+> Take over DSI RELAY Phase 2. Work in the current DSI RELAY repository. Start with `AGENTS.md`, `docs/AGENTS.md`, `docs/PHASE2_START_HERE.md`, `docs/PHASE2_FIRST_SLICE.md`, and `docs/PHASE2_PROMOTION_LEDGER.md`. Phase 1 is complete through D-159; do not reopen its stack selections without contradictory evidence. Begin with the first production-shaped core slice: one project registration, one registry-backed command dispatch, one durable result, one durable job/checkpoint, live status/doctor health, and restart persistence through the selected Rust/SQLite/registry/diagnostics stack. Keep UEFN-specific behavior outside the core.

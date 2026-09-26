@@ -1,5 +1,6 @@
 pub mod adapter;
 pub mod dashboard;
+pub mod diagnostics;
 pub mod pipe;
 pub mod protocol;
 pub mod registry;
@@ -18,6 +19,8 @@ pub const SCHEMA_VERSION: u32 = 1;
 pub const PLATFORM_CAPABILITIES: &[&str] = &[
     "protocol.handshake@1",
     "dashboard.embedded@1",
+    "diagnostics.structured-jsonl@1",
+    "diagnostics.bounded-detail@1",
     "ipc.named_pipe.explicit_dacl@1",
     "registry.json-schema-2020-12-subset@1",
 ];

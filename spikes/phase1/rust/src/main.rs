@@ -1,4 +1,7 @@
 use relay_rust_challenger::dashboard;
+use relay_rust_challenger::diagnostics::{
+    DiagnosticConfig, DiagnosticEvent, DiagnosticHealth, JsonlDiagnostics, Severity,
+};
 use relay_rust_challenger::pipe;
 use relay_rust_challenger::protocol::{dispatch_command, hello_response, HostContext};
 use relay_rust_challenger::registry;
@@ -6,8 +9,8 @@ use relay_rust_challenger::security::{
     current_user_pipe_security, random_hex, verify_pipe_security,
 };
 use relay_rust_challenger::state::{
-    clear_state, db_path, read_state, state_path, write_state, HostState, IpcSecurityState,
-    ProtocolRange,
+    clear_state, db_path, read_state, state_dir, state_path, write_state, HostState,
+    IpcSecurityState, ProtocolRange,
 };
 use relay_rust_challenger::storage::{RelayStorage, StorageHealth};
 use relay_rust_challenger::{capabilities, PROTOCOL_MAX, PROTOCOL_MIN, RELAY_VERSION, SCHEMA_VERSION};
@@ -47,6 +50,69 @@ fn unix_ms() -> u128 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis()
+}
+
+fn record_command_event(
+    context: &HostContext,
+    request_id: &str,
+    command: &str,
+    response: &Value,
+) {
+    let Some(logger) = &context.diagnostics else {
+        return;
+    };
+    let ok = response
+        .get("ok")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let mut event = DiagnosticEvent::new(
+        "relay.command.completed",
+        if ok { Severity::Info } else { Severity::Warn },
+        "core.command",
+        "RELAY command completed",
+    );
+    event.correlation_id = Some(request_id.to_string());
+    event
+        .attributes
+        .insert("command".to_string(), json!(command));
+    event.attributes.insert("ok".to_string(), json!(ok));
+    if let Some(version) = response
+        .get("command_version")
+        .and_then(Value::as_u64)
+    {
+        event
+            .attributes
+            .insert("command_version".to_string(), json!(version));
+    }
+    if let Some(code) = response
+        .get("error")
+        .and_then(|error| error.get("code"))
+        .and_then(Value::as_str)
+    {
+        event
+            .attributes
+            .insert("error_code".to_string(), json!(code));
+    }
+    if let Ok(mut logger) = logger.lock() {
+        if let Err(error) = logger.append(event) {
+            eprintln!("diagnostic command event failed: {error}");
+        }
+    }
+}
+
+fn flush_diagnostics(context: &HostContext) {
+    if let Some(logger) = &context.diagnostics {
+        if let Ok(mut logger) = logger.lock() {
+            let event = DiagnosticEvent::new(
+                "relay.host.stopping",
+                Severity::Info,
+                "core.host",
+                "RELAY host stopping",
+            );
+            let _ = logger.append(event);
+            let _ = logger.flush();
+        }
+    }
 }
 
 fn run_host(dashboard_enabled: bool) -> Result<(), String> {
@@ -89,6 +155,37 @@ fn run_host(dashboard_enabled: bool) -> Result<(), String> {
         ),
     };
 
+    let diagnostics_dir = state_dir().join("diagnostics");
+    let (diagnostics, diagnostics_fallback) =
+        match JsonlDiagnostics::open(DiagnosticConfig::new(&diagnostics_dir)) {
+            Ok(mut logger) => {
+                let mut event = DiagnosticEvent::new(
+                    "relay.host.started",
+                    Severity::Info,
+                    "core.host",
+                    "RELAY host started",
+                );
+                event
+                    .attributes
+                    .insert("version".to_string(), json!(RELAY_VERSION));
+                event
+                    .attributes
+                    .insert("storage_ok".to_string(), json!(storage_health.ok));
+                if let Err(error) = logger.append(event) {
+                    eprintln!("diagnostic startup event failed: {error}");
+                }
+                let health = logger.health();
+                (Some(Arc::new(Mutex::new(logger))), health)
+            }
+            Err(error) => (
+                None,
+                DiagnosticHealth::unavailable(format!(
+                    "{}: {}",
+                    error.code, error.message
+                )),
+            ),
+        };
+
     let shutdown = Arc::new(AtomicBool::new(false));
     let context = HostContext {
         started,
@@ -101,6 +198,8 @@ fn run_host(dashboard_enabled: bool) -> Result<(), String> {
         acl_ace_count: acl_verification.ace_count,
         storage,
         storage_health: storage_health.clone(),
+        diagnostics,
+        diagnostics_fallback: diagnostics_fallback.clone(),
     };
 
     let dashboard_server = if dashboard_enabled {
@@ -120,7 +219,7 @@ fn run_host(dashboard_enabled: bool) -> Result<(), String> {
             max: PROTOCOL_MAX,
         },
         capabilities: capabilities(),
-        recovery_state: if storage_health.ok {
+        recovery_state: if storage_health.ok && diagnostics_fallback.ok {
             "Healthy".to_string()
         } else {
             "Degraded".to_string()
@@ -221,10 +320,12 @@ fn run_host(dashboard_enabled: bool) -> Result<(), String> {
             arguments,
             &context,
         );
+        record_command_event(&context, request_id, command, &response);
         pipe::write_json(pipe_server.raw(), &response)?;
         pipe::disconnect(pipe_server.raw());
     }
 
+    flush_diagnostics(&context);
     clear_state(&state_file);
     if let Some(server) = dashboard_server {
         server.join();

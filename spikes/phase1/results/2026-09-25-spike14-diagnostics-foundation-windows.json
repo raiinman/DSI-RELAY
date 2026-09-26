@@ -1,16 +1,446 @@
 {
-  "benchmark":"phase1-spike14-diagnostics-foundation-windows",
-  "recorded_at":"2026-09-25T23:49:20.557Z",
-  "runtime":{"os":"10.0.26200","cpu":"AMD Ryzen 7 5800X3D","rustc":"1.97.0","cargo":"1.97.0"},
-  "workload":{"events":10000,"payload_bytes":192,"detail_events":1000,"detail_payload_bytes":3000,"durability_window_events":16},
-  "jsonl":{"events_per_second":3984.7737,"write_p50_ms":0.0211,"sync16_p50_ms":3.5707,"retained_bytes":3735997,"idle_rss_bytes":4710400},
-  "jsonl_sync1":{"events_per_second":267.2425,"write_p50_ms":3.7591},
-  "sqlite":{"events_per_second":27725.6382,"write_p50_ms":0.0028,"commit16_p50_ms":0.405,"retained_bytes":4247552,"maintenance_ms":91.1948,"idle_rss_bytes":5738496},
-  "etw":{"no_consumer_events_per_second":308123.6808,"provider_enabled":false,"retained_bytes":0,"non_elevated_durable_session":"access_denied","idle_rss_bytes":4595712},
-  "detail":{"bytes_amplification_ratio":4.18656896,"p50_latency_ratio":1.1},
-  "recovery":{"recovered_partial_bytes":11,"complete_events":1,"invalid_lines":0,"health_ok":true},
-  "verification":{"rust_tests_passed":54,"clean_release_build_ms":33171.318,"new_resolved_packages":0},
-  "selection":{"default":"bounded_jsonl","optional_deep_trace":"etw","sqlite_default_raw_log_store":false},
-  "pass_fail":{"all_gates_pass":true},
-  "limitations":["single high-end Windows fixture","JSONL has a documented 16-event power-loss window","durable ETW collection was not available non-elevated"]
+  "benchmark": "phase1-spike14-diagnostics-foundation-windows",
+  "recorded_at": "2026-09-26T01:10:50.288Z",
+  "decision_informed": "Which minimum local logging/diagnostic foundation RELAY should use before Phase 1 closes.",
+  "hypothesis": "Bounded structured JSONL with an explicit periodic sync window will provide the simplest durable default support record; SQLite raw-log storage will add write/maintenance coupling, while ETW is best kept as optional temporary deep tracing.",
+  "runtime": {
+    "os": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "arch": "x64"
+    },
+    "cpu_model": "AMD Ryzen 7 5800X3D 8-Core Processor",
+    "logical_cpu_count": 16,
+    "total_memory_bytes": 51437408256,
+    "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+    "cargo": "cargo 1.97.0 (c980f4866 2026-06-30)"
+  },
+  "workload": {
+    "normal_events_per_candidate": 10000,
+    "normal_payload_bytes": 192,
+    "detail_events": 1000,
+    "detail_payload_bytes": 3000,
+    "jsonl_retention": {
+      "max_file_bytes": 1048576,
+      "max_files": 4,
+      "default_sync_every": 16,
+      "strict_sync_control": 1
+    },
+    "sqlite_retention_rows": 4096,
+    "idle_sample_ms": 5000
+  },
+  "candidates": {
+    "jsonl": {
+      "aggregate": {
+        "by_component": {
+          "fixture.component": 4711
+        },
+        "by_event_id": {
+          "relay.fixture.operation": 4711
+        },
+        "by_severity": {
+          "info": 4711
+        },
+        "detail_events": 0,
+        "incomplete_events": 0,
+        "invalid_lines": 0,
+        "retention_evicted_events": 5289,
+        "retention_evicted_files": 4,
+        "sampled_events": 0,
+        "total_events": 4711,
+        "untrusted_source_events": 0
+      },
+      "aggregate_ms": 19.706999999999997,
+      "candidate": "jsonl",
+      "durability_sync_latency": {
+        "max_ms": 6.4814,
+        "mean_ms": 3.92501403225807,
+        "min_ms": 0.6533,
+        "n": 620,
+        "p50_ms": 3.8777,
+        "p95_ms": 5.0494,
+        "p99_ms": 5.7307
+      },
+      "durability_window_events": 16,
+      "events_input": 10000,
+      "events_per_second": 3685.912079128276,
+      "explicit_flush_ms": 3.6128,
+      "health": {
+        "current_bytes": 590785,
+        "detail_active": false,
+        "detail_until_unix_ms": null,
+        "evicted_events": 5289,
+        "evicted_files": 4,
+        "last_error": null,
+        "last_sync_unix_ms": 1790384987517,
+        "max_file_bytes": 1048576,
+        "max_files": 4,
+        "ok": true,
+        "recovered_partial_bytes": 0,
+        "rotated_files": 3,
+        "sync_every": 16
+      },
+      "logical_bytes_per_input_event": 792.8859,
+      "logical_bytes_written": 7928859,
+      "retained_bytes": 3735997,
+      "retained_bytes_per_input_event": 373.5997,
+      "rotation": {
+        "count": 7,
+        "latency": {
+          "max_ms": 6.9444,
+          "mean_ms": 5.511057142857143,
+          "min_ms": 3.7131,
+          "n": 7,
+          "p50_ms": 5.8599000000000006,
+          "p95_ms": 6.9444,
+          "p99_ms": 6.9444
+        }
+      },
+      "sync_every": 16,
+      "total_write_ms": 2713.0326999999997,
+      "write_latency": {
+        "max_ms": 8.164,
+        "mean_ms": 0.2699915699999987,
+        "min_ms": 0.0171,
+        "n": 10000,
+        "p50_ms": 0.0196,
+        "p95_ms": 3.4215,
+        "p99_ms": 4.5546
+      }
+    },
+    "jsonl_sync_every_event": {
+      "aggregate": {
+        "by_component": {
+          "fixture.component": 4711
+        },
+        "by_event_id": {
+          "relay.fixture.operation": 4711
+        },
+        "by_severity": {
+          "info": 4711
+        },
+        "detail_events": 0,
+        "incomplete_events": 0,
+        "invalid_lines": 0,
+        "retention_evicted_events": 5289,
+        "retention_evicted_files": 4,
+        "sampled_events": 0,
+        "total_events": 4711,
+        "untrusted_source_events": 0
+      },
+      "aggregate_ms": 16.5849,
+      "candidate": "jsonl",
+      "durability_sync_latency": {
+        "max_ms": 17.3252,
+        "mean_ms": 4.174461629999986,
+        "min_ms": 0.6348,
+        "n": 10000,
+        "p50_ms": 4.164700000000001,
+        "p95_ms": 5.4295,
+        "p99_ms": 6.4528
+      },
+      "durability_window_events": 1,
+      "events_input": 10000,
+      "events_per_second": 239.3653516853408,
+      "explicit_flush_ms": 3.7664999999999997,
+      "health": {
+        "current_bytes": 590785,
+        "detail_active": false,
+        "detail_until_unix_ms": null,
+        "evicted_events": 5289,
+        "evicted_files": 4,
+        "last_error": null,
+        "last_sync_unix_ms": 1790385029370,
+        "max_file_bytes": 1048576,
+        "max_files": 4,
+        "ok": true,
+        "recovered_partial_bytes": 0,
+        "rotated_files": 3,
+        "sync_every": 1
+      },
+      "logical_bytes_per_input_event": 792.8859,
+      "logical_bytes_written": 7928859,
+      "retained_bytes": 3735997,
+      "retained_bytes_per_input_event": 373.5997,
+      "rotation": {
+        "count": 7,
+        "latency": {
+          "max_ms": 12.704699999999999,
+          "mean_ms": 9.955214285714286,
+          "min_ms": 7.3349,
+          "n": 7,
+          "p50_ms": 9.6641,
+          "p95_ms": 12.704699999999999,
+          "p99_ms": 12.704699999999999
+        }
+      },
+      "sync_every": 1,
+      "total_write_ms": 41777.1408,
+      "write_latency": {
+        "max_ms": 17.3252,
+        "mean_ms": 4.174461629999986,
+        "min_ms": 0.6348,
+        "n": 10000,
+        "p50_ms": 4.164700000000001,
+        "p95_ms": 5.4295,
+        "p99_ms": 6.4528
+      }
+    },
+    "sqlite": {
+      "aggregate": {
+        "by_component": {
+          "fixture.component": 4096
+        },
+        "total_events": 4096
+      },
+      "aggregate_ms": 7.6530000000000005,
+      "bytes_after_checkpoint": 10305536,
+      "bytes_after_writes": 12238400,
+      "candidate": "sqlite",
+      "checkpoint_ms": 0.6459,
+      "durability_sync_latency": {
+        "max_ms": 14.7739,
+        "mean_ms": 0.5264580799999999,
+        "min_ms": 0.3538,
+        "n": 625,
+        "p50_ms": 0.42719999999999997,
+        "p95_ms": 0.6972,
+        "p99_ms": 1.3227
+      },
+      "durability_window_events": 16,
+      "events_input": 10000,
+      "events_per_second": 24350.56436085491,
+      "logical_bytes_per_input_event": 791.8859,
+      "logical_bytes_written": 7918859,
+      "post_vacuum_checkpoint_ms": 0.4906,
+      "prune_ms": 58.5194,
+      "retained_bytes": 4247552,
+      "retained_bytes_per_input_event": 424.7552,
+      "retention_target_rows": 4096,
+      "sqlite_version": "3.53.2",
+      "total_write_ms": 410.6681,
+      "vacuum_ms": 48.9525,
+      "write_latency": {
+        "max_ms": 14.7964,
+        "mean_ms": 0.03785633000000049,
+        "min_ms": 0.0023,
+        "n": 10000,
+        "p50_ms": 0.003,
+        "p95_ms": 0.3951,
+        "p99_ms": 0.5771
+      }
+    },
+    "etw_no_consumer": {
+      "aggregate_supported_by_probe": false,
+      "candidate": "etw",
+      "durable_without_consumer_session": false,
+      "events_input": 10000,
+      "events_per_second": 275268.2489085614,
+      "failed_writes": 0,
+      "logical_bytes_per_input_event": 791.8859,
+      "logical_bytes_written": 7918859,
+      "provider_enabled_at_start": false,
+      "provider_guid": "{9a421fa8-f21b-4f9e-99ab-1db6bb8b1470}",
+      "retained_bytes": 0,
+      "total_write_ms": 36.328199999999995,
+      "write_latency": {
+        "max_ms": 0.001,
+        "mean_ms": 0.00004015999999999723,
+        "min_ms": 0,
+        "n": 10000,
+        "p50_ms": 0,
+        "p95_ms": 0.00009999999999999999,
+        "p99_ms": 0.00009999999999999999
+      }
+    },
+    "etw_durable_session": {
+      "session_started": false,
+      "start_exit_code": 2147942405,
+      "access_denied": true,
+      "provider_run": null,
+      "etl_bytes": 0
+    }
+  },
+  "detail_mode": {
+    "amplification": {
+      "bytes_ratio": 4.186568960724956,
+      "p50_latency_ratio": 1.1059907834101383
+    },
+    "detail": {
+      "bytes_per_event": 3599.859,
+      "logical_bytes": 3599859,
+      "write_latency": {
+        "max_ms": 8.2469,
+        "mean_ms": 0.19416700000000006,
+        "min_ms": 0.0198,
+        "n": 1000,
+        "p50_ms": 0.024,
+        "p95_ms": 1.6467,
+        "p99_ms": 3.6117
+      }
+    },
+    "events": 1000,
+    "normal": {
+      "bytes_per_event": 859.859,
+      "logical_bytes": 859859,
+      "write_latency": {
+        "max_ms": 4.3128,
+        "mean_ms": 0.13478499999999985,
+        "min_ms": 0.0187,
+        "n": 1000,
+        "p50_ms": 0.0217,
+        "p95_ms": 0.8859,
+        "p99_ms": 2.8668
+      }
+    }
+  },
+  "recovery": {
+    "health_ok": true,
+    "invalid_lines_after_recovery": 0,
+    "recovered_partial_bytes": 11,
+    "total_events_after_recovery": 1
+  },
+  "idle": {
+    "jsonl": {
+      "ready": {
+        "candidate": "jsonl",
+        "duration_ms": 6500,
+        "health": {
+          "current_bytes": 0,
+          "detail_active": false,
+          "detail_until_unix_ms": null,
+          "evicted_events": 0,
+          "evicted_files": 0,
+          "last_error": null,
+          "last_sync_unix_ms": null,
+          "max_file_bytes": 524288,
+          "max_files": 4,
+          "ok": true,
+          "recovered_partial_bytes": 0,
+          "rotated_files": 0,
+          "sync_every": 16
+        },
+        "pid": 2148
+      },
+      "sample_ms": 5000,
+      "cpu_ms": 0,
+      "rss_bytes": 5197824,
+      "private_bytes": 782336,
+      "rss_delta_bytes": 0,
+      "handle_count": 65,
+      "thread_count": 4
+    },
+    "sqlite": {
+      "ready": {
+        "candidate": "sqlite",
+        "duration_ms": 6500,
+        "pid": 22288,
+        "sqlite_version": "3.53.2"
+      },
+      "sample_ms": 5000,
+      "cpu_ms": 0,
+      "rss_bytes": 6242304,
+      "private_bytes": 872448,
+      "rss_delta_bytes": 0,
+      "handle_count": 69,
+      "thread_count": 4
+    },
+    "etw": {
+      "ready": {
+        "candidate": "etw",
+        "duration_ms": 6500,
+        "pid": 16376,
+        "provider_enabled": false,
+        "provider_guid": "{9a421fa8-f21b-4f9e-99ab-1db6bb8b1470}"
+      },
+      "sample_ms": 5000,
+      "cpu_ms": 0,
+      "rss_bytes": 5087232,
+      "private_bytes": 786432,
+      "rss_delta_bytes": 0,
+      "handle_count": 65,
+      "thread_count": 4
+    }
+  },
+  "build_and_complexity": {
+    "clean_release_build_ms": 37446.762,
+    "core_exe_bytes": 2360832,
+    "diagnostics_probe_exe_bytes": 2091008,
+    "direct_dependency_count": 6,
+    "cargo_lock_package_count": 37,
+    "head_cargo_lock_package_count": 37,
+    "new_resolved_packages": 0,
+    "diagnostics_source": {
+      "files": 2,
+      "lines": 1762,
+      "bytes": 60634,
+      "unsafe_mentions": 6
+    }
+  },
+  "verification": {
+    "passed_groups": [
+      30,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      8,
+      4,
+      3,
+      2,
+      2,
+      3,
+      2,
+      0
+    ],
+    "total_passed": 54
+  },
+  "candidate_outcome": {
+    "default_candidate": "bounded_jsonl",
+    "optional_deep_trace": "etw",
+    "not_selected_as_default_raw_log_store": "sqlite",
+    "selection_rationale": [
+      "SQLite is faster on this fixture, but bounded JSONL already sustains far more diagnostic events than RELAY is expected to generate.",
+      "JSONL keeps raw diagnostics outside the operational SQLite failure and maintenance domain and provides directly inspectable/salvageable support evidence.",
+      "SQLite raw-log retention requires explicit prune/checkpoint/VACUUM work; ETW has no non-admin durable consumer path on this fixture."
+    ],
+    "durability_window": "normal JSONL syncs every 16 events; explicit flush/shutdown sync narrows the window; sync-every-event control is measured separately",
+    "support_export": "aggregate/health summary only by default; unrestricted raw history is excluded"
+  },
+  "comparisons": {
+    "sqlite_vs_jsonl_throughput_ratio": 6.606387737445397,
+    "jsonl_vs_sqlite_retained_bytes_ratio": 0.879564746941297,
+    "jsonl_vs_sqlite_idle_rss_ratio": 0.8326771653543307,
+    "jsonl_sync16_p50_ms": 3.8777,
+    "sqlite_commit16_p50_ms": 0.42719999999999997,
+    "sqlite_retention_maintenance_ms": 108.60839999999999
+  },
+  "pass_fail": {
+    "rust_regressions_green": true,
+    "jsonl_bounded_retention": true,
+    "jsonl_partial_tail_recovery": true,
+    "jsonl_aggregate_valid": true,
+    "detail_mode_is_explicit_and_bounded": true,
+    "sync1_control_measured": true,
+    "sqlite_retention_maintenance_measured": true,
+    "idle_jsonl_cpu_bounded": true,
+    "idle_sqlite_cpu_bounded": true,
+    "idle_etw_cpu_bounded": true,
+    "etw_no_consumer_is_not_durable": true,
+    "etw_session_availability_classified": true,
+    "no_new_direct_dependency_or_lock_package": true,
+    "all_gates_pass": true
+  },
+  "limitations": [
+    "One high-end Windows workstation cannot establish public diagnostic resource budgets.",
+    "The default JSONL candidate intentionally accepts a documented periodic durability window between sync_data calls; sudden power loss may lose the unsynced tail even though process-crash tail recovery is bounded.",
+    "The SQLite candidate uses synchronous FULL with the same 16-event durability window as default JSONL, plus explicit row pruning, WAL checkpoint, VACUUM, and a post-VACUUM checkpoint; other batching changes durability/latency semantics and were not used to hide that trade-off.",
+    "The ETW no-consumer measurement is intentionally non-durable. A non-elevated durable logman session was attempted separately; if denied, elevated ETW session loss counters and ETL export cost remain unmeasured.",
+    "ETW remains Windows-specific and does not replace RELAY's portable structured support summary.",
+    "The support-summary spike returns health and aggregate counts only; a final user-facing support-bundle archive format is later product work.",
+    "Remote analytics, telemetry upload, encryption at rest, and public retention defaults are outside Phase 1."
+  ]
 }

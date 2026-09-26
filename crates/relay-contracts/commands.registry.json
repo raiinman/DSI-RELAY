@@ -820,6 +820,38 @@
       ]
     },
     {
+      "id": "adapter.dependencies.parse",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Sandboxed adapter operation that observes dependency targets in one source file.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["adapter"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["source_path", "source_sha256", "project_type", "content_utf8"],
+        "properties": {
+          "source_path": { "type": "string", "minLength": 1 },
+          "source_sha256": { "type": "string", "minLength": 64 },
+          "project_type": { "type": "string", "minLength": 1 },
+          "content_utf8": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["source_path", "source_sha256", "targets"],
+        "properties": {
+          "source_path": { "type": "string", "minLength": 1 },
+          "source_sha256": { "type": "string", "minLength": 64 },
+          "targets": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["ADAPTER_PARSE_FAILED", "ADAPTER_INPUT_UNSUPPORTED"]
+    },
+    {
       "id": "project.dependencies.list",
       "version": 1,
       "stability": "phase3",

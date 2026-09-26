@@ -243,6 +243,80 @@ impl AdapterBroker {
         result
     }
 
+    /// Invoke a bound parser and validate its observation before a caller may submit it to Core.
+    pub fn invoke_dependency_parser(
+        &self,
+        adapter_id: &str,
+        source_path: &str,
+        source_sha256: &str,
+        project_type: &str,
+        content_utf8: &str,
+    ) -> Result<InvocationOutcome, AdapterError> {
+        if !valid_relative_path(source_path)
+            || source_sha256.len() != 64
+            || !source_sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
+            || project_type.is_empty()
+            || project_type.len() > 128
+            || content_utf8.len() > 1024 * 1024
+        {
+            return Err(AdapterError::new(
+                "ADAPTER_PARSE_INPUT_INVALID",
+                "dependency parser input exceeds bounded project-relative contract",
+            ));
+        }
+        let outcome = self.invoke(
+            adapter_id,
+            "adapter.dependencies.parse",
+            1,
+            json!({
+                "source_path": source_path,
+                "source_sha256": source_sha256,
+                "project_type": project_type,
+                "content_utf8": content_utf8
+            }),
+        )?;
+        if outcome.response["ok"] != true {
+            return Err(AdapterError::new(
+                "ADAPTER_PARSE_FAILED",
+                "dependency parser did not return an observation",
+            ));
+        }
+        let result = &outcome.response["result"];
+        if result["source_path"] != source_path || result["source_sha256"] != source_sha256 {
+            return Err(AdapterError::new(
+                "ADAPTER_PARSE_SOURCE_MISMATCH",
+                "dependency parser observation does not match the requested source identity",
+            ));
+        }
+        let targets = result["targets"].as_array().ok_or_else(|| {
+            AdapterError::new("ADAPTER_PARSE_RESULT_INVALID", "dependency targets are missing")
+        })?;
+        if targets.len() > 500 {
+            return Err(AdapterError::new(
+                "ADAPTER_PARSE_RESULT_INVALID",
+                "dependency target count exceeds the bounded limit",
+            ));
+        }
+        let mut distinct = BTreeSet::new();
+        let normalized_source = source_path.replace('\\', "/");
+        for target in targets {
+            let target = target.as_str().ok_or_else(|| {
+                AdapterError::new("ADAPTER_PARSE_RESULT_INVALID", "dependency target is not text")
+            })?;
+            let normalized_target = target.replace('\\', "/");
+            if !valid_relative_path(target)
+                || normalized_target == normalized_source
+                || !distinct.insert(normalized_target)
+            {
+                return Err(AdapterError::new(
+                    "ADAPTER_PARSE_RESULT_INVALID",
+                    "dependency targets must be distinct project-relative files",
+                ));
+            }
+        }
+        Ok(outcome)
+    }
+
     fn preflight_runtime(&self, adapter_id: &str) -> Result<(), AdapterError> {
         let runtime = self.runtime.lock().map_err(|_| {
             AdapterError::new(
@@ -473,6 +547,17 @@ fn safe_segment(value: &str) -> String {
     } else {
         value
     }
+}
+
+fn valid_relative_path(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 4096
+        && !value.starts_with(['/', '\\'])
+        && !value.contains(':')
+        && !value.contains('\0')
+        && value.split(['/', '\\']).all(|part| {
+            !part.is_empty() && part != "." && part != ".."
+        })
 }
 
 fn sandbox_identity(

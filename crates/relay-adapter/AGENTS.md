@@ -21,6 +21,7 @@ Own production generic adapter manifests, broker lifecycle, and qualified Window
 - Invocations sharing one adapter package tree are serialized through a package lock so temporary ACL/label grants cannot race. Different package trees may run independently.
 - Job Objects enforce one active process, kill-on-close, and a process-memory limit in addition to AppContainer isolation.
 - Worker identity/protocol/capabilities and structured result/error schemas are validated against the shared command registry.
+- The adapter-only dependency parser operation accepts at most 1 MiB of explicit UTF-8 source content in the ephemeral sandbox mailbox. Broker validation binds observations to the requested source path/hash and rejects unsafe, duplicate, self-referential, or excessive targets before a caller may submit them to Core. A parser result never grants Core write authority.
 - Crash/hang/invalid-response failures feed bounded backoff/quarantine state.
 - Adapter stdout/stderr and tool-provided text remain untrusted data.
 - The synthetic fixture binary is test evidence only and must never be included in public packaging.
@@ -38,6 +39,7 @@ Own production generic adapter manifests, broker lifecycle, and qualified Window
 - Run live synthetic sandbox integration tests on allowlisted Windows builds.
 - Test bad digest, over-permission, incompatible command/protocol, crash, hang, quarantine, direct-network denial, blocked-path denial, child-process denial, temporary ACL restoration, concurrent same-package invocation serialization, and fail-closed unmeasured-build selection.
 - Measure inactive installed-adapter overhead and one on-demand invocation against Phase 1 order-of-magnitude evidence using a dedicated adapter package directory.
+- Synthetic parser fixture verifies strong sandbox launch, source identity, project-relative target bounds, and malformed observation rejection.
 
 # Child DOX Index
 

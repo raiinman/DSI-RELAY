@@ -56,6 +56,7 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `PHASE3_SCALE_BENCHMARK_EVIDENCE.md` — one-host 15,000-file production-fixture resource sample and repeatable tier harness.
 - `PHASE3_SIXTH_SLICE_EVIDENCE.md` — durable schema-6 continuity requirement and bounded idle recovery evidence.
 - `PHASE3_SEVENTH_SLICE_EVIDENCE.md` — schema-7 project configuration and declared adapter version metadata evidence.
+- `PHASE3_EIGHTH_SLICE_EVIDENCE.md` — sandboxed generic dependency parser operation and bounded observation validation evidence.
 - `PHASE3_CLOSURE_REVIEW.md` — active Phase 3 exit-gate review with explicit open and partial items.
 - `ROADMAP.md` — staged delivery plan and milestone exit criteria.
 - `RESEARCH_PLAN.md` — academic/technical research and benchmark program.

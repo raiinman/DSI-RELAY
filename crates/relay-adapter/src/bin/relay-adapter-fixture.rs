@@ -333,7 +333,34 @@ fn main() {
         capabilities.push("undeclared.extra".to_string());
     }
 
-    let (ok, result, error) = match mode.as_str() {
+    let (ok, result, error) = if request.command == "adapter.dependencies.parse" {
+        match request.arguments["content_utf8"]
+            .as_str()
+            .and_then(|content| serde_json::from_str::<Value>(content).ok())
+        {
+            Some(document) => (
+                true,
+                Some(json!({
+                    "source_path": if document["mode"] == "bad_source" {
+                        "different.txt"
+                    } else {
+                        request.arguments["source_path"].as_str().unwrap_or("")
+                    },
+                    "source_sha256": request.arguments["source_sha256"],
+                    "targets": document.get("targets").cloned().unwrap_or(json!([]))
+                })),
+                None,
+            ),
+            None => (
+                false,
+                None,
+                Some(json!({
+                    "code": "ADAPTER_PARSE_FAILED",
+                    "message": "fixture dependency document is invalid"
+                })),
+            ),
+        }
+    } else { match mode.as_str() {
         "bad_result" => (
             true,
             Some(json!({ "not_echo": true })),
@@ -361,7 +388,7 @@ fn main() {
             })),
             None,
         ),
-    };
+    }};
 
     write_response(
         &mailbox,

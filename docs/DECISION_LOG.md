@@ -1429,3 +1429,13 @@ Schema 7 stores one optional configuration record per project. Version-1 `projec
 The declared adapter binding is not evidence that the package is installed, compatible, sandboxed, or permitted, and it cannot grant authority to replace dependency edges. Adapter-specific settings, credentials, absolute paths, and parser output are outside this format-1 foundation. A generic parser/adapter execution and observation contract is still needed before automatic dependency extraction can be accepted.
 
 Evidence: `docs/PHASE3_SEVENTH_SLICE_EVIDENCE.md`.
+
+## D-168 — Parser observations are sandboxed and source-bound before Core replacement
+
+Status: Phase 3 eighth slice accepted on a synthetic Windows adapter fixture
+
+The adapter-only `adapter.dependencies.parse` operation uses the shared registry and the existing strongly isolated worker broker. A caller explicitly supplies one bounded UTF-8 source payload, current project-relative source path, source digest, and project type. The broker verifies the worker's declared binding and identity, then rejects output that changes the requested source identity or exceeds project-relative target bounds. The worker cannot write Core dependency edges; `project.dependencies.replace` remains the separate authorized, generation- and digest-guarded Core transaction.
+
+This is a parser execution contract, not automatic project-file dispatch. Adapter installation, authorization to deliver source content, per-project version matching, scheduling, and invalidation/reparse evidence remain open Phase 3 work. A declared project adapter binding alone does not provide those permissions.
+
+Evidence: `docs/PHASE3_EIGHTH_SLICE_EVIDENCE.md`.

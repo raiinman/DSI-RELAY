@@ -90,6 +90,50 @@ fn manifest_for(id: &str, worker: &Path) -> AdapterManifest {
     }
 }
 
+#[test]
+fn sandboxed_dependency_parser_observations_are_bounded_and_source_bound() {
+    let root = unique_dir("dependency-parser");
+    fs::create_dir_all(&root).unwrap();
+    let worker = copy_worker(&root);
+    let broker = AdapterBroker::new(BrokerPolicy::synthetic_default(), root.join("mailboxes")).unwrap();
+    let mut manifest = manifest_for("fixture.parser", &worker);
+    manifest.relay.command_bindings.push(CommandBinding {
+        command: "adapter.dependencies.parse".to_string(),
+        command_version: 1,
+        capability: "synthetic.dependencies.parse".to_string(),
+    });
+    broker.install(manifest, &worker).unwrap();
+    let source_sha = "a".repeat(64);
+    let parsed = broker.invoke_dependency_parser(
+        "fixture.parser", "src/source.json", &source_sha, "synthetic.project",
+        r#"{"targets":["src/target.txt"]}"#,
+    ).unwrap();
+    assert_eq!(parsed.response["result"]["targets"][0], "src/target.txt");
+    assert_eq!(parsed.provenance.adapter_id, "fixture.parser");
+    assert_eq!(parsed.job_limits.active_process_limit, 1);
+
+    let bad_source = broker.invoke_dependency_parser(
+        "fixture.parser", "src/source.json", &source_sha, "synthetic.project",
+        r#"{"mode":"bad_source","targets":[]}"#,
+    ).unwrap_err();
+    assert_eq!(bad_source.code, "ADAPTER_PARSE_SOURCE_MISMATCH");
+    let bad_target = broker.invoke_dependency_parser(
+        "fixture.parser", "src/source.json", &source_sha, "synthetic.project",
+        r#"{"targets":["../outside.txt"]}"#,
+    ).unwrap_err();
+    assert_eq!(bad_target.code, "ADAPTER_PARSE_RESULT_INVALID");
+    let self_target = broker.invoke_dependency_parser(
+        "fixture.parser", "src/source.json", &source_sha, "synthetic.project",
+        r#"{"targets":["src\\source.json"]}"#,
+    ).unwrap_err();
+    assert_eq!(self_target.code, "ADAPTER_PARSE_RESULT_INVALID");
+    let bad_input = broker.invoke_dependency_parser(
+        "fixture.parser", "../outside.txt", &source_sha, "synthetic.project", "{}",
+    ).unwrap_err();
+    assert_eq!(bad_input.code, "ADAPTER_PARSE_INPUT_INVALID");
+    fs::remove_dir_all(root).unwrap();
+}
+
 
 #[test]
 fn stable_sandbox_blocks_ungranted_worker_access() {

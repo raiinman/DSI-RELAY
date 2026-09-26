@@ -17,9 +17,9 @@ Own production RELAY Core deterministic local business logic and durable state.
 - Durable result/job outputs carry provenance/trust metadata.
 - Phase 3 project baselines and change rows are project-scoped, derived state. Canonical roots stay local; machine-facing index paths are project-relative. Reconciliation treats watcher paths as hints and hashes changed candidates after authoritative metadata enumeration.
 - Schema-5 delta reads and dependency edges are bounded, project-scoped derived state. Edge replacement requires the current index generation and source content hash; source/target changes invalidate edges, and rebuild resets the delta boundary.
-- Hint-only index updates read and hash only named files, commit `stale` state, and never claim complete continuity. Authoritative reconciliation restores `ready`; delta and dependency-edge reads/writes require ready state.
-- Normal reconciliation checks all filesystem metadata and hashes changed candidates. Explicit `verify_content` reconciliation hashes all files for uncertain continuity and detects same-size/same-timestamp edits; schedule this expensive recovery around foreground work.
-- Trusted daemon watcher input can query local indexed roots and durably mark index status `stale` without changing generation. These methods never expose canonical roots through command results.
+- Hint-only index updates read and hash only named files, commit `stale` state, and never claim complete continuity. Delta and dependency-edge reads/writes require ready state.
+- Normal reconciliation checks all filesystem metadata and hashes changed candidates. Explicit `verify_content` reconciliation hashes all files for uncertain continuity and detects same-size/same-timestamp edits. After continuity loss, a durable schema-6 flag requires full content verification before `ready` can be restored.
+- Trusted daemon watcher input can query local indexed roots, durably mark continuity loss, and run cooperatively cancellable reconciliation. These methods never expose canonical roots through command results.
 
 # Verification
 
@@ -29,6 +29,7 @@ Own production RELAY Core deterministic local business logic and durable state.
 - Schema-4-to-5 migration preserves index records and marks a conservative baseline generation; delta and edge tests cover stale input, bounds, restart, and cross-project authority.
 - Hint-update tests cover targeted work counts, rename/directory hints, missed-event recovery, stale restart, and cross-project denial.
 - Content-verification tests cover same-size/same-timestamp changes missed by metadata-only reconciliation and the full-hash cost on a 1,000-file fixture.
+- Schema-5-to-6 migration and hard-restart tests preserve the verification requirement; a metadata-only commit cannot clear it. Guarded reconciliation abandons partial plans before a storage commit.
 
 # Child DOX Index
 

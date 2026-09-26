@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const STORAGE_SCHEMA_VERSION: i64 = 5;
+pub const STORAGE_SCHEMA_VERSION: i64 = 6;
 static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,6 +74,7 @@ pub struct ProjectIndexState {
     pub generation: i64,
     pub baseline_generation: i64,
     pub status: String,
+    pub content_verification_required: bool,
     pub file_count: u64,
     pub total_bytes: u64,
     pub last_reconciled_at: String,
@@ -127,6 +128,7 @@ pub struct ProjectIndexCommit<'a> {
     pub file_count: usize,
     pub total_bytes: u64,
     pub mode: IndexCommitMode,
+    pub content_verified: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -427,6 +429,9 @@ impl RelayStorage {
         }
         if self.schema_version()? < 5 {
             self.apply_schema_five()?;
+        }
+        if self.schema_version()? < 6 {
+            self.apply_schema_six()?;
         }
         Ok(())
     }
@@ -761,6 +766,23 @@ impl RelayStorage {
         })
     }
 
+    fn apply_schema_six(&mut self) -> Result<(), StorageError> {
+        let applied_at = sqlite_now(&self.conn)?;
+        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| StorageError::sqlite("begin schema-6 migration", error))?;
+        tx.execute_batch(
+            "ALTER TABLE project_index_state
+               ADD COLUMN content_verification_required INTEGER NOT NULL DEFAULT 0;
+             UPDATE project_index_state
+               SET status = 'stale', content_verification_required = 1;",
+        ).map_err(|error| StorageError::sqlite("update schema-6 project index state", error))?;
+        tx.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
+            params![6i64, applied_at],
+        ).map_err(|error| StorageError::sqlite("record schema migration 6", error))?;
+        tx.commit().map_err(|error| StorageError::sqlite("commit schema migration 6", error))
+    }
+
     pub fn db_path(&self) -> &Path {
         &self.db_path
     }
@@ -898,7 +920,8 @@ impl RelayStorage {
         self.conn
             .query_row(
                 "SELECT project_id, generation, baseline_generation, status,
-                        file_count, total_bytes, last_reconciled_at, updated_at
+                        file_count, total_bytes, last_reconciled_at, updated_at,
+                        content_verification_required
                  FROM project_index_state WHERE project_id = ?1",
                 [project_id],
                 |row| {
@@ -907,6 +930,7 @@ impl RelayStorage {
                         generation: row.get(1)?,
                         baseline_generation: row.get(2)?,
                         status: row.get(3)?,
+                        content_verification_required: row.get::<_, i64>(8)? != 0,
                         file_count: row.get::<_, i64>(4)?.max(0) as u64,
                         total_bytes: row.get::<_, i64>(5)?.max(0) as u64,
                         last_reconciled_at: row.get(6)?,
@@ -923,7 +947,8 @@ impl RelayStorage {
     pub fn mark_project_index_stale(&self, project_id: &str) -> Result<(), StorageError> {
         let now = sqlite_now(&self.conn)?;
         self.conn.execute(
-            "UPDATE project_index_state SET status = 'stale', updated_at = ?2
+            "UPDATE project_index_state
+             SET status = 'stale', content_verification_required = 1, updated_at = ?2
              WHERE project_id = ?1",
             params![project_id, now],
         ).map_err(|error| StorageError::sqlite("mark project index stale", error))?;
@@ -1087,12 +1112,13 @@ impl RelayStorage {
         tx.execute(
             "INSERT INTO project_index_state(
                 project_id, generation, baseline_generation, status, file_count,
-                total_bytes, last_reconciled_at, updated_at
-             ) VALUES (?1, ?2, ?2, 'ready', ?3, ?4, ?5, ?5)
+                total_bytes, last_reconciled_at, updated_at, content_verification_required
+             ) VALUES (?1, ?2, ?2, 'ready', ?3, ?4, ?5, ?5, 0)
              ON CONFLICT(project_id) DO UPDATE SET
                generation=excluded.generation,
                baseline_generation=excluded.baseline_generation,
                status=excluded.status,
+               content_verification_required=0,
                file_count=excluded.file_count,
                total_bytes=excluded.total_bytes,
                last_reconciled_at=excluded.last_reconciled_at,
@@ -1131,6 +1157,7 @@ impl RelayStorage {
             file_count,
             total_bytes,
             mode,
+            content_verified,
         } = commit;
         let status = match mode {
             IndexCommitMode::Authoritative => "ready",
@@ -1141,19 +1168,19 @@ impl RelayStorage {
             StorageError::sqlite("begin project reconciliation", error)
         })?;
 
-        let current_generation: Option<i64> = tx
+        let current_state: Option<(i64, bool)> = tx
             .query_row(
-                "SELECT generation FROM project_index_state
+                "SELECT generation, content_verification_required FROM project_index_state
                  WHERE project_id = ?1",
                 [project_id],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get::<_, i64>(1)? != 0)),
             )
             .optional()
             .map_err(|error| {
                 StorageError::sqlite("read reconciliation generation", error)
             })?;
 
-        let Some(current_generation) = current_generation else {
+        let Some((current_generation, verification_required)) = current_state else {
             return Err(StorageError::new(
                 "INDEX_BASELINE_MISSING",
                 "project baseline is missing",
@@ -1165,6 +1192,14 @@ impl RelayStorage {
                 format!(
                     "expected project index generation {expected_generation}, found {current_generation}"
                 ),
+            ));
+        }
+        if matches!(mode, IndexCommitMode::Authoritative)
+            && verification_required && !content_verified
+        {
+            return Err(StorageError::new(
+                "INDEX_CONTENT_VERIFICATION_REQUIRED",
+                "full content verification is required after index continuity loss",
             ));
         }
         let next_generation = current_generation.saturating_add(1);
@@ -1267,6 +1302,8 @@ impl RelayStorage {
             "UPDATE project_index_state
              SET generation = ?2,
                  status = ?5,
+                 content_verification_required = CASE
+                   WHEN ?5 = 'ready' THEN 0 ELSE content_verification_required END,
                  file_count = ?3,
                  total_bytes = ?4,
                  last_reconciled_at = CASE
@@ -2400,7 +2437,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 5);
+        assert_eq!(storage.schema_version().unwrap(), 6);
         let project = storage
             .register_project(
                 Some("PRJ-production"),
@@ -2453,7 +2490,7 @@ mod tests {
         create_schema_one_fixture(&path);
 
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 5);
+        assert_eq!(storage.schema_version().unwrap(), 6);
         let project = storage.get_project("PRJ-phase1").unwrap().unwrap();
         assert_eq!(project.name, "Phase 1 Fixture");
 
@@ -2477,7 +2514,7 @@ mod tests {
         create_schema_two_fixture(&path);
 
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 5);
+        assert_eq!(storage.schema_version().unwrap(), 6);
         let result = storage.get_result("RES-phase1").unwrap().unwrap();
         assert_eq!(result.payload["value"], 42);
         assert_eq!(result.trust, "local");
@@ -2587,7 +2624,7 @@ mod tests {
         drop(schema_three);
 
         let migrated = RelayStorage::open(&path).unwrap();
-        assert_eq!(migrated.schema_version().unwrap(), 5);
+        assert_eq!(migrated.schema_version().unwrap(), 6);
         assert_eq!(migrated.get_project("PRJ-phase1").unwrap().unwrap().name, "Phase 1 Fixture");
         assert_eq!(migrated.get_result("RES-phase1").unwrap().unwrap().payload["value"], 42);
         assert!(migrated.get_job("JOB-phase1").unwrap().is_some());
@@ -2610,7 +2647,7 @@ mod tests {
     }
 
     #[test]
-    fn schema_four_index_migrates_to_five_with_conservative_delta_boundary() {
+    fn schema_four_index_migrates_to_six_with_conservative_delta_boundary() {
         let dir = temp_dir("schema4-to-schema5");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
@@ -2661,13 +2698,56 @@ mod tests {
         drop(schema_four);
 
         let migrated = RelayStorage::open(&path).unwrap();
-        assert_eq!(migrated.schema_version().unwrap(), 5);
+        assert_eq!(migrated.schema_version().unwrap(), 6);
         let state = migrated.get_project_index_state("PRJ-schema4").unwrap().unwrap();
         assert_eq!(state.generation, 3);
         assert_eq!(state.baseline_generation, 3);
+        assert_eq!(state.status, "stale");
+        assert!(state.content_verification_required);
         assert_eq!(migrated.list_project_files("PRJ-schema4").unwrap().len(), 1);
         assert_eq!(migrated.list_project_changes("PRJ-schema4", 10).unwrap().len(), 1);
         assert!(migrated.list_project_dependency_edges("PRJ-schema4", None, 10).unwrap().is_empty());
+        drop(migrated);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn schema_five_ready_index_migrates_to_required_verification() {
+        let dir = temp_dir("schema5-to-schema6");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("relay.sqlite3");
+        let conn = Connection::open(&path).unwrap();
+        let mut schema_five = RelayStorage { db_path: path.clone(), conn };
+        schema_five.configure().unwrap();
+        schema_five.conn.execute_batch(
+            "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);"
+        ).unwrap();
+        schema_five.apply_schema_one().unwrap();
+        schema_five.apply_schema_two().unwrap();
+        schema_five.apply_schema_three().unwrap();
+        schema_five.apply_schema_four().unwrap();
+        schema_five.apply_schema_five().unwrap();
+        assert_eq!(schema_five.schema_version().unwrap(), 5);
+        schema_five.conn.execute(
+            "INSERT INTO projects(id, name, root_uri, created_at, updated_at)
+             VALUES ('PRJ-schema5', 'Schema 5', 'file:///fixture', 'fixture', 'fixture')",
+            [],
+        ).unwrap();
+        schema_five.conn.execute(
+            "INSERT INTO project_index_state(project_id, generation, baseline_generation,
+             status, file_count, total_bytes, last_reconciled_at, updated_at)
+             VALUES ('PRJ-schema5', 4, 1, 'ready', 0, 0, 'fixture', 'fixture')",
+            [],
+        ).unwrap();
+        drop(schema_five);
+
+        let migrated = RelayStorage::open(&path).unwrap();
+        assert_eq!(migrated.schema_version().unwrap(), 6);
+        let state = migrated.get_project_index_state("PRJ-schema5").unwrap().unwrap();
+        assert_eq!(state.generation, 4);
+        assert_eq!(state.baseline_generation, 1);
+        assert_eq!(state.status, "stale");
+        assert!(state.content_verification_required);
         drop(migrated);
         fs::remove_dir_all(dir).unwrap();
     }
@@ -2721,6 +2801,7 @@ mod tests {
             .replace_project_baseline("PRJ-index-b", &b_files, 30)
             .unwrap();
         assert_eq!(a_state.generation, 1);
+        assert!(!a_state.content_verification_required);
         assert_eq!(b_state.generation, 1);
         assert_eq!(storage.list_project_files("PRJ-index-a").unwrap(), a_files);
         assert_eq!(storage.list_project_files("PRJ-index-b").unwrap(), b_files);
@@ -2747,6 +2828,7 @@ mod tests {
                 file_count: 2,
                 total_bytes: 31,
                 mode: IndexCommitMode::Authoritative,
+                content_verified: false,
             })
             .unwrap();
         assert_eq!(next.generation, 2);
@@ -2774,13 +2856,14 @@ mod tests {
                 file_count: 2,
                 total_bytes: 31,
                 mode: IndexCommitMode::Authoritative,
+                content_verified: false,
             })
             .expect_err("stale generation must fail");
         assert_eq!(error.code, "INDEX_GENERATION_CONFLICT");
 
         drop(storage);
         let reopened = RelayStorage::open(&path).unwrap();
-        assert_eq!(reopened.schema_version().unwrap(), 5);
+        assert_eq!(reopened.schema_version().unwrap(), 6);
         assert_eq!(
             reopened
                 .get_project_index_state("PRJ-index-a")
@@ -2793,6 +2876,47 @@ mod tests {
             reopened.list_project_files("PRJ-index-b").unwrap(),
             b_files
         );
+        drop(reopened);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn lost_continuity_requires_verified_commit_across_restart() {
+        let dir = temp_dir("verified-recovery");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("relay.sqlite3");
+        let storage = RelayStorage::open(&path).unwrap();
+        storage.register_project(Some("PRJ-recovery"), "Recovery", "file:///fixture").unwrap();
+        let file = IndexedFileSnapshot {
+            relative_path: "one.txt".to_string(),
+            size_bytes: 1,
+            modified_unix_ns: 1,
+            content_sha256: "a".repeat(64),
+        };
+        storage.replace_project_baseline("PRJ-recovery", &[file], 1).unwrap();
+        storage.mark_project_index_stale("PRJ-recovery").unwrap();
+        drop(storage);
+
+        let reopened = RelayStorage::open(&path).unwrap();
+        let state = reopened.get_project_index_state("PRJ-recovery").unwrap().unwrap();
+        assert_eq!(state.status, "stale");
+        assert!(state.content_verification_required);
+        let commit = |content_verified| ProjectIndexCommit {
+            project_id: "PRJ-recovery",
+            expected_generation: 1,
+            touched_files: &[],
+            changes: &[],
+            file_count: 1,
+            total_bytes: 1,
+            mode: IndexCommitMode::Authoritative,
+            content_verified,
+        };
+        let error = reopened.apply_project_reconciliation(commit(false)).unwrap_err();
+        assert_eq!(error.code, "INDEX_CONTENT_VERIFICATION_REQUIRED");
+        assert_eq!(reopened.get_project_index_state("PRJ-recovery").unwrap().unwrap().generation, 1);
+        let ready = reopened.apply_project_reconciliation(commit(true)).unwrap();
+        assert_eq!(ready.status, "ready");
+        assert!(!ready.content_verification_required);
         drop(reopened);
         fs::remove_dir_all(dir).unwrap();
     }

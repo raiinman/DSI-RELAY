@@ -174,6 +174,16 @@ pub fn reconcile(
     hints: &[String],
     verify_content: bool,
 ) -> Result<IndexPlan, IndexError> {
+    reconcile_with_guard(root, previous, hints, verify_content, &|| true)
+}
+
+pub fn reconcile_with_guard(
+    root: &Path,
+    previous: &[IndexedFileSnapshot],
+    hints: &[String],
+    verify_content: bool,
+    should_continue: &impl Fn() -> bool,
+) -> Result<IndexPlan, IndexError> {
     let started = Instant::now();
     let normalized_hints = validate_hints(hints)?;
     let previous_map: BTreeMap<String, IndexedFileSnapshot> = previous
@@ -181,7 +191,7 @@ pub fn reconcile(
         .cloned()
         .map(|file| (file.relative_path.clone(), file))
         .collect();
-    let (metadata, symlinks_skipped) = collect_metadata(root)?;
+    let (metadata, symlinks_skipped) = collect_metadata_with_guard(root, should_continue)?;
     let current_paths: BTreeSet<String> = metadata
         .iter()
         .map(|item| item.relative_path.clone())
@@ -197,6 +207,7 @@ pub fn reconcile(
     let mut total_bytes = 0u64;
 
     for item in metadata {
+        ensure_continue(should_continue)?;
         total_bytes = total_bytes.saturating_add(item.size_bytes);
         match previous_map.get(&item.relative_path) {
             Some(old)
@@ -209,7 +220,7 @@ pub fn reconcile(
                 files.push(old.clone());
             }
             Some(old) => {
-                let content_sha256 = hash_file(&item.absolute_path)?;
+                let content_sha256 = hash_file_with_guard(&item.absolute_path, should_continue)?;
                 files_hashed += 1;
                 let snapshot = IndexedFileSnapshot {
                     relative_path: item.relative_path.clone(),
@@ -232,7 +243,7 @@ pub fn reconcile(
                 files.push(snapshot);
             }
             None => {
-                let content_sha256 = hash_file(&item.absolute_path)?;
+                let content_sha256 = hash_file_with_guard(&item.absolute_path, should_continue)?;
                 files_hashed += 1;
                 added_paths.push((item.relative_path.clone(), content_sha256.clone()));
                 let snapshot = IndexedFileSnapshot {
@@ -299,6 +310,7 @@ pub fn reconcile(
         .filter(|hint| changed_paths.contains(hint.as_str()))
         .count();
 
+    ensure_continue(should_continue)?;
     Ok(IndexPlan {
         stats: IndexStats {
             files_seen: files.len(),
@@ -529,11 +541,19 @@ fn reject_symlink_components(root: &Path, relative_path: &str) -> Result<(), Ind
 }
 
 fn collect_metadata(root: &Path) -> Result<(Vec<FileMeta>, usize), IndexError> {
+    collect_metadata_with_guard(root, &|| true)
+}
+
+fn collect_metadata_with_guard(
+    root: &Path,
+    should_continue: &impl Fn() -> bool,
+) -> Result<(Vec<FileMeta>, usize), IndexError> {
     let mut files = Vec::new();
     let mut stack = vec![root.to_path_buf()];
     let mut symlinks_skipped = 0usize;
 
     while let Some(directory) = stack.pop() {
+        ensure_continue(should_continue)?;
         let entries = fs::read_dir(&directory).map_err(|error| {
             IndexError::new(
                 "PROJECT_FILE_UNREADABLE",
@@ -549,6 +569,7 @@ fn collect_metadata(root: &Path) -> Result<(Vec<FileMeta>, usize), IndexError> {
         entries.sort_by_key(|entry| entry.file_name());
 
         for entry in entries {
+            ensure_continue(should_continue)?;
             let file_type = entry.file_type().map_err(|error| {
                 IndexError::new(
                     "PROJECT_FILE_UNREADABLE",
@@ -650,6 +671,13 @@ pub fn normalize_project_relative_path(input: &str) -> Result<String, IndexError
 }
 
 fn hash_file(path: &Path) -> Result<String, IndexError> {
+    hash_file_with_guard(path, &|| true)
+}
+
+fn hash_file_with_guard(
+    path: &Path,
+    should_continue: &impl Fn() -> bool,
+) -> Result<String, IndexError> {
     let mut file = File::open(path).map_err(|error| {
         IndexError::new(
             "PROJECT_FILE_UNREADABLE",
@@ -659,6 +687,7 @@ fn hash_file(path: &Path) -> Result<String, IndexError> {
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 64 * 1024];
     loop {
+        ensure_continue(should_continue)?;
         let read = file.read(&mut buffer).map_err(|error| {
             IndexError::new(
                 "PROJECT_FILE_UNREADABLE",
@@ -677,6 +706,17 @@ fn hash_file(path: &Path) -> Result<String, IndexError> {
         write!(&mut output, "{byte:02x}").expect("writing to String cannot fail");
     }
     Ok(output)
+}
+
+fn ensure_continue(should_continue: &impl Fn() -> bool) -> Result<(), IndexError> {
+    if should_continue() {
+        Ok(())
+    } else {
+        Err(IndexError::new(
+            "INDEX_RECOVERY_DEFERRED",
+            "background index recovery was deferred",
+        ))
+    }
 }
 fn match_renames(
     added: &mut Vec<(String, String)>,
@@ -788,6 +828,22 @@ mod tests {
         assert_eq!(plan.changes[0].relative_path, "nested/b.txt");
         assert_eq!(plan.touched_files.len(), 1);
 
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn guarded_reconciliation_defers_before_returning_a_partial_plan() {
+        let dir = temp_dir("recovery-defer");
+        fs::create_dir_all(&dir).unwrap();
+        write(&dir.join("one.txt"), "content");
+        let baseline = build_baseline(&dir).unwrap();
+        let calls = std::cell::Cell::new(0usize);
+        let error = reconcile_with_guard(&dir, &baseline.files, &[], true, &|| {
+            calls.set(calls.get() + 1);
+            calls.get() < 3
+        })
+        .unwrap_err();
+        assert_eq!(error.code, "INDEX_RECOVERY_DEFERRED");
         fs::remove_dir_all(dir).unwrap();
     }
 

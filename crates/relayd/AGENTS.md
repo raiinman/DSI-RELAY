@@ -16,6 +16,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 - Daemon records transport-safe diagnostics without persisting command arguments/results.
 - Restart must preserve Core operational state.
 - The daemon's recursive OS watcher feeds bounded file-path hints through Core and marks continuity loss stale. Startup marks persisted baselines stale before readiness; notification events never establish complete truth. Background hint hashing defers during foreground RELAY commands.
+- After a quiet period, the watcher attempts one stale-project recovery while the signed-in Windows session is idle. Recovery checks user input and active RELAY commands during enumeration and hashing, stops after a bounded attempt, and retries after backoff. A failed watch subscription cannot restore ready state automatically.
 
 # Verification
 
@@ -29,6 +30,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 - Explicit full-content verification after a metadata-invisible edit through `tests/phase3_second_slice.rs`.
 - Live OS notifications, shared-root handling, distinct-root isolation, directory uncertainty, idle resource sample, and hard-restart continuity through `tests/phase3_watcher.rs`.
 - Ignored, manually invoked 15,000-file two-project scale fixture in `tests/phase3_watcher.rs`; record host class and avoid treating one run as a tier budget.
+- Live idle recovery after hard restart detects a same-size/same-timestamp edit without a manual reconciliation command; debug-only accelerated idle timing is limited to the test fixture.
 
 # Child DOX Index
 

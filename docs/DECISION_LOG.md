@@ -1388,24 +1388,34 @@ Evidence: `docs/PHASE3_THIRD_SLICE_EVIDENCE.md`.
 
 ## D-164 — Explicit content verification closes metadata-invisible continuity gaps
 
-Status: Phase 3 fourth slice accepted; automatic recovery scheduling remains open
+Status: Phase 3 fourth slice accepted; schema-6 continuity policy and idle scheduling are recorded in D-166
 
 The version-1 `project.index.reconcile` command gains an additive optional `verify_content` flag. Its default remains changed-candidate hashing after full-tree metadata enumeration. When selected for uncertain continuity, the command hashes every regular project file, compares content digests, and applies changes through the existing project-scoped generation transaction. The response reports the chosen mode. No schema migration or source-file mutation is involved.
 
 A live fixture rewrote a file with different same-length bytes and restored its prior timestamp. Metadata-only reconciliation did not see the change; explicit content verification did. A 1,000-file fixture showed the full pass hashes 1,000 files versus one for a targeted hint and zero for clean metadata reconciliation. This expensive mode is a recovery tool, not the default for ordinary small edits. The `ready` marker means a full-tree reconciliation completed for the stored generation; it does not guarantee detection of an edit invisible to metadata unless content verification ran.
 
-OS watcher delivery, automatic continuity-loss signaling and foreground-safe recovery scheduling, dependency extraction, hardware-tier budgets, and closure review remain Phase 3 work. D-149 and Phase 2 authority assumptions remain unchanged.
+The later schema-6 continuity requirement and idle scheduler are recorded in D-166. Dependency extraction, hardware-tier budgets, and closure review remain Phase 3 work. D-149 and Phase 2 authority assumptions remain unchanged.
 
 Evidence: `docs/PHASE3_FOURTH_SLICE_EVIDENCE.md`.
 
 ## D-165 — Bounded Windows watcher delivery feeds provisional Core hints
 
-Status: Phase 3 fifth slice accepted; automatic reconciliation scheduling remains open
+Status: Phase 3 fifth slice accepted; automatic recovery scheduling is recorded in D-166
 
 The per-user daemon now subscribes to recursive OS notifications for indexed local project roots using `notify` 8.2.0. Projects sharing a root share one subscription. A bounded callback queue and 32-path batch limit feed the existing `project.index.apply_hints` command under a trusted local daemon identity. The worker defers hint hashing during active RELAY client commands and leaves expensive files above 64 MiB for explicit recovery. Normal file events update only named paths and mark the index stale; notifications are never treated as complete project truth.
 
 Callback errors, overflow, ambiguous directory or rename events, watch failures, and daemon downtime durably mark affected indexes stale. On startup, prior baselines are marked stale before the daemon publishes readiness. The recovery path is `project.index.reconcile`, with `verify_content: true` when metadata continuity is insufficient. The live Windows fixtures proved two projects on one watched root both received a file event, distinct project roots remained isolated, directory uncertainty was surfaced, and hard restart preserved the stale boundary. One second of idle observation on the shared-root fixture measured 10,817,536 bytes working set and 0 ms sampled CPU increase; it does not establish a supported hardware-tier budget.
 
-The watcher dependency added 23 resolved cross-platform lockfile packages and grew the optimized daemon by 346,112 bytes on this host. Automatic foreground-aware full reconciliation, long-run burst/scale evidence, dependency extraction, and closure review remain open. D-149 and Phase 2 authority rules remain intact.
+The watcher dependency added 23 resolved cross-platform lockfile packages and grew the optimized daemon by 346,112 bytes on this host. The later idle recovery loop is recorded in D-166. Long-run burst/scale evidence, dependency extraction, and closure review remain open. D-149 and Phase 2 authority rules remain intact.
 
 Evidence: `docs/PHASE3_FIFTH_SLICE_EVIDENCE.md`.
+
+## D-166 — Continuity loss requires durable content verification and idle recovery
+
+Status: Phase 3 sixth slice accepted on a synthetic Windows restart fixture
+
+Schema 6 stores a per-project `content_verification_required` flag. An upgrade from schema 5 and every watcher continuity-loss signal mark the index stale and set the flag. Targeted hints cannot clear it. Metadata-only reconciliation is rejected while it is set; full content verification or a complete baseline rebuild restores ready. The rule prevents a same-size/same-timestamp edit during daemon downtime from being silently missed.
+
+The per-user daemon attempts one stale project after a quiet period and signed-in-session input inactivity, while no RELAY command or hint batch is active. Enumeration and content hashing can defer before commit when activity returns or a bounded attempt expires. Failed and deferred attempts back off. The Windows input signal is a conservative scheduling proxy, not proof that creator applications are free of CPU/GPU or storage pressure. Projects exceeding the attempt limit remain stale until explicit recovery or a future chunked scheduler. Supported-tier, burst, and prolonged-contention evidence is still required for Phase 3 closure.
+
+Evidence: `docs/PHASE3_SIXTH_SLICE_EVIDENCE.md`.

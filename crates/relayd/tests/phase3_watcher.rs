@@ -61,23 +61,28 @@ fn fixture_dir() -> PathBuf {
 }
 
 fn spawn_host(state_dir: &Path) -> (TestHost, LocalHostState) {
+    spawn_host_with_recovery(state_dir, false)
+}
+
+fn spawn_host_with_recovery(state_dir: &Path, fast_recovery: bool) -> (TestHost, LocalHostState) {
     let instance = state_dir
         .parent()
         .unwrap()
         .file_name()
         .unwrap()
         .to_string_lossy();
-    let child = TestHost(
-        Command::new(env!("CARGO_BIN_EXE_relayd"))
-            .env("RELAY_STATE_DIR", state_dir)
-            .env("RELAY_INSTANCE", instance.as_ref())
-            .env_remove("RELAY_TEST_DISABLE_WATCHER")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap(),
-    );
+    let mut command = Command::new(env!("CARGO_BIN_EXE_relayd"));
+    command
+        .env("RELAY_STATE_DIR", state_dir)
+        .env("RELAY_INSTANCE", instance.as_ref())
+        .env_remove("RELAY_TEST_DISABLE_WATCHER")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    if fast_recovery {
+        command.env("RELAY_TEST_RECOVERY_IDLE_MS", "1");
+    }
+    let child = TestHost(command.spawn().unwrap());
     let deadline = Instant::now() + Duration::from_secs(5);
     while Instant::now() < deadline {
         if let Ok(bytes) = fs::read(state_dir.join("host.json"))
@@ -89,6 +94,161 @@ fn spawn_host(state_dir: &Path) -> (TestHost, LocalHostState) {
         thread::sleep(Duration::from_millis(20));
     }
     panic!("watcher host did not become ready");
+}
+
+#[test]
+fn idle_recovery_verifies_content_after_downtime() {
+    let dir = fixture_dir();
+    let state_dir = dir.join("state");
+    let root = dir.join("project");
+    fs::create_dir_all(&root).unwrap();
+    let file = root.join("one.txt");
+    fs::write(&file, b"before").unwrap();
+    let (mut first, state) = spawn_host_with_recovery(&state_dir, true);
+    let imported = call(
+        &state,
+        request(
+            "auto-import",
+            "project.import",
+            json!({
+                "id": "PRJ-auto", "name": "Auto recovery", "root_path": root.to_string_lossy()
+            }),
+            true,
+        ),
+    );
+    assert!(imported.ok, "{:?}", imported.error);
+    let built = call(
+        &state,
+        request(
+            "auto-build",
+            "project.index.build",
+            json!({
+                "project_id": "PRJ-auto"
+            }),
+            true,
+        ),
+    );
+    assert!(built.ok, "{:?}", built.error);
+
+    let deadline = Instant::now() + Duration::from_secs(8);
+    let first_generation = loop {
+        let caps = call(
+            &state,
+            request(
+                "auto-caps",
+                "project.capabilities",
+                json!({
+                    "project_id": "PRJ-auto"
+                }),
+                false,
+            ),
+        )
+        .result
+        .unwrap();
+        if caps["index_status"] == "ready" && caps["content_verification_required"] == false {
+            let storage =
+                relay_core::storage::RelayStorage::open(state_dir.join("relay.sqlite3")).unwrap();
+            break storage
+                .get_project_index_state("PRJ-auto")
+                .unwrap()
+                .unwrap()
+                .generation;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "first idle recovery did not complete"
+        );
+        thread::sleep(Duration::from_millis(50));
+    };
+    first.0.kill().unwrap();
+    first.0.wait().unwrap();
+    let original_modified = fs::metadata(&file).unwrap().modified().unwrap();
+    fs::write(&file, b"after!").unwrap();
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&file)
+        .unwrap()
+        .set_times(fs::FileTimes::new().set_modified(original_modified))
+        .unwrap();
+
+    let (mut second, state) = spawn_host_with_recovery(&state_dir, true);
+    let stale = call(
+        &state,
+        request(
+            "auto-stale",
+            "project.capabilities",
+            json!({
+                "project_id": "PRJ-auto"
+            }),
+            false,
+        ),
+    )
+    .result
+    .unwrap();
+    assert_eq!(stale["index_status"], "stale");
+    assert_eq!(stale["content_verification_required"], true);
+    let metadata_only = call(
+        &state,
+        request(
+            "auto-metadata",
+            "project.index.reconcile",
+            json!({
+                "project_id": "PRJ-auto"
+            }),
+            true,
+        ),
+    );
+    assert_eq!(
+        metadata_only.error.unwrap().code,
+        "INDEX_CONTENT_VERIFICATION_REQUIRED"
+    );
+    let deadline = Instant::now() + Duration::from_secs(8);
+    loop {
+        let caps = call(
+            &state,
+            request(
+                "auto-ready",
+                "project.capabilities",
+                json!({
+                    "project_id": "PRJ-auto"
+                }),
+                false,
+            ),
+        )
+        .result
+        .unwrap();
+        if caps["index_status"] == "ready" && caps["content_verification_required"] == false {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "restart idle recovery did not complete"
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
+    let delta = call(
+        &state,
+        request(
+            "auto-delta",
+            "project.changes",
+            json!({
+                "project_id": "PRJ-auto", "after_generation": first_generation
+            }),
+            false,
+        ),
+    );
+    assert!(delta.ok, "{:?}", delta.error);
+    assert_eq!(
+        delta.result.unwrap()["changes"][0]["relative_path"],
+        "one.txt"
+    );
+    let stopped = call(
+        &state,
+        request("auto-stop", "system.shutdown", json!({}), false),
+    );
+    assert!(stopped.ok);
+    assert!(second.0.wait().unwrap().success());
+    fs::remove_dir_all(dir).unwrap();
 }
 
 fn request(id: &str, command: &str, arguments: Value, keyed: bool) -> CommandRequest {
@@ -140,7 +300,7 @@ fn os_notifications_apply_hints_and_restart_marks_continuity_uncertain() {
         request(
             "watch-attached-reconcile",
             "project.index.reconcile",
-            json!({ "project_id": "PRJ-watch" }),
+            json!({ "project_id": "PRJ-watch", "verify_content": true }),
             true,
         ),
     );
@@ -171,7 +331,7 @@ fn os_notifications_apply_hints_and_restart_marks_continuity_uncertain() {
         request(
             "watch-second-attached",
             "project.index.reconcile",
-            json!({ "project_id": "PRJ-watch-second" }),
+            json!({ "project_id": "PRJ-watch-second", "verify_content": true }),
             true,
         ),
     );
@@ -306,6 +466,19 @@ fn os_notifications_apply_hints_and_restart_marks_continuity_uncertain() {
         ),
     );
     assert_eq!(second_caps.result.unwrap()["index_status"], "stale");
+    let incomplete = call(
+        &state,
+        request(
+            "watch-restart-metadata-rejected",
+            "project.index.reconcile",
+            json!({ "project_id": "PRJ-watch" }),
+            true,
+        ),
+    );
+    assert_eq!(
+        incomplete.error.unwrap().code,
+        "INDEX_CONTENT_VERIFICATION_REQUIRED"
+    );
     let recovered = call(
         &state,
         request(
@@ -366,7 +539,7 @@ fn os_notifications_remain_project_scoped_across_distinct_roots() {
             request(
                 &format!("attach-{project_id}"),
                 "project.index.reconcile",
-                json!({ "project_id": project_id }),
+                json!({ "project_id": project_id, "verify_content": true }),
                 true,
             ),
         );
@@ -480,7 +653,7 @@ fn benchmark_two_watched_projects_at_fifteen_thousand_files() {
             request(
                 &format!("bench-attach-{project_id}"),
                 "project.index.reconcile",
-                json!({ "project_id": project_id }),
+                json!({ "project_id": project_id, "verify_content": true }),
                 true,
             ),
         );

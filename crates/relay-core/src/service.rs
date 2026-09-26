@@ -98,6 +98,27 @@ impl RelayCore {
             .map_err(|error| error.message)
     }
 
+    /// Local daemon recovery input; exposes only index state, never a canonical root.
+    pub fn index_recovery_state(&self, project_id: &str) -> Result<Option<crate::storage::ProjectIndexState>, String> {
+        self.with_storage(|storage| storage.get_project_index_state(project_id))
+            .map_err(|error| error.message)
+    }
+
+    /// Trusted local watcher recovery uses the same reconciliation path with cooperative deferral.
+    pub fn reconcile_index_background(
+        &self,
+        project_id: &str,
+        verify_content: bool,
+        should_continue: &impl Fn() -> bool,
+    ) -> Result<(), String> {
+        self.project_index_reconcile_with_guard(
+            &json!({ "project_id": project_id, "verify_content": verify_content }),
+            should_continue,
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{}: {}", error.code, error.message))
+    }
+
     pub fn open(config: CoreConfig) -> Self {
         let _ = std::fs::create_dir_all(&config.data_dir);
 
@@ -1230,6 +1251,7 @@ impl RelayCore {
                 file_count,
                 total_bytes: plan.stats.total_bytes,
                 mode: IndexCommitMode::HintsOnly,
+                content_verified: false,
             })
         })?;
         Ok(json!({
@@ -1247,6 +1269,14 @@ impl RelayCore {
     fn project_index_reconcile(
         &self,
         arguments: &Value,
+    ) -> Result<Value, CoreCommandError> {
+        self.project_index_reconcile_with_guard(arguments, &|| true)
+    }
+
+    fn project_index_reconcile_with_guard(
+        &self,
+        arguments: &Value,
+        should_continue: &impl Fn() -> bool,
     ) -> Result<Value, CoreCommandError> {
         let project_id = arguments["project_id"]
             .as_str()
@@ -1288,10 +1318,23 @@ impl RelayCore {
             Ok((project, state, files))
         })?;
 
+        if index_state.content_verification_required && !verify_content {
+            return Err(CoreCommandError::new(
+                "INDEX_CONTENT_VERIFICATION_REQUIRED",
+                "full content verification is required after index continuity loss",
+            ));
+        }
+
         let root = indexing::canonical_project_root(&project.root_uri)
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
-        let plan = indexing::reconcile(&root, &previous, &hints, verify_content)
+        let plan = indexing::reconcile_with_guard(&root, &previous, &hints, verify_content, should_continue)
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        if !should_continue() {
+            return Err(CoreCommandError::new(
+                "INDEX_RECOVERY_DEFERRED",
+                "background index recovery was deferred",
+            ));
+        }
         let state = self.with_storage(|storage| {
             storage.apply_project_reconciliation(ProjectIndexCommit {
                 project_id,
@@ -1301,6 +1344,7 @@ impl RelayCore {
                 file_count: plan.files.len(),
                 total_bytes: plan.stats.total_bytes,
                 mode: IndexCommitMode::Authoritative,
+                content_verified: verify_content,
             })
         })?;
 
@@ -1429,6 +1473,8 @@ impl RelayCore {
             "project_id": project_id,
             "baseline_state": baseline_state,
             "index_status": index_status,
+            "content_verification_required": state.as_ref()
+                .map(|state| state.content_verification_required).unwrap_or(false),
             "capabilities": capabilities
         }))
     }

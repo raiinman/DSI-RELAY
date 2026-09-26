@@ -77,7 +77,7 @@ fn project_edges_and_deltas_survive_hard_restart_without_scope_leakage() {
     fs::write(root_b.join("target.txt"), b"target B").unwrap();
 
     let (mut first, state) = spawn_host(&state_dir);
-    assert_eq!(state.storage_schema_version, Some(5));
+    assert_eq!(state.storage_schema_version, Some(6));
     for (project_id, root) in [("PRJ-alpha", &root_a), ("PRJ-bravo", &root_b)] {
         let imported = call(
             &state,
@@ -243,7 +243,7 @@ fn project_edges_and_deltas_survive_hard_restart_without_scope_leakage() {
     first.kill().unwrap();
     first.wait().unwrap();
     let (mut second, state) = spawn_host(&state_dir);
-    assert_eq!(state.storage_schema_version, Some(5));
+    assert_eq!(state.storage_schema_version, Some(6));
     let alpha_delta = call(
         &state,
         request(

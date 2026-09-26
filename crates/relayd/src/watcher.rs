@@ -12,11 +12,18 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
+use windows_sys::Win32::System::SystemInformation::GetTickCount;
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
 
 const EVENT_QUEUE_CAPACITY: usize = 1_024;
 const MAX_HINTS_PER_BATCH: usize = 32;
 const MAX_BACKGROUND_FILE_BYTES: u64 = 64 * 1024 * 1024;
 const BATCH_INTERVAL: Duration = Duration::from_millis(250);
+const RECOVERY_QUIET_PERIOD: Duration = Duration::from_secs(2);
+const RECOVERY_POLL_INTERVAL: Duration = Duration::from_secs(1);
+const RECOVERY_RETRY_DELAY: Duration = Duration::from_secs(30);
+const RECOVERY_ATTEMPT_LIMIT: Duration = Duration::from_secs(15);
+const RECOVERY_IDLE: Duration = Duration::from_secs(30);
 static EVENT_ID: AtomicU64 = AtomicU64::new(1);
 
 enum Message {
@@ -159,6 +166,9 @@ fn run_worker(
     let mut last_refresh = Instant::now();
     let mut pending: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut last_flush = Instant::now();
+    let mut last_event = Instant::now();
+    let mut last_recovery_poll = Instant::now();
+    let mut last_recovery_attempt = BTreeMap::new();
 
     loop {
         if refresh_pending.swap(false, Ordering::SeqCst)
@@ -170,14 +180,17 @@ fn run_worker(
         if overflow.swap(false, Ordering::SeqCst) {
             mark_all_stale(&core, &roots);
             pending.clear();
+            last_event = Instant::now();
         }
         match receiver.recv_timeout(Duration::from_millis(100)) {
             Ok(Message::Stop) => break,
             Ok(Message::Event(Err(_))) => {
                 mark_all_stale(&core, &roots);
                 pending.clear();
+                last_event = Instant::now();
             }
             Ok(Message::Event(Ok(event))) => {
+                last_event = Instant::now();
                 collect_event(&core, &roots, event, &mut pending);
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -187,6 +200,87 @@ fn run_worker(
             flush_hints(&core, &runtime, started_at_unix_ms, &mut pending);
             last_flush = Instant::now();
         }
+        if last_recovery_poll.elapsed() >= RECOVERY_POLL_INTERVAL {
+            recover_one_stale_project(
+                &core,
+                &roots,
+                &watched_paths,
+                &pending,
+                &foreground_active,
+                last_event,
+                &mut last_recovery_attempt,
+            );
+            last_recovery_poll = Instant::now();
+        }
+    }
+}
+
+fn recovery_idle_threshold() -> Duration {
+    if cfg!(debug_assertions)
+        && let Ok(value) = std::env::var("RELAY_TEST_RECOVERY_IDLE_MS")
+        && let Ok(milliseconds) = value.parse::<u64>()
+    {
+        return Duration::from_millis(milliseconds.max(1));
+    }
+    RECOVERY_IDLE
+}
+
+fn user_idle_duration() -> Option<Duration> {
+    let mut last = LASTINPUTINFO {
+        cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+        dwTime: 0,
+    };
+    if unsafe { GetLastInputInfo(&mut last) } == 0 {
+        return None;
+    }
+    let elapsed = unsafe { GetTickCount() }.wrapping_sub(last.dwTime);
+    // A distant or future input tick is ambiguous after wrap or injected input.
+    (elapsed <= 7 * 24 * 60 * 60 * 1_000).then(|| Duration::from_millis(elapsed as u64))
+}
+
+fn recover_one_stale_project(
+    core: &RelayCore,
+    roots: &BTreeMap<String, PathBuf>,
+    watched_paths: &BTreeSet<PathBuf>,
+    pending: &BTreeMap<String, BTreeSet<String>>,
+    foreground_active: &AtomicBool,
+    last_event: Instant,
+    last_attempt: &mut BTreeMap<String, Instant>,
+) {
+    let idle_threshold = recovery_idle_threshold();
+    let safe_to_scan = || {
+        !foreground_active.load(Ordering::SeqCst)
+            && last_event.elapsed() >= RECOVERY_QUIET_PERIOD
+            && user_idle_duration().is_some_and(|idle| idle >= idle_threshold)
+    };
+    if !pending.is_empty() || !safe_to_scan() {
+        return;
+    }
+    for (project_id, root) in roots {
+        if !watched_paths.contains(root) {
+            continue;
+        }
+        if last_attempt
+            .get(project_id)
+            .is_some_and(|at| at.elapsed() < RECOVERY_RETRY_DELAY)
+        {
+            continue;
+        }
+        let Ok(Some(state)) = core.index_recovery_state(project_id) else {
+            continue;
+        };
+        if state.status != "stale" {
+            continue;
+        }
+        let started = Instant::now();
+        last_attempt.insert(project_id.clone(), started);
+        let should_continue = || started.elapsed() < RECOVERY_ATTEMPT_LIMIT && safe_to_scan();
+        let _ = core.reconcile_index_background(
+            project_id,
+            state.content_verification_required,
+            &should_continue,
+        );
+        break;
     }
 }
 

@@ -659,7 +659,7 @@
       },
       "errors": [
         "PROJECT_NOT_FOUND", "INDEX_BASELINE_MISSING",
-        "INDEX_GENERATION_CONFLICT", "INDEX_HINT_INVALID",
+        "INDEX_GENERATION_CONFLICT", "INDEX_CONTENT_VERIFICATION_REQUIRED", "INDEX_HINT_INVALID",
         "PROJECT_PATH_INVALID", "PROJECT_PATH_NOT_DIRECTORY",
         "PROJECT_FILE_UNREADABLE", "PROJECT_PATH_ESCAPE",
         "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
@@ -810,6 +810,7 @@
             "type": "string",
             "enum": ["missing", "ready", "stale", "unavailable"]
           },
+          "content_verification_required": { "type": "boolean" },
           "baseline_state": {
             "type": "string",
             "enum": ["missing", "ready", "unavailable"]

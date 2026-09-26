@@ -250,6 +250,7 @@ name = "relay-adapter"
 version = "0.1.0"
 dependencies = [
  "relay-contracts",
+ "relay-core",
  "serde",
  "serde_json",
  "sha2",

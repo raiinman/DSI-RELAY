@@ -14,7 +14,8 @@ Core remains the only writer of derived dependency edges. The separate `project.
 
 - A live synthetic worker in the qualified Windows AppContainer/LPAC sandbox parsed a generic JSON dependency fixture through the new adapter-only operation. The broker retained installed adapter provenance and one-process Job Object evidence.
 - The same fixture rejected a source-identity mismatch, a traversal target, and a traversal input path. Existing adapter tests continue to cover artifact integrity, permissions, network/path/process denial, crash/hang handling, and quarantine.
-- The full workspace suite passed 80 active tests; the optimized workspace release build passed. The ignored 15,000-file benchmark was not rerun for this parser-contract change.
+- A test-only adapter-to-Core bridge imported and indexed a project, ran the sandboxed parser, confirmed no edge existed until `project.dependencies.replace` was explicitly called, then committed one guarded edge. A source edit invalidated the edge; replaying the old generation failed. This composes the existing contracts but does not register a parser with the running daemon.
+- The full workspace suite passed 81 active tests, including the adapter-to-Core bridge; the optimized workspace release build passed. The ignored 15,000-file benchmark was not rerun for this parser-contract change.
 
 ## Remaining gate
 

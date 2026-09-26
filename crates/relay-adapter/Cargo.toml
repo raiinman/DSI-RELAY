@@ -27,3 +27,6 @@ windows-sys = { workspace = true, features = [
 [[bin]]
 name = "relay-adapter-fixture"
 path = "src/bin/relay-adapter-fixture.rs"
+
+[dev-dependencies]
+relay-core = { path = "../relay-core" }

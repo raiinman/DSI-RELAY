@@ -7,6 +7,9 @@ use relay_adapter::{
     RequestedPermissions, TargetRequirement, TrustMetadata, UpdateMetadata,
 };
 use relay_adapter::sandbox::security_descriptor_sddl;
+use relay_contracts::{CommandRequest, RequestContext};
+use relay_core::indexing;
+use relay_core::service::{CoreConfig, RelayCore, RuntimeContext};
 use serde_json::json;
 use std::fs;
 use std::net::TcpListener;
@@ -88,6 +91,88 @@ fn manifest_for(id: &str, worker: &Path) -> AdapterManifest {
             review_status: "test-fixture".to_string(),
         },
     }
+}
+
+fn core_request(id: &str, command: &str, arguments: serde_json::Value, keyed: bool) -> CommandRequest {
+    CommandRequest {
+        request_id: id.to_string(),
+        command: command.to_string(),
+        command_version: Some(1),
+        arguments,
+        idempotency_key: keyed.then(|| format!("IDEMP-{id}")),
+        context: RequestContext::default(),
+    }
+}
+
+#[test]
+fn parsed_observation_reaches_edges_only_through_core_guard() {
+    let dir = unique_dir("parser-core-bridge");
+    let root = dir.join("project");
+    fs::create_dir_all(root.join("src")).unwrap();
+    let source = root.join("src/source.json");
+    let content = r#"{"targets":["src/target.txt"]}"#;
+    fs::write(&source, content).unwrap();
+    fs::write(root.join("src/target.txt"), b"target").unwrap();
+    let worker = copy_worker(&dir);
+    let mut manifest = manifest_for("fixture.bridge", &worker);
+    manifest.relay.command_bindings.push(CommandBinding {
+        command: "adapter.dependencies.parse".to_string(),
+        command_version: 1,
+        capability: "synthetic.dependencies.parse".to_string(),
+    });
+    let broker = AdapterBroker::new(BrokerPolicy::synthetic_default(), dir.join("mailboxes")).unwrap();
+    broker.install(manifest, &worker).unwrap();
+    let core = RelayCore::open(CoreConfig::new(dir.join("state")));
+    let runtime = RuntimeContext::in_process();
+    let imported = core.execute(core_request("bridge-import", "project.import", json!({
+        "id": "PRJ-bridge", "name": "Parser bridge", "root_path": root.to_string_lossy()
+    }), true), &runtime);
+    assert!(imported.ok, "{:?}", imported.error);
+    let built = core.execute(core_request("bridge-build", "project.index.build", json!({
+        "project_id": "PRJ-bridge"
+    }), true), &runtime);
+    assert!(built.ok, "{:?}", built.error);
+    let generation = built.result.unwrap()["generation"].as_i64().unwrap();
+    let baseline = indexing::build_baseline(&root).unwrap();
+    let source_sha = baseline.files.iter().find(|file| file.relative_path == "src/source.json")
+        .unwrap().content_sha256.clone();
+    let observation = broker.invoke_dependency_parser(
+        "fixture.bridge", "src/source.json", &source_sha, "synthetic.project", content,
+    ).unwrap();
+    let before = core.execute(core_request("bridge-before", "project.dependencies.list", json!({
+        "project_id": "PRJ-bridge"
+    }), false), &runtime);
+    assert!(before.result.unwrap()["edges"].as_array().unwrap().is_empty());
+
+    let result = &observation.response["result"];
+    let replaced = core.execute(core_request("bridge-replace", "project.dependencies.replace", json!({
+        "project_id": "PRJ-bridge", "expected_generation": generation,
+        "source_path": result["source_path"], "source_sha256": result["source_sha256"],
+        "producer_id": observation.provenance.adapter_id,
+        "producer_version": observation.provenance.adapter_version,
+        "targets": result["targets"]
+    }), true), &runtime);
+    assert!(replaced.ok, "{:?}", replaced.error);
+    assert_eq!(replaced.result.unwrap()["edge_count"], 1);
+
+    fs::write(&source, format!("{content} ")).unwrap();
+    let reconciled = core.execute(core_request("bridge-reconcile", "project.index.reconcile", json!({
+        "project_id": "PRJ-bridge"
+    }), true), &runtime);
+    assert!(reconciled.ok, "{:?}", reconciled.error);
+    let after = core.execute(core_request("bridge-after", "project.dependencies.list", json!({
+        "project_id": "PRJ-bridge"
+    }), false), &runtime);
+    assert!(after.result.unwrap()["edges"].as_array().unwrap().is_empty());
+    let stale = core.execute(core_request("bridge-stale", "project.dependencies.replace", json!({
+        "project_id": "PRJ-bridge", "expected_generation": generation,
+        "source_path": "src/source.json", "source_sha256": source_sha,
+        "producer_id": "fixture.bridge", "producer_version": "1.0.0",
+        "targets": ["src/target.txt"]
+    }), true), &runtime);
+    assert_eq!(stale.error.unwrap().code, "INDEX_GENERATION_CONFLICT");
+    drop(core);
+    fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]

@@ -145,7 +145,11 @@ fn run_worker(
 ) {
     let overflow = Arc::new(AtomicBool::new(false));
     let callback_overflow = Arc::clone(&overflow);
+    // The worker cannot drain notifications while it scans, so track arrivals in the callback.
+    let event_epoch = Arc::new(AtomicU64::new(0));
+    let callback_event_epoch = Arc::clone(&event_epoch);
     let mut watcher = match notify::recommended_watcher(move |result| {
+        callback_event_epoch.fetch_add(1, Ordering::SeqCst);
         if let Err(TrySendError::Full(_)) = sender.try_send(Message::Event(result)) {
             callback_overflow.store(true, Ordering::SeqCst);
         }
@@ -207,6 +211,7 @@ fn run_worker(
                 &watched_paths,
                 &pending,
                 &foreground_active,
+                &event_epoch,
                 last_event,
                 &mut last_recovery_attempt,
             );
@@ -244,6 +249,7 @@ fn recover_one_stale_project(
     watched_paths: &BTreeSet<PathBuf>,
     pending: &BTreeMap<String, BTreeSet<String>>,
     foreground_active: &AtomicBool,
+    event_epoch: &AtomicU64,
     last_event: Instant,
     last_attempt: &mut BTreeMap<String, Instant>,
 ) {
@@ -273,13 +279,21 @@ fn recover_one_stale_project(
             continue;
         }
         let started = Instant::now();
+        let observed_event_epoch = event_epoch.load(Ordering::SeqCst);
         last_attempt.insert(project_id.clone(), started);
-        let should_continue = || started.elapsed() < RECOVERY_ATTEMPT_LIMIT && safe_to_scan();
+        let should_continue = || {
+            started.elapsed() < RECOVERY_ATTEMPT_LIMIT
+                && event_epoch.load(Ordering::SeqCst) == observed_event_epoch
+                && safe_to_scan()
+        };
         let _ = core.reconcile_index_background(
             project_id,
             state.content_verification_required,
             &should_continue,
         );
+        if event_epoch.load(Ordering::SeqCst) != observed_event_epoch {
+            let _ = core.mark_index_stale(project_id);
+        }
         break;
     }
 }

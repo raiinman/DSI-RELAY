@@ -57,6 +57,10 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `PHASE3_SIXTH_SLICE_EVIDENCE.md` — durable schema-6 continuity requirement and bounded idle recovery evidence.
 - `PHASE3_SEVENTH_SLICE_EVIDENCE.md` — schema-7 project configuration and declared adapter version metadata evidence.
 - `PHASE3_EIGHTH_SLICE_EVIDENCE.md` — sandboxed generic dependency parser operation and bounded observation validation evidence.
+- `PHASE3_NINTH_SLICE_EVIDENCE.md` — installed and authorized parser dispatch, guarded edge replacement, and stale-edge invalidation evidence.
+- `PHASE3_WATCHER_LOAD_EVIDENCE.md` — live burst, prolonged event activity, and recovery callback-race observations and limits.
+- `PHASE3_RESOURCE_BUDGET_METHOD.md` — repeatable scale measurements, release-gate method, and hardware-tier proof plan.
+- `PHASE3_SCALE_FIVE_RUN_2026-09-26.json` — machine-readable five-run scale sample from one workstation.
 - `PHASE3_CLOSURE_REVIEW.md` — active Phase 3 exit-gate review with explicit open and partial items.
 - `ROADMAP.md` — staged delivery plan and milestone exit criteria.
 - `RESEARCH_PLAN.md` — academic/technical research and benchmark program.

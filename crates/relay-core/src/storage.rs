@@ -123,6 +123,7 @@ pub struct DependencyReplacement<'a> {
     pub expected_source_sha256: &'a str,
     pub producer_id: &'a str,
     pub producer_version: &'a str,
+    pub configuration_guard: Option<(i64, &'a str, &'a str)>,
     pub targets: &'a [String],
 }
 
@@ -1020,6 +1021,10 @@ impl RelayStorage {
                updated_at=excluded.updated_at",
             params![project_id, next_revision, project_type, adapter_id, adapter_version, now],
         ).map_err(|error| StorageError::sqlite("write project configuration", error))?;
+        tx.execute(
+            "DELETE FROM project_dependency_edges WHERE project_id = ?1",
+            [project_id],
+        ).map_err(|error| StorageError::sqlite("invalidate edges after configuration change", error))?;
         tx.commit().map_err(|error| StorageError::sqlite("commit project configuration", error))?;
         self.get_project_configuration(project_id)?.ok_or_else(|| {
             StorageError::new("STORAGE_ERROR", "project configuration disappeared after update")
@@ -1104,6 +1109,18 @@ impl RelayStorage {
             })?);
         }
         Ok(files)
+    }
+
+    pub fn project_file_sha256(
+        &self,
+        project_id: &str,
+        relative_path: &str,
+    ) -> Result<Option<String>, StorageError> {
+        self.conn.query_row(
+            "SELECT content_sha256 FROM project_files WHERE project_id = ?1 AND relative_path = ?2",
+            params![project_id, relative_path],
+            |row| row.get(0),
+        ).optional().map_err(|error| StorageError::sqlite("read indexed parser source", error))
     }
 
     pub fn project_files_for_paths(
@@ -1549,6 +1566,7 @@ impl RelayStorage {
             expected_source_sha256,
             producer_id,
             producer_version,
+            configuration_guard,
             targets,
         } = replacement;
         let now = sqlite_now(&self.conn)?;
@@ -1579,6 +1597,25 @@ impl RelayStorage {
                 "INDEX_GENERATION_CONFLICT",
                 format!("expected generation {expected_generation}, found {generation}"),
             ));
+        }
+        if let Some((expected_revision, expected_adapter_id, expected_adapter_version)) = configuration_guard {
+            let selected: Option<(i64, Option<String>, Option<String>)> = tx.query_row(
+                "SELECT revision, adapter_id, adapter_version FROM project_configuration WHERE project_id = ?1",
+                [project_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            ).optional().map_err(|error| StorageError::sqlite("read parser selection", error))?;
+            if !selected.is_some_and(|(revision, id, version)|
+                revision == expected_revision
+                    && id.as_deref() == Some(expected_adapter_id)
+                    && version.as_deref() == Some(expected_adapter_version)
+                    && producer_id == expected_adapter_id
+                    && producer_version == expected_adapter_version)
+            {
+                return Err(StorageError::new(
+                    "PROJECT_CONFIG_CONFLICT",
+                    "project parser selection changed before dependency replacement",
+                ));
+            }
         }
         let source_sha256: Option<String> = tx.query_row(
             "SELECT content_sha256 FROM project_files

@@ -1439,3 +1439,17 @@ The adapter-only `adapter.dependencies.parse` operation uses the shared registry
 This is a parser execution contract, not automatic project-file dispatch. Adapter installation, authorization to deliver source content, per-project version matching, scheduling, and invalidation/reparse evidence remain open Phase 3 work. A declared project adapter binding alone does not provide those permissions.
 
 Evidence: `docs/PHASE3_EIGHTH_SLICE_EVIDENCE.md`.
+
+## D-169 — Installed parser grants enable bounded automatic edge extraction
+
+Status: Phase 3 ninth slice accepted on a synthetic Windows adapter fixture
+
+The daemon reads an explicit version-1 per-project installation grant from its local state at startup. The grant pins the adapter identity/version, worker digest and target, source extensions, and permission to deliver source bytes. The broker still verifies the manifest, worker artifact, project read scope, and qualified sandbox; a project configuration declaration alone grants nothing. Idle dispatch reads ready index identities, verifies the exact source bytes before sandbox delivery, and sends validated observations through Core's generation-, digest-, and configuration-guarded edge replacement. Configuration changes invalidate derived edges. A two-project live fixture proved extraction and reparse only for the granted project, target deletion/restoration, and version revocation.
+
+This is a synthetic local state-file installation path. Public installation UX, parser failure diagnostics, real tool adapters, and supported-tier parser cost remain open. Evidence: `docs/PHASE3_NINTH_SLICE_EVIDENCE.md`.
+
+## D-170 — Watcher recovery defers when callbacks arrive during verification
+
+Status: Phase 3 live watcher-load fixture accepted on one Windows host
+
+The watcher callback advances an event epoch before queuing a notification. Background recovery checks that epoch during enumeration and hashing and after the attempt; a new callback leaves the project requiring verification even if its hint later advances a provisional generation. Read-only `observe` commands can inspect progress without cancelling recovery, while writes and analysis commands remain foreground work. A 96-file burst, one-minute event soak, and callback-during-1 GiB-verification fixture passed. The repeated 15,000-file sample remains exploratory on one workstation; numerical supported-tier budgets, long quiet-state idle cost, creator-app interference, and recovery completion under the 15-second cap on slower tiers remain open. Evidence: `docs/PHASE3_WATCHER_LOAD_EVIDENCE.md`, `docs/PHASE3_RESOURCE_BUDGET_METHOD.md`.

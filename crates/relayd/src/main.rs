@@ -1,4 +1,5 @@
 mod pipe;
+mod parser;
 mod security;
 mod state;
 mod watcher;
@@ -146,6 +147,7 @@ fn run() -> Result<(), String> {
     };
 
     let core = Arc::new(RelayCore::open(CoreConfig::new(&state_dir)));
+    let parser_installations = parser::load_installations(&state_dir)?;
     let watcher_enabled = std::env::var("RELAY_TEST_DISABLE_WATCHER").as_deref() != Ok("1");
     if watcher_enabled {
         for (project_id, _) in core.index_watch_targets().unwrap_or_default() {
@@ -208,6 +210,12 @@ fn run() -> Result<(), String> {
 
     let shutdown = AtomicBool::new(false);
     let foreground_active = Arc::new(AtomicBool::new(false));
+    let mut parser = parser::ParserRuntime::start(
+        Arc::clone(&core),
+        initial_runtime.clone(),
+        Arc::clone(&foreground_active),
+        parser_installations,
+    );
     let mut watcher = watcher_enabled.then(|| {
         watcher::WatcherRuntime::start(
             Arc::clone(&core),
@@ -302,14 +310,23 @@ fn run() -> Result<(), String> {
             request.command.as_str(),
             "project.register" | "project.import" | "project.index.build"
         );
+        let foreground_work = relay_contracts::registry::registry()
+            .commands
+            .iter()
+            .find(|command| command.id == request.command)
+            .is_none_or(|command| command.effect_class != "observe");
         let runtime = runtime_context(started, &ipc_security);
-        foreground_active.store(true, Ordering::SeqCst);
+        if foreground_work {
+            foreground_active.store(true, Ordering::SeqCst);
+        }
         let response =
             core.execute_authorized(request, &runtime, &authority);
         let accepted_shutdown = should_shutdown && response.ok;
         let _ = pipe::write_json(server.raw(), &response);
         pipe::disconnect(server.raw());
-        foreground_active.store(false, Ordering::SeqCst);
+        if foreground_work {
+            foreground_active.store(false, Ordering::SeqCst);
+        }
         if refresh_watches && response.ok && let Some(watcher) = &watcher {
             watcher.refresh();
         }
@@ -320,6 +337,9 @@ fn run() -> Result<(), String> {
     }
     if let Some(watcher) = &mut watcher {
         watcher.stop();
+    }
+    if let Some(parser) = &mut parser {
+        parser.stop();
     }
     core.flush_diagnostics();
     state::clear_state(&state_file);

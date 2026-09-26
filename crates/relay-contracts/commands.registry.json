@@ -795,6 +795,9 @@
           "source_sha256": { "type": "string", "minLength": 64 },
           "producer_id": { "type": "string", "minLength": 1 },
           "producer_version": { "type": "string", "minLength": 1 },
+          "expected_configuration_revision": { "type": "integer", "minimum": 1 },
+          "expected_adapter_id": { "type": "string", "minLength": 1 },
+          "expected_adapter_version": { "type": "string", "minLength": 1 },
           "targets": { "type": "array", "items": { "type": "string", "minLength": 1 } }
         },
         "additionalProperties": false
@@ -815,7 +818,7 @@
         "PROJECT_NOT_FOUND", "PROJECT_PATH_INVALID", "PROJECT_PATH_ESCAPE",
         "INDEX_BASELINE_MISSING", "INDEX_GENERATION_CONFLICT",
         "INDEX_RECONCILIATION_REQUIRED",
-        "INDEX_FILE_NOT_FOUND", "INDEX_SOURCE_CHANGED",
+        "INDEX_FILE_NOT_FOUND", "INDEX_SOURCE_CHANGED", "PROJECT_CONFIG_CONFLICT",
         "VALIDATION_FAILED", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
       ]
     },

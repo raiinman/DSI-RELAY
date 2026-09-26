@@ -1,0 +1,26 @@
+# Phase 3 live watcher load evidence
+
+Status: PASS for the synthetic burst, one-minute soak, and callback-during-recovery fixtures, 2026-09-26. This is one Windows host and is not a supported-tier budget.
+
+## Contract under test
+
+The daemon's recursive watcher coalesces file events into bounded hint batches. Directory changes and uncertain delivery require a durable full-content verification before `ready` can be restored. The idle worker waits for a quiet period and checks user activity, active RELAY commands, the callback event epoch, and its attempt deadline during scanning and before commit. A callback received during recovery must discard the obsolete authoritative plan; a later provisional hint update may still advance the generation while the index remains stale.
+
+## Live fixtures
+
+- `live_burst_uncertainty_recovers_without_cross_project_changes`: two watched roots; 96 files created in a new directory on Alpha; Bravo remains ready with unchanged generation; metadata-only reconciliation is rejected; idle recovery eventually returns Alpha to ready and exposes all 96 paths in its project delta.
+- `live_watcher_soak_recovers_after_prolonged_event_activity` (manual/ignored): one watched root receives writes every 100 ms for at least 60 seconds across 16 files; after writes stop, idle recovery must become ready and persist those paths. Process working set and CPU time are sampled before and after activity.
+- `callback_during_full_recovery_keeps_verification_required` (manual/ignored): a directory event starts full verification of a fixture with 1 GiB of padding; a same-size, same-timestamp edit to the first file arrives while later content is being hashed; the index must remain stale and require verification until a later explicit full pass. Provisional hint updates may validly advance the generation while stale.
+
+## Measurements
+
+- Two active burst runs passed. The first with 500 ms capability polling created 96 files in 54 ms and returned ready 3,530 ms after stale was observed. The second with direct storage observation created 96 files in 44 ms and returned ready in 3,270 ms. All 96 project-relative additions appeared in Alpha's delta; Bravo's generation remained unchanged. The first 50 ms capability-polling run timed out after 12 seconds, consistent with foreground status requests interfering with recovery under the former request classification. The daemon subsequently classified registry `observe` commands as non-foreground and the 50 ms polling rerun passed, as recorded below.
+- The manual one-minute soak passed: 594 writes over 60,015 ms across 16 files. The index returned ready 2,193 ms after writes stopped. Sampled daemon working set changed from 12,500,992 to 16,056,320 bytes, and process CPU time increased 1,657 ms over the activity plus recovery interval. The test checked that all 16 file paths were present in durable index state.
+- With the daemon treating registry `observe` commands as non-foreground, the burst fixture passed using 50 ms capability polling: 96 files written in 52 ms; ready 3,209 ms after stale was observed; all 96 additions present; Bravo's generation unchanged.
+- The manual 1 GiB callback-race fixture passed. It observed generation 2 and `stale` immediately before the same-size, same-timestamp edit, 2,453 ms after the directory event. During the following 3-second observation window the status stayed stale and `content_verification_required` stayed true. The callback hint validly advanced the generation to 3; at 5,480 ms after the directory event the status was still stale. A later explicit full verification hashed all 17 files and the delta identified the edited first file. The earlier run's generation 2→4 assertion was invalid because provisional hints can advance a stale generation; the corrected fixture checks the verification flag and status.
+
+The manual fixtures are separated from routine tests because they take one minute or create 1 GiB of temporary source content.
+
+## Limits
+
+The fast idle threshold is enabled only in debug test daemon processes. Release builds retain the normal 30-second user-idle threshold. The fixture does not simulate an external creator application's foreground workload or determine minimum and recommended hardware-tier budgets. Callback queue overflow itself is not injected deterministically; the directory event provides a reliable uncertainty path. A passing one-minute soak is not long-run aging evidence. The callback fixture's observed stale state supports cancellation but does not record every internal scheduler transition; deterministic fault injection would be needed to prove exact callback-to-guard timing on every run.

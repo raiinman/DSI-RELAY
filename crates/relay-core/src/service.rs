@@ -9,7 +9,7 @@ use crate::policy::{
 };
 use crate::storage::{
     CredentialHandleRecord, DependencyReplacement, EgressLedgerInput, IndexCommitMode,
-    NewTransaction, ProjectIndexCommit, RelayStorage, StorageError, StorageHealth,
+    NewTransaction, ProjectIndexCommit, ProjectConfiguration, RelayStorage, StorageError, StorageHealth,
     UsageMetricInput,
 };
 use relay_contracts::registry::{self, ResolveError};
@@ -77,7 +77,122 @@ pub struct RelayCore {
     diagnostics_fallback: DiagnosticHealth,
     producer: Producer,
 }
+
+/// Trusted daemon input only. Canonical roots and indexed source identities never enter
+/// public command results or adapter mailboxes.
+pub struct ParserProjectSnapshot {
+    pub project_id: String,
+    pub root_uri: String,
+    pub configuration: ProjectConfiguration,
+    pub generation: i64,
+    pub files: Vec<indexing::IndexedFileSnapshot>,
+}
+
 impl RelayCore {
+    pub fn parser_ready_projects(&self) -> Result<Vec<ParserProjectSnapshot>, String> {
+        self.with_storage(|storage| {
+            let mut ready = Vec::new();
+            for project in storage.list_projects()? {
+                let Some(configuration) = storage.get_project_configuration(&project.id)? else {
+                    continue;
+                };
+                if configuration.adapter_id.is_none() {
+                    continue;
+                }
+                let Some(state) = storage.get_project_index_state(&project.id)? else {
+                    continue;
+                };
+                if state.status != "ready" || state.content_verification_required {
+                    continue;
+                }
+                ready.push(ParserProjectSnapshot {
+                    project_id: project.id.clone(),
+                    root_uri: project.root_uri,
+                    configuration,
+                    generation: state.generation,
+                    files: Vec::new(),
+                });
+            }
+            Ok(ready)
+        }).map_err(|error| error.message)
+    }
+
+    /// Fetch source identities only when a daemon-observed ready generation changes.
+    pub fn parser_ready_files(
+        &self,
+        project_id: &str,
+        expected_generation: i64,
+    ) -> Result<Option<Vec<indexing::IndexedFileSnapshot>>, String> {
+        self.with_storage(|storage| {
+            let Some(state) = storage.get_project_index_state(project_id)? else {
+                return Ok(None);
+            };
+            if state.status != "ready" || state.content_verification_required
+                || state.generation != expected_generation
+            {
+                return Ok(None);
+            }
+            storage.list_project_files(project_id).map(Some)
+        }).map_err(|error| error.message)
+    }
+
+    /// A bounded invalidation hint for daemon parser scheduling. None requires a full
+    /// parser-cache reset after a rebuild or an oversized change burst.
+    pub fn parser_changed_paths(
+        &self,
+        project_id: &str,
+        after_generation: i64,
+        expected_generation: i64,
+    ) -> Result<Option<BTreeSet<String>>, String> {
+        self.with_storage(|storage| {
+            let Some(state) = storage.get_project_index_state(project_id)? else {
+                return Ok(None);
+            };
+            if state.status != "ready" || state.generation != expected_generation
+                || after_generation < state.baseline_generation
+            {
+                return Ok(None);
+            }
+            let changes = storage.list_project_changes_since(project_id, after_generation, 501)?;
+            if changes.len() > 500 {
+                return Ok(None);
+            }
+            let mut paths = BTreeSet::new();
+            for change in changes {
+                paths.insert(change.relative_path);
+                if let Some(previous_path) = change.previous_path {
+                    paths.insert(previous_path);
+                }
+            }
+            Ok(Some(paths))
+        }).map_err(|error| error.message)
+    }
+
+    /// Recheck the selected parser and indexed source immediately before source delivery.
+    pub fn parser_source_selected(
+        &self,
+        project_id: &str,
+        generation: i64,
+        configuration_revision: i64,
+        adapter_id: &str,
+        adapter_version: &str,
+        source_path: &str,
+        source_sha256: &str,
+    ) -> bool {
+        self.with_storage(|storage| {
+            let state = storage.get_project_index_state(project_id)?;
+            let configuration = storage.get_project_configuration(project_id)?;
+            let indexed_sha256 = storage.project_file_sha256(project_id, source_path)?;
+            Ok(state.is_some_and(|state| state.status == "ready"
+                && !state.content_verification_required
+                && state.generation == generation)
+                && configuration.is_some_and(|config|
+                    config.revision == configuration_revision
+                        && config.adapter_id.as_deref() == Some(adapter_id)
+                        && config.adapter_version.as_deref() == Some(adapter_version))
+                && indexed_sha256.as_deref() == Some(source_sha256))
+        }).unwrap_or(false)
+    }
     /// Local daemon input only; never return canonical roots through command results.
     pub fn index_watch_targets(&self) -> Result<Vec<(String, String)>, String> {
         self.with_storage(|storage| {
@@ -1639,6 +1754,17 @@ impl RelayCore {
         let producer_version = arguments["producer_version"]
             .as_str()
             .expect("registry validation requires producer_version");
+        let configuration_revision = arguments.get("expected_configuration_revision").and_then(Value::as_i64);
+        let adapter_id = arguments.get("expected_adapter_id").and_then(Value::as_str);
+        let adapter_version = arguments.get("expected_adapter_version").and_then(Value::as_str);
+        let configuration_guard = match (configuration_revision, adapter_id, adapter_version) {
+            (None, None, None) => None,
+            (Some(revision), Some(id), Some(version)) => Some((revision, id, version)),
+            _ => return Err(CoreCommandError::new(
+                "VALIDATION_FAILED",
+                "parser selection guard requires revision, adapter ID, and version together",
+            )),
+        };
         let raw_targets = arguments["targets"]
             .as_array()
             .expect("registry validation requires targets");
@@ -1675,6 +1801,7 @@ impl RelayCore {
                 expected_source_sha256: source_sha256,
                 producer_id,
                 producer_version,
+                configuration_guard,
                 targets: &targets,
             })
         })?;

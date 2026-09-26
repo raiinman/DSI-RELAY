@@ -8,8 +8,10 @@
 4. SYSTEM_ARCHITECTURE.md — technical boundaries and data flow.
 5. ROADMAP.md — implementation order and milestone exit criteria.
 
-The Phase 3 baseline, dependency-edge, provisional hint-update, content-verification, OS-watcher, idle recovery, project configuration, and parser-contract results are in PHASE3_FIRST_SLICE.md and the eight PHASE3_*_SLICE_EVIDENCE.md records.
+The Phase 3 baseline, dependency-edge, provisional hint-update, content-verification, OS-watcher, idle recovery, project configuration, parser-contract, and authorized parser-dispatch results are in PHASE3_FIRST_SLICE.md and the nine PHASE3_*_SLICE_EVIDENCE.md records.
 The larger indexing sample and current NOT READY closure verdict are in PHASE3_SCALE_BENCHMARK_EVIDENCE.md and PHASE3_CLOSURE_REVIEW.md.
+Live burst, prolonged watcher activity, and recovery callback-race observations are in PHASE3_WATCHER_LOAD_EVIDENCE.md.
+The repeatable resource measurement method and one-host five-run sample are in PHASE3_RESOURCE_BUDGET_METHOD.md and PHASE3_SCALE_FIVE_RUN_2026-09-26.json.
 
 ## Core design
 

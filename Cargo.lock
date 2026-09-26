@@ -282,10 +282,12 @@ version = "0.1.0"
 dependencies = [
  "notify",
  "relay",
+ "relay-adapter",
  "relay-contracts",
  "relay-core",
  "serde",
  "serde_json",
+ "sha2",
  "windows-sys 0.61.2",
 ]
 

@@ -16,6 +16,7 @@ Own the versioned machine contracts shared by RELAY Core and every client surfac
 - Discovery metadata must remain compact enough for CLI/dashboard/AI clients.
 - Project configuration commands expose versioned, project-scoped metadata. A declared adapter ID/version is a binding preference, never proof that the adapter is installed or that its parser output is trusted.
 - Adapter-only parser operations use the shared bounded request/result schema, but are worker observations rather than Core state-write commands. Only Core's project-scoped dependency replacement can commit edges.
+- Dependency replacement accepts an optional complete configuration-selection guard (revision, adapter ID, adapter version). Core checks it atomically for automatic parser submissions; omitted guards preserve existing manual callers and grant no authority.
 - No secret values, project paths, or runtime state are embedded in contract metadata.
 
 # Verification

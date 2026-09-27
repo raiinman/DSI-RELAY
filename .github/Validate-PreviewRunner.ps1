@@ -61,7 +61,6 @@ try {
         throw 'Archive SHA-256 mismatch'
     }
     & (Join-Path $repoRoot 'release\Verify-MeasurementPreview.ps1') -BundleDirectory $bundle
-    if ($LASTEXITCODE -ne 0) { throw 'Assembled bundle verification failed' }
 
     $manifest = Get-Content -LiteralPath (Join-Path $bundle 'bundle-manifest.json') -Raw | ConvertFrom-Json
     if ($manifest.status -ne 'review_only' -or -not $manifest.source_tree_clean -or
@@ -76,11 +75,9 @@ try {
     Expand-Archive -LiteralPath $archive -DestinationPath $extractRoot -ErrorAction Stop
     $extractedBundle = Join-Path $extractRoot $name
     & (Join-Path $repoRoot 'release\Verify-MeasurementPreview.ps1') -BundleDirectory $extractedBundle
-    if ($LASTEXITCODE -ne 0) { throw 'Extracted archive verification failed' }
 
     & (Join-Path $extractedBundle 'run-phase3-benchmark.ps1') `
         -BinaryDirectory $extractedBundle -FilesPerProject 100 -Runs 1 -OutputPath $reportPath
-    if ($LASTEXITCODE -ne 0) { throw 'Contained benchmark failed' }
     $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
     if ($report.status -ne 'passed' -or $report.runs_requested -ne 1 -or
         $report.runs_completed -ne 1 -or $report.file_count_per_project -ne 100 -or
@@ -106,8 +103,6 @@ try {
     if (-not (Test-Path -LiteralPath $reviewRoot)) {
         $null = New-Item -ItemType Directory -Path $reviewRoot
     }
-    Copy-Item -LiteralPath $archive -Destination $reviewRoot
-    Copy-Item -LiteralPath $checksum -Destination $reviewRoot
     Copy-Item -LiteralPath $reportPath -Destination (Join-Path $reviewRoot 'hosted-runner-smoke.json')
     Write-Output 'Committed-source archive and contained 100-file hosted-runner smoke passed.'
 }

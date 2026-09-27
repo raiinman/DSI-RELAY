@@ -51,40 +51,10 @@ jobs:
             -BundleOutputDirectory (Join-Path $env:RUNNER_TEMP 'relay-preview-ci-out') `
             -ReviewDirectory (Join-Path $env:RUNNER_TEMP 'relay-preview-ci-review')
 
-      - name: Upload review-only archive, checksum, and sanitized smoke report
+      - name: Upload sanitized hosted-runner smoke report
         uses: actions/upload-artifact@v7
         with:
-          name: relay-measurement-preview-review
+          name: relay-measurement-preview-smoke-report
           path: ${{ runner.temp }}/relay-preview-ci-review/
           if-no-files-found: error
           retention-days: 7
-
-  attest-public-review-artifact:
-    name: Attest review archive when eligible
-    needs: build-and-smoke
-    if: ${{ github.event.repository.private == false }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      actions: read
-      contents: read
-      id-token: write
-      attestations: write
-    steps:
-      - name: Download same-run review artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: relay-measurement-preview-review
-          path: review
-
-      - name: Recheck archive checksum
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd review
-          sha256sum --check -- *.zip.sha256
-
-      - name: Attest the review-only archive
-        uses: actions/attest@v4
-        with:
-          subject-path: review/*.zip

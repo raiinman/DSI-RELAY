@@ -1,17 +1,20 @@
 use std::ffi::c_void;
 use std::ptr::null_mut;
-use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, LocalFree, ERROR_INSUFFICIENT_BUFFER, HANDLE, HLOCAL};
+use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, LocalFree, ERROR_INSUFFICIENT_BUFFER, GENERIC_ALL, HANDLE, HLOCAL};
 use windows_sys::Win32::Security::Authorization::{
-    ConvertSecurityDescriptorToStringSecurityDescriptorW, ConvertSidToStringSidW,
+    ConvertSidToStringSidW,
     ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo, SE_KERNEL_OBJECT,
 };
 use windows_sys::Win32::Security::Cryptography::{
     BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG,
 };
 use windows_sys::Win32::Security::{
-    GetTokenInformation, TokenUser, DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
-    PSECURITY_DESCRIPTOR, TOKEN_QUERY, TOKEN_USER, SECURITY_ATTRIBUTES,
+    GetAce, GetAclInformation, GetSecurityDescriptorControl, GetTokenInformation, IsValidSid,
+    TokenUser, AclSizeInformation, ACCESS_ALLOWED_ACE, ACL, ACL_SIZE_INFORMATION,
+    DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR,
+    SE_DACL_PROTECTED, TOKEN_QUERY, TOKEN_USER, SECURITY_ATTRIBUTES,
 };
+use windows_sys::Win32::Storage::FileSystem::FILE_ALL_ACCESS;
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
 pub struct PipeSecurity {
@@ -138,62 +141,90 @@ pub struct AclVerification {
 pub fn verify_pipe_security(handle: HANDLE, expected_sid: &str) -> Result<AclVerification, String> {
     unsafe {
         let mut descriptor: PSECURITY_DESCRIPTOR = null_mut();
+        let mut owner = null_mut();
+        let mut dacl: *mut ACL = null_mut();
         let security_info = OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION;
         let status = GetSecurityInfo(
             handle,
             SE_KERNEL_OBJECT,
             security_info,
+            &mut owner,
             null_mut(),
-            null_mut(),
-            null_mut(),
+            &mut dacl,
             null_mut(),
             &mut descriptor,
         );
         if status != 0 || descriptor.is_null() {
             return Err(format!("GetSecurityInfo failed: {status}"));
         }
-
-        let mut sddl_ptr: *mut u16 = null_mut();
-        let converted = ConvertSecurityDescriptorToStringSecurityDescriptorW(
-            descriptor,
-            1,
-            security_info,
-            &mut sddl_ptr,
-            null_mut(),
-        );
-        if converted == 0 {
-            let error = GetLastError();
-            LocalFree(descriptor as HLOCAL);
-            return Err(format!(
-                "ConvertSecurityDescriptorToStringSecurityDescriptorW failed: {error}"
-            ));
-        }
-
-        let sddl = wide_string(sddl_ptr);
-        LocalFree(sddl_ptr as HLOCAL);
+        let checked = (|| -> Result<AclVerification, String> {
+            let mut control = 0u16;
+            let mut revision = 0u32;
+            if GetSecurityDescriptorControl(descriptor, &mut control, &mut revision) == 0 {
+                return Err(format!("GetSecurityDescriptorControl failed: {}", GetLastError()));
+            }
+            let protected_dacl = control & SE_DACL_PROTECTED != 0;
+            let owner_is_current_user = sid_matches(owner, expected_sid)?;
+            if dacl.is_null() {
+                return Ok(AclVerification {
+                    query_ok: true,
+                    protected_dacl,
+                    owner_is_current_user,
+                    current_user_only: false,
+                    current_user_full_control: false,
+                    ace_count: 0,
+                });
+            }
+            let mut acl_info = ACL_SIZE_INFORMATION::default();
+            if GetAclInformation(
+                dacl,
+                &mut acl_info as *mut _ as *mut c_void,
+                std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
+                AclSizeInformation,
+            ) == 0 {
+                return Err(format!("GetAclInformation failed: {}", GetLastError()));
+            }
+            let ace_count = acl_info.AceCount;
+            let mut full_control = false;
+            if ace_count == 1 {
+                let mut ace_ptr: *mut c_void = null_mut();
+                if GetAce(dacl, 0, &mut ace_ptr) == 0 {
+                    return Err(format!("GetAce failed: {}", GetLastError()));
+                }
+                let ace = &*(ace_ptr as *const ACCESS_ALLOWED_ACE);
+                if ace.Header.AceType == 0 &&
+                    usize::from(ace.Header.AceSize) >= std::mem::size_of::<ACCESS_ALLOWED_ACE>() + 4 {
+                    let ace_sid = &ace.SidStart as *const u32 as *mut c_void;
+                    let sid_in_dacl = sid_matches(ace_sid, expected_sid)?;
+                    full_control = sid_in_dacl &&
+                        (ace.Mask & GENERIC_ALL != 0 || ace.Mask & FILE_ALL_ACCESS == FILE_ALL_ACCESS);
+                }
+            }
+            Ok(AclVerification {
+                query_ok: true,
+                protected_dacl,
+                owner_is_current_user,
+                current_user_only: protected_dacl && ace_count == 1 && full_control,
+                current_user_full_control: full_control,
+                ace_count,
+            })
+        })();
         LocalFree(descriptor as HLOCAL);
-
-        let dacl = sddl
-            .find("D:")
-            .map(|index| &sddl[index..])
-            .unwrap_or("");
-        let ace_count = dacl.matches('(').count() as u32;
-        let protected_dacl = dacl.starts_with("D:P");
-        let owner_is_current_user = sddl.contains(&format!("O:{expected_sid}"));
-        let sid_in_dacl = dacl.contains(expected_sid);
-        let full_control = sid_in_dacl
-            && (dacl.contains("(A;;FA;;;") || dacl.contains("(A;;GA;;;"));
-        let current_user_only = protected_dacl && ace_count == 1 && sid_in_dacl && full_control;
-
-        Ok(AclVerification {
-            query_ok: true,
-            protected_dacl,
-            owner_is_current_user,
-            current_user_only,
-            current_user_full_control: full_control,
-            ace_count,
-        })
+        checked
     }
+}
+
+fn sid_matches(sid: *mut c_void, expected: &str) -> Result<bool, String> {
+    if sid.is_null() || unsafe { IsValidSid(sid) } == 0 {
+        return Ok(false);
+    }
+    let mut text_ptr: *mut u16 = null_mut();
+    if unsafe { ConvertSidToStringSidW(sid, &mut text_ptr) } == 0 {
+        return Err(format!("ConvertSidToStringSidW failed: {}", unsafe { GetLastError() }));
+    }
+    let actual = wide_string(text_ptr);
+    unsafe { LocalFree(text_ptr as HLOCAL) };
+    Ok(actual == expected)
 }
 
 pub fn random_hex(bytes: usize) -> Result<String, String> {

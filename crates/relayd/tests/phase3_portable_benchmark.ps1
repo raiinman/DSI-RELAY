@@ -132,12 +132,34 @@ function Invoke-Relay {
 }
 
 function Wait-Daemon {
-    param([System.Diagnostics.Process]$Process)
+    param([System.Diagnostics.Process]$Process, [string]$StderrPath)
     $deadline = [DateTime]::UtcNow.AddSeconds(10)
     $statePath = Join-Path $stateDir 'host.json'
     while ([DateTime]::UtcNow -lt $deadline) {
         if ($Process.HasExited) {
             $script:benchmarkFailureCode = 'BENCHMARK_DAEMON_EXITED'
+            if (Test-Path -LiteralPath $StderrPath -PathType Leaf) {
+                try {
+                    $failure = Get-Content -LiteralPath $StderrPath -Raw | ConvertFrom-Json
+                    $message = [string]$failure.error.message
+                    if ($message -eq 'kernel verification rejected local pipe security') {
+                        $script:benchmarkFailureCode = 'BENCHMARK_DAEMON_PIPE_ACL_REJECTED'
+                    }
+                    elseif ($message -match '^(OpenProcessToken|GetTokenInformation|ConvertSidToStringSidW|ConvertStringSecurityDescriptorToSecurityDescriptorW|CreateNamedPipeW|GetSecurityInfo|ConvertSecurityDescriptorToStringSecurityDescriptorW) failed:') {
+                        $script:benchmarkFailureCode = 'BENCHMARK_DAEMON_PIPE_SECURITY_FAILED'
+                    }
+                    elseif ($message -match '^dashboard (loopback bind|listener setup|local address) failed:') {
+                        $script:benchmarkFailureCode = 'BENCHMARK_DAEMON_DASHBOARD_LISTEN_FAILED'
+                    }
+                    elseif ($message -match '^(create restricted dashboard state|write restricted dashboard state|publish dashboard state)') {
+                        $script:benchmarkFailureCode = 'BENCHMARK_DAEMON_DASHBOARD_STATE_FAILED'
+                    }
+                    elseif ($message -match '^(create state dir|write host state|publish host state)') {
+                        $script:benchmarkFailureCode = 'BENCHMARK_DAEMON_HOST_STATE_FAILED'
+                    }
+                }
+                catch { }
+            }
             throw 'RELAY daemon exited before becoming ready'
         }
         if (Test-Path -LiteralPath $statePath) {
@@ -275,12 +297,13 @@ try {
     Write-Host "Run $run of ${Runs}: creating two temporary $FilesPerProject-file projects"
     New-SyntheticProject $rootA
     New-SyntheticProject $rootB
-    try { $daemon = Start-Process -FilePath $daemonPath -PassThru -WindowStyle Hidden }
+    $daemonStderr = Join-Path $ownedFull 'daemon-stderr.json'
+    try { $daemon = Start-Process -FilePath $daemonPath -PassThru -WindowStyle Hidden -RedirectStandardError $daemonStderr }
     catch {
         $script:benchmarkFailureCode = 'BENCHMARK_DAEMON_LAUNCH_FAILED'
         throw
     }
-    $hostState = Wait-Daemon $daemon
+    $hostState = Wait-Daemon $daemon $daemonStderr
 
     Set-Stage "run_${run}_baseline"
     $baseline = @()

@@ -92,7 +92,9 @@ pub fn current_user_sid_string() -> Result<String, String> {
 
 pub fn current_user_pipe_security() -> Result<PipeSecurity, String> {
     let sid = current_user_sid_string()?;
-    let sddl = format!("D:P(A;;GA;;;{sid})");
+    // An elevated process may otherwise give the pipe the Administrators group
+    // as its owner. The host requires the account SID to own the pipe.
+    let sddl = format!("O:{sid}D:P(A;;GA;;;{sid})");
     let mut wide: Vec<u16> = sddl.encode_utf16().collect();
     wide.push(0);
 

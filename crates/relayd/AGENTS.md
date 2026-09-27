@@ -20,6 +20,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 - The daemon loads explicit digest-pinned per-project parser grants from local state at startup. Only the exact configured installed parser with a source-delivery grant receives bounded UTF-8 indexed source bytes through the sandbox. Parser dispatch waits for idle, ready project state and writes edges through Core's generation, source, and configuration guards.
 - Parser installation, quarantine, and recovery health is aggregated into live `system.status`/`system.doctor` output and fixed-code transition diagnostics without source text, paths, or project identifiers. Invalid grants fail closed for source delivery while daemon health remains inspectable. `host.json` recovery state is a startup snapshot; clients needing current health use the live commands.
 - The read-only dashboard binds to loopback with a per-start token, invokes only selected observe commands through Core, and stores its local URL in a current-user-DACL-protected `dashboard.json` while the daemon runs. CLI prints that URL through `relay dashboard-url`.
+- The portable synthetic benchmark creates a new report path without overwriting an existing file, replaces later progress records atomically, bounds each CLI child process and kills it on deadline, records a fixed timeout code, and shuts down its daemon before removing only a validated temporary root without descendant reparse points.
 
 # Verification
 
@@ -43,6 +44,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 - `tests/phase3_parser_dispatch.rs` also verifies missing/malformed installation health, broker quarantine, fixed-code diagnostics, and repair/restart or source-change recovery.
 - The ignored live installed-parser resource fixture in `tests/phase3_parser_resource.rs` measures initial publication, changed-source reparse, foreground latency, idle CPU, and resident memory on one host; `tests/phase3_parser_resource_report.ps1` records repeatable samples and source fingerprints without claiming a supported hardware tier.
 - The draft portable runner in `tests/phase3_portable_benchmark.ps1` exercises a staged release daemon on another host; its smoke results are functional evidence until minimum/recommended hardware and creator-app contention are measured.
+- The portable runner smoke should verify a successful staged-binary run, an existing report path left byte-identical without starting a daemon, and an induced CLI timeout that leaves a fixed-code failure report with no new daemon or fixture root.
 - `src/dashboard.rs` unit tests and `tests/phase5_dashboard.rs` verify live HTTP token/origin/write rejection and parity with the named-pipe command path.
 
 # Child DOX Index

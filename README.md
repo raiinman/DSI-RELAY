@@ -2,6 +2,8 @@
 
 Created by **RAiiNMAN**. The first-party RELAY Core, daemon, CLI, and documentation are licensed under [MIT](LICENSE); see [creator credit](NOTICE-RELAY.txt).
 
+Preview users can read the [privacy statement](PRIVACY.md), [support guide](SUPPORT.md), and [security reporting policy](SECURITY.md).
+
 DSI RELAY is a developing model-independent control and observability layer for game projects and creative toolchains.
 
 The product exists to make AI-assisted development cheaper, more reliable, and easier to use. RELAY should do deterministic work locally, keep large results out of chat, expose a clean headless CLI, provide a plain-language dashboard, and let multiple AI clients work through the same verified project state.

@@ -25,7 +25,7 @@ The current `crates/relayd/tests/phase3_scale_report.ps1` is an internal Rust-ch
 - Include the selected MIT license and RAiiNMAN creator credit, inventory dependency licenses, and include required notices. Review branding and any included third-party components. The public-release legal checklist is in `LEGAL_LICENSING_AND_DISTRIBUTION.md`.
 - Decide the publisher-signing and trust bootstrap for a direct Windows package. The Phase 1 side-by-side updater is prototype evidence, not a shipping updater; do not distribute its synthetic test certificate. For a preview without unattended updates, publish a verified versioned bundle and an explicit manual replacement path with schema compatibility checks.
 - Complete a focused threat/privacy review of the packaged surface, including named-pipe cross-user denial, path traversal, archive extraction, adapter execution, diagnostic redaction, and clean removal. Publish a privacy notice that matches the actual no-upload behavior.
-- Provide a support channel, known limitations, reproducible bug-report fields, and a clear way to report security issues. Test install/run/update or replacement/uninstall from a clean user profile.
+- Provide a support channel, known limitations, reproducible bug-report fields, and a clear way to report security issues. Root `SUPPORT.md`, `SECURITY.md`, and `PRIVACY.md` now define the repository's preview channels and report behavior; GitHub private vulnerability reporting is enabled. Test install/run/update or replacement/uninstall from a clean user profile.
 
 These are release controls, not Phase 3 indexing work. Passing Phase 3 unit and synthetic daemon tests alone does not make a public binary safe or useful.
 

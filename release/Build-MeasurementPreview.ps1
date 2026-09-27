@@ -367,6 +367,8 @@ includes CPU model/core counts, installed RAM, Windows version, storage and
 power classes, binary hashes, counts, timings, memory, and correctness results.
 It omits username, computer name, project paths/content, credentials, and the
 local IPC token. Inspect it before choosing to share it with anyone.
+During a sample, the daemon also opens a loopback-only dashboard listener on
+127.0.0.1. The benchmark does not connect to any remote server.
 
 KNOWN LIMITS: Synthetic small files on a local filesystem cannot prove editor
 performance, real creator-app contention, parser performance, minimum or
@@ -376,8 +378,13 @@ Deleting this folder removes the package; reports you wrote outside remain.
 
 This is a REVIEW-ONLY package. Check bundle-manifest.json for unresolved
 licensing, trust, clean-account, and security items before public distribution.
+
+Project source and preview policies: https://github.com/raiinman/DSI-RELAY
+Privacy: https://github.com/raiinman/DSI-RELAY/blob/{{SOURCE_REVISION}}/PRIVACY.md
+Support: https://github.com/raiinman/DSI-RELAY/blob/{{SOURCE_REVISION}}/SUPPORT.md
+Private security reports: https://github.com/raiinman/DSI-RELAY/security/advisories
 '@
-    Write-Utf8 (Join-Path $payloadRoot 'README.txt') ($readme + "`n")
+    Write-Utf8 (Join-Path $payloadRoot 'README.txt') ($readme.Replace('{{SOURCE_REVISION}}', $sourceRevision) + "`n")
     $smoke = @'
 CLEAN WINDOWS ACCOUNT SMOKE CHECK
 

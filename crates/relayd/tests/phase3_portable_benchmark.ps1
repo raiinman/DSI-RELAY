@@ -4,15 +4,20 @@ param(
     [int]$FilesPerProject = 1000,
     [ValidateRange(1, 20)]
     [int]$Runs = 3,
-    [string]$OutputPath = (Join-Path (Get-Location) ("relay-phase3-benchmark-{0}.json" -f (Get-Date -Format 'yyyyMMdd-HHmmss')))
+    [string]$OutputPath = (Join-Path (Get-Location) ("relay-phase3-benchmark-{0}-{1}.json" -f (Get-Date -Format 'yyyyMMdd-HHmmss'), ([Guid]::NewGuid().ToString('N').Substring(0, 8)))),
+    [ValidateRange(1, 600000)]
+    [int]$CommandTimeoutMs = 180000
 )
 
 $ErrorActionPreference = 'Stop'
-$outputFull = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
+$outputFull = [System.IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath))
 $binaryRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($BinaryDirectory)
 $daemonPath = Join-Path $binaryRoot 'relayd.exe'
 $cliPath = Join-Path $binaryRoot 'relay.exe'
 $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\')
+$script:reportInitialized = $false
+$script:cliTimedOut = $false
+$utf8 = New-Object System.Text.UTF8Encoding($false)
 $report = [ordered]@{
     schema_version = 2
     benchmark_version = '0.2.0-draft'
@@ -36,7 +41,35 @@ $report = [ordered]@{
 }
 
 function Save-Report {
-    [System.IO.File]::WriteAllText($outputFull, (($report | ConvertTo-Json -Depth 12) + [Environment]::NewLine))
+    $bytes = $utf8.GetBytes(($report | ConvertTo-Json -Depth 12) + [Environment]::NewLine)
+    if (-not $script:reportInitialized) {
+        $parent = [System.IO.Path]::GetDirectoryName($outputFull)
+        $initial = Join-Path $parent ('.relay-report-initial-' + [Guid]::NewGuid().ToString('N') + '.tmp')
+        try {
+            $stream = New-Object System.IO.FileStream($initial, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+            try { $stream.Write($bytes, 0, $bytes.Length) }
+            finally { $stream.Dispose() }
+            [System.IO.File]::Move($initial, $outputFull)
+        }
+        finally {
+            if (Test-Path -LiteralPath $initial) { Remove-Item -LiteralPath $initial -Force }
+        }
+        $script:reportInitialized = $true
+        return
+    }
+    $parent = [System.IO.Path]::GetDirectoryName($outputFull)
+    $temp = Join-Path $parent ('.relay-report-' + [Guid]::NewGuid().ToString('N') + '.tmp')
+    $backup = Join-Path $parent ('.relay-report-backup-' + [Guid]::NewGuid().ToString('N') + '.tmp')
+    try {
+        $stream = New-Object System.IO.FileStream($temp, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+        try { $stream.Write($bytes, 0, $bytes.Length) }
+        finally { $stream.Dispose() }
+        [System.IO.File]::Replace($temp, $outputFull, $backup)
+    }
+    finally {
+        if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force }
+        if (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Force }
+    }
 }
 
 function Set-Stage {
@@ -48,7 +81,7 @@ function Set-Stage {
 Save-Report
 
 function Invoke-Relay {
-    param([string]$Command, [hashtable]$Arguments, [bool]$Keyed = $false)
+    param([string]$Command, [hashtable]$Arguments, [bool]$Keyed = $false, [int]$TimeoutMs = $CommandTimeoutMs)
     $id = 'BENCH-' + [Guid]::NewGuid().ToString('N')
     $inputObject = @{
         request_id = $id
@@ -58,8 +91,40 @@ function Invoke-Relay {
     }
     if ($Keyed) { $inputObject.idempotency_key = "IDEMP-$id" }
     $inputJson = $inputObject | ConvertTo-Json -Depth 8 -Compress
-    $responseText = $inputJson | & $cliPath exec --stdin 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0) { throw "RELAY command $Command failed" }
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $cliPath
+    $startInfo.Arguments = 'exec --stdin'
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardInput = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $child = New-Object System.Diagnostics.Process
+    $child.StartInfo = $startInfo
+    $started = $false
+    try {
+        $started = $child.Start()
+        if (-not $started) { throw 'RELAY CLI did not start' }
+        $stdout = $child.StandardOutput.ReadToEndAsync()
+        $stderr = $child.StandardError.ReadToEndAsync()
+        $child.StandardInput.WriteLine($inputJson)
+        $child.StandardInput.Close()
+        if (-not $child.WaitForExit($TimeoutMs)) {
+            $script:cliTimedOut = $true
+            throw 'RELAY_CLI_TIMEOUT'
+        }
+        $exitCode = $child.ExitCode
+        $responseText = $stdout.GetAwaiter().GetResult()
+        $null = $stderr.GetAwaiter().GetResult()
+    }
+    finally {
+        if ($started -and -not $child.HasExited) {
+            try { $child.Kill() } catch { }
+            $null = $child.WaitForExit(5000)
+        }
+        $child.Dispose()
+    }
+    if ($exitCode -ne 0) { throw "RELAY command $Command failed" }
     $response = $responseText | ConvertFrom-Json
     if (-not $response.ok) { throw "RELAY command $Command returned an error" }
     return $response.result
@@ -149,6 +214,16 @@ function Remove-OwnedRoot {
     if ([System.IO.Path]::GetDirectoryName($resolved) -ne $tempRoot -or
         [System.IO.Path]::GetFileName($resolved) -ne $name) {
         throw 'Owned temporary directory resolved outside the temporary root'
+    }
+    $pending = New-Object 'System.Collections.Generic.Stack[string]'
+    $pending.Push($full)
+    while ($pending.Count -gt 0) {
+        foreach ($child in Get-ChildItem -LiteralPath ($pending.Pop()) -Force) {
+            if ($child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                throw 'Owned temporary directory contains a reparse point'
+            }
+            if ($child.PSIsContainer) { $pending.Push($child.FullName) }
+        }
     }
     Remove-Item -LiteralPath $full -Recurse -Force
 }
@@ -283,7 +358,7 @@ try {
     }
     finally {
     if ($daemon -and -not $daemon.HasExited) {
-        try { $null = Invoke-Relay 'system.shutdown' @{} } catch { }
+        try { $null = Invoke-Relay -Command 'system.shutdown' -Arguments @{} -TimeoutMs 3000 } catch { }
         if (-not $daemon.WaitForExit(3000)) {
             Stop-Process -Id $daemon.Id -Force -ErrorAction SilentlyContinue
             $daemon.WaitForExit()
@@ -303,7 +378,9 @@ try {
 }
 catch {
     $report.status = 'failed'
-    $report.failure_code = if ($report.current_stage -eq 'preflight') { 'BENCHMARK_PREFLIGHT_FAILED' } else { 'BENCHMARK_STAGE_FAILED' }
+    $report.failure_code = if ($script:cliTimedOut) { 'BENCHMARK_CLI_TIMEOUT' }
+        elseif ($report.current_stage -eq 'preflight') { 'BENCHMARK_PREFLIGHT_FAILED' }
+        else { 'BENCHMARK_STAGE_FAILED' }
     try { Save-Report } catch { }
     throw "Benchmark failed at $($report.current_stage); inspect the local JSON report"
 }

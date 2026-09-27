@@ -2,6 +2,8 @@
 
 `Build-MeasurementPreview.ps1` assembles a **review-only** Windows archive for the Phase 3 synthetic benchmark. It does not publish or sign the archive. Its generated `README.txt` explains the limited claim and local JSON privacy behavior to a tester.
 
+The benchmark daemon opens a local named pipe and a loopback-only dashboard listener while each sample runs. The runner does not make a remote network call or upload its report; this is disclosed in the generated README and root `PRIVACY.md`.
+
 Run from the repository root after reviewing the source revision:
 
 ```powershell

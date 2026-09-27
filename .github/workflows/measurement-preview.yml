@@ -58,3 +58,14 @@ jobs:
           path: ${{ runner.temp }}/relay-preview-ci-review/
           if-no-files-found: error
           retention-days: 7
+
+      - name: Upload public dependency diagnostics after a failed check
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: relay-preview-dependency-diagnostics
+          path: |
+            ${{ runner.temp }}/relay-preview-ci-out/relay-measurement-preview-${{ env.PREVIEW_VERSION }}-windows-x64/bundle-manifest.json
+            ${{ runner.temp }}/relay-preview-ci-out/relay-measurement-preview-${{ env.PREVIEW_VERSION }}-windows-x64/THIRD-PARTY-INVENTORY.json
+          if-no-files-found: ignore
+          retention-days: 1

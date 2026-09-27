@@ -68,7 +68,9 @@ try {
         $manifest.binary_build_mode -ne 'built_by_packager' -or
         $manifest.third_party_notice_review -ne 'technical_selection_recorded' -or
         $manifest.bundled_sqlite_provenance -ne 'source_hash_and_features_verified') {
-        throw 'Bundle manifest failed committed-source or technical review checks'
+        throw ('Bundle manifest failed committed-source or technical review checks: clean={0}, revision_match={1}, notices={2}, sqlite={3}' -f
+            $manifest.source_tree_clean, ($manifest.source_revision -eq $env:GITHUB_SHA),
+            $manifest.third_party_notice_review, $manifest.bundled_sqlite_provenance)
     }
 
     $null = New-Item -ItemType Directory -Path $extractRoot

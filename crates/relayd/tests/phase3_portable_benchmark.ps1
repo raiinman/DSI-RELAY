@@ -97,7 +97,6 @@ function Invoke-Relay {
     $startInfo.Arguments = 'exec --stdin'
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $true
-    $startInfo.StandardInputEncoding = $utf8
     $startInfo.StandardOutputEncoding = $utf8
     $startInfo.StandardErrorEncoding = $utf8
     $startInfo.RedirectStandardInput = $true
@@ -111,7 +110,8 @@ function Invoke-Relay {
         if (-not $started) { throw 'RELAY CLI did not start' }
         $stdout = $child.StandardOutput.ReadToEndAsync()
         $stderr = $child.StandardError.ReadToEndAsync()
-        $child.StandardInput.WriteLine($inputJson)
+        $inputBytes = $utf8.GetBytes($inputJson + [Environment]::NewLine)
+        $child.StandardInput.BaseStream.Write($inputBytes, 0, $inputBytes.Length)
         $child.StandardInput.Close()
         if (-not $child.WaitForExit($TimeoutMs)) {
             $script:cliTimedOut = $true

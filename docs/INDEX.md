@@ -21,6 +21,7 @@ The current Rust release dependency and license-expression inventory is in RELEA
 PHASE4_RESULT_DESCRIPTION_EVIDENCE.md records the early metadata-only result lookup; Phase 4 remains open.
 PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md records the first byte-budgeted exact-fact view by result ID and its test limits.
 PHASE5_DASHBOARD_FIRST_SLICE_EVIDENCE.md records the first local read-only dashboard view; Phase 5 remains open.
+PHASE5_DASHBOARD_ACCESSIBILITY_SLICE_EVIDENCE.md records the focused keyboard, status, and error-state improvements; manual assistive-technology review remains open.
 
 ## Core design
 

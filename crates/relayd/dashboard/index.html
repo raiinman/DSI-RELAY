@@ -8,21 +8,23 @@
   <script src="/app.js" defer></script>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to dashboard content</a>
   <header>
     <div><p class="eyebrow">LOCAL WORKSPACE</p><h1>RELAY</h1></div>
     <button id="refresh" type="button">Refresh</button>
   </header>
-  <main>
+  <main id="main" tabindex="-1">
     <section class="status" aria-labelledby="status-title">
       <p class="eyebrow">OVERVIEW</p>
       <h2 id="status-title">Is RELAY working?</h2>
-      <p id="status-message" role="status">Checking…</p>
+      <p id="status-message" role="status" aria-atomic="true">Checking…</p>
     </section>
     <div class="grid">
       <section class="card" aria-labelledby="health-title">
         <h2 id="health-title">Health</h2>
         <p id="health-summary">Checking…</p>
         <ul id="health-checks"></ul>
+        <p id="next-action" hidden></p>
       </section>
       <section class="card" aria-labelledby="projects-title">
         <h2 id="projects-title">Projects</h2>
@@ -32,7 +34,7 @@
     </div>
     <details>
       <summary>Advanced details</summary>
-      <pre id="details"></pre>
+      <pre id="details">Checking…</pre>
     </details>
   </main>
   <footer>Read-only local preview · Your project files stay on this computer.</footer>

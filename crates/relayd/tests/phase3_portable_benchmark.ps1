@@ -92,41 +92,43 @@ function Invoke-Relay {
     }
     if ($Keyed) { $inputObject.idempotency_key = "IDEMP-$id" }
     $inputJson = $inputObject | ConvertTo-Json -Depth 8 -Compress
-    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
-    $startInfo.FileName = $cliPath
-    $startInfo.Arguments = 'exec --stdin'
-    $startInfo.UseShellExecute = $false
-    $startInfo.CreateNoWindow = $true
-    $startInfo.StandardOutputEncoding = $utf8
-    $startInfo.StandardErrorEncoding = $utf8
-    $startInfo.RedirectStandardInput = $true
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-    $child = New-Object System.Diagnostics.Process
-    $child.StartInfo = $startInfo
-    $started = $false
+    $inputBytes = $utf8.GetBytes($inputJson + [Environment]::NewLine)
+    $ioRoot = Join-Path $ownedFull ('cli-' + [Guid]::NewGuid().ToString('N'))
+    $inputPath = $ioRoot + '.in'
+    $stdoutPath = $ioRoot + '.out'
+    $stderrPath = $ioRoot + '.err'
+    [System.IO.File]::WriteAllBytes($inputPath, $inputBytes)
+    $child = $null
     try {
-        $started = $child.Start()
-        if (-not $started) { throw 'RELAY CLI did not start' }
-        $stdout = $child.StandardOutput.ReadToEndAsync()
-        $stderr = $child.StandardError.ReadToEndAsync()
-        $inputBytes = $utf8.GetBytes($inputJson + [Environment]::NewLine)
-        $child.StandardInput.BaseStream.Write($inputBytes, 0, $inputBytes.Length)
-        $child.StandardInput.Close()
+        try {
+            $child = Start-Process -FilePath $cliPath -ArgumentList 'exec --stdin' -PassThru -WindowStyle Hidden `
+                -RedirectStandardInput $inputPath -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+        }
+        catch {
+            $script:benchmarkFailureCode = 'BENCHMARK_CLI_LAUNCH_FAILED'
+            throw
+        }
         if (-not $child.WaitForExit($TimeoutMs)) {
             $script:cliTimedOut = $true
             throw 'RELAY_CLI_TIMEOUT'
         }
+        $responseText = [System.IO.File]::ReadAllText($stdoutPath, $utf8)
+        $stderrText = [System.IO.File]::ReadAllText($stderrPath, $utf8)
         $exitCode = $child.ExitCode
-        $responseText = $stdout.GetAwaiter().GetResult()
-        $stderrText = $stderr.GetAwaiter().GetResult()
+        if ($null -eq $exitCode) {
+            # Windows PowerShell 5.1 does not expose ExitCode from a redirected Start-Process.
+            $exitCode = if ($stderrText -or -not $responseText) { 1 } else { 0 }
+        }
     }
     finally {
-        if ($started -and -not $child.HasExited) {
+        if ($child -and -not $child.HasExited) {
             try { $child.Kill() } catch { }
             $null = $child.WaitForExit(5000)
         }
-        $child.Dispose()
+        if ($child) { $child.Dispose() }
+        foreach ($path in @($inputPath, $stdoutPath, $stderrPath)) {
+            if (Test-Path -LiteralPath $path -PathType Leaf) { Remove-Item -LiteralPath $path -Force }
+        }
     }
     if ($exitCode -ne 0) {
         $script:benchmarkFailureCode = 'BENCHMARK_CLI_EXIT_NONZERO'

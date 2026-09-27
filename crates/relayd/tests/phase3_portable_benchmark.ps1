@@ -145,6 +145,13 @@ function Invoke-Relay {
                 'serialize request', 'BAD_HANDSHAKE', 'UNAUTHORIZED',
                 'PROTOCOL_INCOMPATIBLE'
             )) { Write-Host "RELAY CLI error category: $safeCategory" }
+            if ($safeCategory -eq 'INVALID_MACHINE_INPUT' -and $message.Length -le 240 -and
+                $message -match '^INVALID_MACHINE_INPUT: [\x20-\x7e]+$' -and
+                $message -notmatch '[\\/@]' -and
+                $message.IndexOf([string]$env:USERNAME, [StringComparison]::OrdinalIgnoreCase) -lt 0 -and
+                $message.IndexOf([string]$env:COMPUTERNAME, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+                Write-Host "RELAY CLI parser detail: $message"
+            }
         }
         catch { }
         throw "RELAY command $Command failed"

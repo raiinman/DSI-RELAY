@@ -271,9 +271,9 @@ pub fn load_installations(state_dir: &Path) -> Result<BTreeMap<String, Installat
             || !manifest.permissions.project_write.is_empty()
             || !manifest.permissions.credentials.is_empty()
             || !manifest.permissions.external_apps.is_empty()
-            || !manifest.relay.command_bindings.iter().any(|binding| {
-                binding.command == "adapter.dependencies.parse" && binding.command_version == 1
-            })
+            || manifest.relay.command_bindings.len() != 1
+            || manifest.relay.command_bindings[0].command != "adapter.dependencies.parse"
+            || manifest.relay.command_bindings[0].command_version != 1
         {
             return Err("parser manifest does not request exactly the granted read scope and parser operation".to_string());
         }

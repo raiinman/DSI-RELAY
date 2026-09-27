@@ -142,11 +142,9 @@ fn validate_package(
         || !manifest.permissions.project_write.is_empty()
         || !manifest.permissions.credentials.is_empty()
         || !manifest.permissions.external_apps.is_empty()
-        || !manifest
-            .relay
-            .command_bindings
-            .iter()
-            .any(|b| b.command == "adapter.dependencies.parse" && b.command_version == 1)
+        || manifest.relay.command_bindings.len() != 1
+        || manifest.relay.command_bindings[0].command != "adapter.dependencies.parse"
+        || manifest.relay.command_bindings[0].command_version != 1
     {
         return Err("PARSER_SCOPE_DENIED: package must request only this project's read scope and parser binding".into());
     }
@@ -391,6 +389,27 @@ mod tests {
                 .starts_with("PARSER_SCOPE_DENIED")
         );
         manifest["permissions"]["network"] = json!(false);
+        manifest["relay"]["command_bindings"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({
+                "command": "adapter.dependencies.parse", "command_version": 1,
+                "capability": "fixture.extra"
+            }));
+        fs::write(
+            &options.manifest_path,
+            serde_json::to_vec(&manifest).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            install_in_state_dir(&state, options.clone())
+                .unwrap_err()
+                .starts_with("PARSER_SCOPE_DENIED")
+        );
+        manifest["relay"]["command_bindings"]
+            .as_array_mut()
+            .unwrap()
+            .pop();
         manifest["artifact"]["sha256"] = json!("0".repeat(64));
         fs::write(
             &options.manifest_path,

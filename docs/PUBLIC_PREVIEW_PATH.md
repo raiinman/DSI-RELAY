@@ -10,6 +10,8 @@ Status: planning guide, 2026-09-26. No public artifact is approved or published 
 
 Neither claim requires a central hardware-tracking service. A versioned local JSON report plus an opt-in submission path is sufficient to begin collecting tier evidence. A service becomes useful only if the volume of reports makes manual review impractical, and would add privacy, security, hosting, and support obligations.
 
+After an authorized preview release, volunteers can use the public benchmark issue template. `VOLUNTEER_BENCHMARK_INTAKE.md` defines the report fields and triage rules; submitting a report remains optional and manual.
+
 ## Minimum measurement-preview artifact
 
 1. Build the Rust binaries once in release mode and package only RELAY-owned preview binaries, a bounded synthetic fixture runner, a report schema, instructions, and required third-party notices. Do not include the synthetic sandbox fixture worker as a public adapter.
@@ -18,7 +20,7 @@ Neither claim requires a central hardware-tracking service. A versioned local JS
 4. Run the package on a clean Windows account before sharing it. Verify no network access is needed, no unrelated project files are opened, no background daemon remains after the run, and removal leaves user data untouched.
 5. Publish precise limitations: synthetic indexing evidence only, no real editor integration, no supported-tier performance promise, no automatic uploads, and no production-ready installer claim.
 
-The current `crates/relayd/tests/phase3_scale_report.ps1` is an internal Rust-checkout runner. The portable benchmark at `crates/relayd/tests/phase3_portable_benchmark.ps1` uses release-built preview binaries without Cargo. A local review bundle has been assembled and verified using `release/Build-MeasurementPreview.ps1` and `release/Verify-MeasurementPreview.ps1`; its evidence is in `release/LOCAL_REVIEW_EVIDENCE.md`. The reviewed dependency notice set and bundled SQLite provenance are recorded in `release/THIRD_PARTY_NOTICE_REVIEW.md`. It is a review artifact from an evolving source tree, not an approved public download. A clean-source rebuild, clean-account test, legal review, and distribution trust/security review remain before sharing. See `PHASE3_PORTABLE_BENCHMARK_DRAFT.md`.
+The current `crates/relayd/tests/phase3_scale_report.ps1` is an internal Rust-checkout runner. The portable benchmark at `crates/relayd/tests/phase3_portable_benchmark.ps1` uses release-built preview binaries without Cargo. A clean-source local review bundle has been assembled and verified using `release/Build-MeasurementPreview.ps1` and `release/Verify-MeasurementPreview.ps1`; a fresh hosted Windows build also passed archive and contained-runner checks. Evidence is in `release/LOCAL_REVIEW_EVIDENCE.md` and `MEASUREMENT_PREVIEW_CI_PLAN.md`. The reviewed dependency notice set and bundled SQLite provenance are recorded in `release/THIRD_PARTY_NOTICE_REVIEW.md`. These are review artifacts, not approved public downloads. A clean-account test, legal review, and distribution trust/security review remain before sharing. See `PHASE3_PORTABLE_BENCHMARK_DRAFT.md`.
 
 ## Before any public binary distribution
 

@@ -77,16 +77,52 @@ pub fn write_state(
         fs::create_dir_all(parent)
             .map_err(|error| format!("create state dir: {error}"))?;
     }
-    let temp = path.with_extension("json.tmp");
+    let temp = path.with_extension(format!("{}.tmp", crate::security::random_hex(8)?));
     let bytes = serde_json::to_vec_pretty(state)
         .map_err(|error| format!("serialize host state: {error}"))?;
-    fs::write(&temp, bytes)
-        .map_err(|error| format!("write host state: {error}"))?;
-    if path.exists() {
-        let _ = fs::remove_file(path);
+    let security = crate::security::current_user_pipe_security()?;
+    let wide: Vec<u16> = temp.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let handle = unsafe {
+        CreateFileW(
+            wide.as_ptr(),
+            GENERIC_WRITE,
+            0,
+            &security.attributes,
+            CREATE_NEW,
+            FILE_ATTRIBUTE_NORMAL,
+            null_mut(),
+        )
+    };
+    if handle == INVALID_HANDLE_VALUE {
+        return Err(format!("create restricted host state failed: {}", unsafe { GetLastError() }));
     }
-    fs::rename(&temp, path)
-        .map_err(|error| format!("publish host state: {error}"))
+    let result = (|| {
+        let verified = crate::security::verify_file_security(handle, &security.sid)?;
+        if !verified.query_ok
+            || !verified.protected_dacl
+            || !verified.owner_is_current_user
+            || !verified.current_user_only
+            || !verified.current_user_full_control
+            || verified.ace_count != 1
+        {
+            return Err("restricted host state ACL verification failed".to_string());
+        }
+        let mut written = 0u32;
+        let ok = unsafe { WriteFile(handle, bytes.as_ptr(), bytes.len() as u32, &mut written, null_mut()) };
+        if ok == 0 || written as usize != bytes.len() {
+            return Err("write restricted host state failed".to_string());
+        }
+        Ok(())
+    })();
+    unsafe { CloseHandle(handle) };
+    if let Err(error) = result {
+        let _ = fs::remove_file(&temp);
+        return Err(error);
+    }
+    fs::rename(&temp, path).map_err(|error| {
+        let _ = fs::remove_file(&temp);
+        format!("publish host state: {error}")
+    })
 }
 
 pub fn clear_state(path: &Path) {
@@ -107,7 +143,7 @@ mod tests {
             std::process::id()
         ));
         let path = dir.join("host.json");
-        let state = LocalHostState {
+        let mut state = LocalHostState {
             state_format: LOCAL_HOST_STATE_FORMAT,
             pid: 1,
             pipe: r"\\.\pipe\fixture".to_string(),
@@ -129,9 +165,34 @@ mod tests {
             started_at_unix_ms: 1,
         };
         write_state(&path, &state).unwrap();
+        let file = fs::File::open(&path).unwrap();
+        let sid = crate::security::current_user_sid_string().unwrap();
+        let verified = crate::security::verify_file_security(
+            std::os::windows::io::AsRawHandle::as_raw_handle(&file),
+            &sid,
+        ).unwrap();
+        assert!(verified.protected_dacl);
+        assert!(verified.owner_is_current_user);
+        assert!(verified.current_user_only);
+        assert!(verified.current_user_full_control);
+        assert_eq!(verified.ace_count, 1);
         let restored: LocalHostState =
             serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         assert_eq!(restored.pipe, state.pipe);
+        drop(file);
+        state.auth_token = "replacement-token".to_string();
+        write_state(&path, &state).unwrap();
+        let replacement: LocalHostState =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(replacement.auth_token, state.auth_token);
+        let file = fs::File::open(&path).unwrap();
+        let verified = crate::security::verify_file_security(
+            std::os::windows::io::AsRawHandle::as_raw_handle(&file),
+            &sid,
+        ).unwrap();
+        assert!(verified.current_user_only);
+        drop(file);
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
         clear_state(&path);
         let _ = fs::remove_dir_all(dir);
     }

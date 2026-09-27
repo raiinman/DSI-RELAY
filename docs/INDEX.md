@@ -16,6 +16,7 @@ Parser health and recovery evidence is in PHASE3_TENTH_SLICE_EVIDENCE.md. One-ho
 PHASE3_PORTABLE_BENCHMARK_DRAFT.md records the local no-Cargo synthetic benchmark draft and remaining package gates.
 PUBLIC_PREVIEW_PATH.md separates a synthetic measurement preview from a public RELAY beta and lists the release controls needed before distributing binaries.
 MEASUREMENT_PREVIEW_CI_PLAN.md records the branch-only hosted Windows package check and its limits; it is not a desktop-account or hardware-tier result.
+VOLUNTEER_BENCHMARK_INTAKE.md describes optional public report submission and how to classify synthetic hardware observations.
 The current Rust release dependency and license-expression inventory is in RELEASE_DEPENDENCY_LICENSE_INVENTORY.md.
 PHASE4_RESULT_DESCRIPTION_EVIDENCE.md records the early metadata-only result lookup; Phase 4 remains open.
 PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md records the first byte-budgeted exact-fact view by result ID and its test limits.

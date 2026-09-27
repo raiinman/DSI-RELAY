@@ -11,6 +11,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 
 - Normal signed-in-user process; no Session 0 service default.
 - Windows named pipe is current-user protected and still requires a per-start application token.
+- `host.json` contains that token. Create it with an explicit protected current-user ACL, verify the kernel owner and DACL before writing token bytes, and publish it from a same-directory temporary file.
 - Protocol/version negotiation fails closed.
 - Host state distinguishes process health from Core recovery health.
 - Daemon records transport-safe diagnostics without persisting command arguments/results.

@@ -113,7 +113,7 @@ When the user requests a durable behavior change, record it here or in the relev
 
 ## Child DOX Index
 
-- `.github/AGENTS.md` — owns branch-scoped review workflows and their validation helpers.
+- `.github/AGENTS.md` — owns branch-scoped review workflows, validation helpers, and public issue intake templates.
 - `crates/AGENTS.md` — owns production Rust crates promoted from Phase 1 evidence during Phase 2 and later implementation phases.
 - `docs/AGENTS.md` — owns durable product, architecture, research, roadmap, security, UX, and operating documentation under `docs/`.
 - `release/AGENTS.md` — owns local release assembly, preview bundle contents, and package verification under `release/`.

@@ -3,7 +3,8 @@ use std::ptr::null_mut;
 use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, LocalFree, ERROR_INSUFFICIENT_BUFFER, GENERIC_ALL, HANDLE, HLOCAL};
 use windows_sys::Win32::Security::Authorization::{
     ConvertSidToStringSidW,
-    ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo, SE_KERNEL_OBJECT,
+    ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo, SE_FILE_OBJECT,
+    SE_KERNEL_OBJECT, SE_OBJECT_TYPE,
 };
 use windows_sys::Win32::Security::Cryptography::{
     BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG,
@@ -139,6 +140,18 @@ pub struct AclVerification {
 }
 
 pub fn verify_pipe_security(handle: HANDLE, expected_sid: &str) -> Result<AclVerification, String> {
+    verify_object_security(handle, SE_KERNEL_OBJECT, expected_sid)
+}
+
+pub fn verify_file_security(handle: HANDLE, expected_sid: &str) -> Result<AclVerification, String> {
+    verify_object_security(handle, SE_FILE_OBJECT, expected_sid)
+}
+
+fn verify_object_security(
+    handle: HANDLE,
+    object_type: SE_OBJECT_TYPE,
+    expected_sid: &str,
+) -> Result<AclVerification, String> {
     unsafe {
         let mut descriptor: PSECURITY_DESCRIPTOR = null_mut();
         let mut owner = null_mut();
@@ -146,7 +159,7 @@ pub fn verify_pipe_security(handle: HANDLE, expected_sid: &str) -> Result<AclVer
         let security_info = OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION;
         let status = GetSecurityInfo(
             handle,
-            SE_KERNEL_OBJECT,
+            object_type,
             security_info,
             &mut owner,
             null_mut(),

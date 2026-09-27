@@ -1,6 +1,55 @@
 use relay_contracts::LocalHostState;
 use std::fs;
+use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
+use std::ptr::null_mut;
+use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, INVALID_HANDLE_VALUE, GENERIC_WRITE};
+use windows_sys::Win32::Storage::FileSystem::{CreateFileW, WriteFile, CREATE_NEW, FILE_ATTRIBUTE_NORMAL};
+
+fn dashboard_path(dir: &Path) -> PathBuf {
+    dir.join("dashboard.json")
+}
+
+pub fn write_dashboard_url(dir: &Path, url: &str) -> Result<(), String> {
+    let path = dashboard_path(dir);
+    let temp = dir.join(format!("dashboard-{}.tmp", crate::security::random_hex(8)?));
+    let bytes = serde_json::to_vec(&serde_json::json!({ "url": url }))
+        .map_err(|error| format!("serialize dashboard state: {error}"))?;
+    let security = crate::security::current_user_pipe_security()?;
+    let wide: Vec<u16> = temp.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let handle = unsafe {
+        CreateFileW(
+            wide.as_ptr(),
+            GENERIC_WRITE,
+            0,
+            &security.attributes,
+            CREATE_NEW,
+            FILE_ATTRIBUTE_NORMAL,
+            null_mut(),
+        )
+    };
+    if handle == INVALID_HANDLE_VALUE {
+        return Err(format!("create restricted dashboard state failed: {}", unsafe { GetLastError() }));
+    }
+    let mut written = 0u32;
+    let ok = unsafe { WriteFile(handle, bytes.as_ptr(), bytes.len() as u32, &mut written, null_mut()) };
+    unsafe { CloseHandle(handle) };
+    if ok == 0 || written as usize != bytes.len() {
+        let _ = fs::remove_file(&temp);
+        return Err("write restricted dashboard state failed".to_string());
+    }
+    if path.exists() {
+        let _ = fs::remove_file(&path);
+    }
+    fs::rename(&temp, &path).map_err(|error| {
+        let _ = fs::remove_file(&temp);
+        format!("publish dashboard state: {error}")
+    })
+}
+
+pub fn clear_dashboard_url(dir: &Path) {
+    let _ = fs::remove_file(dashboard_path(dir));
+}
 
 pub fn state_dir() -> PathBuf {
     if let Some(value) = std::env::var_os("RELAY_STATE_DIR") {

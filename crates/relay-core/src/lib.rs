@@ -1,3 +1,4 @@
+pub mod context;
 pub mod diagnostics;
 pub mod indexing;
 pub mod policy;

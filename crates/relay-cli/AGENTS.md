@@ -15,6 +15,7 @@ Own the canonical RELAY command-line client.
 - Output envelopes remain versioned and parseable.
 - CLI must not maintain a second command catalog; discovery/help comes from the shared registry.
 - No dashboard-only or CLI-only business capability.
+- `relay dashboard-url` prints the daemon's current local dashboard link after confirming the host is reachable; the dashboard remains a client of the same Core commands.
 
 # Verification
 
@@ -22,6 +23,7 @@ Own the canonical RELAY command-line client.
 - malformed machine input fails without prompting.
 - incompatible protocol/version errors remain explicit.
 - daemon acceptance tests may reuse the exported client transport rather than duplicating the pipe protocol.
+- `dashboard-url` fails when the daemon or current dashboard state is unavailable.
 
 # Child DOX Index
 

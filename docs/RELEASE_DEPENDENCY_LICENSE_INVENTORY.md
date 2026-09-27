@@ -1,6 +1,6 @@
 # Rust release dependency and license inventory
 
-Status: factual inventory for the current Windows `relay.exe` and `relayd.exe` dependency graph, 2026-09-26. It does not approve distribution or select RELAY's own license.
+Status: factual inventory for the current Windows `relay.exe` and `relayd.exe` dependency graph, 2026-09-26. RELAY Core uses MIT with RAiiNMAN credit; this inventory does not approve binary distribution.
 
 ## Source and scope
 
@@ -9,7 +9,7 @@ Status: factual inventory for the current Windows `relay.exe` and `relayd.exe` d
 - The combined graph contains five workspace crates and 42 third-party crates from the crates.io registry. Thirty-seven third-party crates are reachable without a build edge; five are build-only (`cc`, `find-msvc-tools`, `pkg-config`, `shlex`, `vcpkg`). `serde_derive` is a proc macro used at build time even though Cargo represents its dependency edge as normal.
 - This is a conservative *resolved package graph*, not a scan of bytes linked into either executable. A release build, packaging manifest, license-text collection, and native-component review must be compared against it before any binary distribution. The proposed synthetic preview runner and any packaged assets are outside this Rust-crate table.
 
-The five workspace packages are `relay`, `relay-adapter`, `relay-contracts`, `relay-core`, and `relayd`, all version `0.1.0`. Their manifests currently report `MIT`; `LEGAL_LICENSING_AND_DISTRIBUTION.md` still leaves the product license decision open. That mismatch must be resolved by the owner before distribution. This inventory does not treat manifest metadata as a final licensing decision.
+The five workspace packages are `relay`, `relay-adapter`, `relay-contracts`, `relay-core`, and `relayd`, all version `0.1.0`. Their manifests report `MIT`, matching the creator's Core license selection and root `LICENSE`. Companion or third-party code retains separate obligations.
 
 ## Third-party resolved crates
 
@@ -66,7 +66,7 @@ All 42 third-party entries have a nonempty Cargo `license` field; **unknown lice
 
 Before packaging, a human release review must:
 
-1. Resolve RELAY's own license decision and reconcile the five workspace manifests with that decision. Add the selected license text and contributor/release policy as needed.
+1. Include RELAY's MIT license and RAiiNMAN credit in the exact release artifact. Define a contribution/release policy before accepting outside contributions.
 2. Collect the actual license and copyright files for the exact crate versions, preserve required notices, and decide how alternative expressions are satisfied. The slash-form metadata (`MIT/Apache-2.0`, `Unlicense/MIT`) should be checked against each crate's own files; it is reproduced here exactly as metadata, not interpreted as SPDX syntax.
 3. Review the combined `Unicode-3.0` expression for `unicode-ident`, `CC0-1.0` for `notify`, and Unlicense alternatives against the chosen notice bundle.
 4. Inspect the bundled SQLite C source and its provenance separately from the `libsqlite3-sys` wrapper's `MIT` metadata. The workspace enables `rusqlite`'s `bundled` feature, so the wrapper expression alone does not describe every shipped source component.

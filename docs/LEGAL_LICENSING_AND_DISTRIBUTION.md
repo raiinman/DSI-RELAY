@@ -147,7 +147,7 @@ The architecture should make compliance easier, but it cannot decide unsettled l
 
 ## RELAY's own license
 
-The public RELAY Core license remains an open decision.
+The creator selected MIT for RELAY Core and requested explicit credit as RAiiNMAN. The repository `LICENSE` and `NOTICE-RELAY.txt` record that choice. This does not decide the license of a future UEFN, Blender, or Krita companion. It also does not replace the third-party notice and distribution review.
 
 Selection criteria include:
 
@@ -160,7 +160,7 @@ Selection criteria include:
 - ability to ship official proprietary services or paid features if desired
 - contributor license/copyright-management model
 
-Do not select a license merely because it is popular.
+MIT was selected by the creator for public source reuse, subject to the release review above.
 
 ## Third-party dependency and license inventory
 
@@ -303,7 +303,7 @@ Examples:
 
 Before a public beta/release:
 
-- choose RELAY Core license
+- include the RELAY Core MIT license and RAiiNMAN credit in the release artifact
 - complete dependency/license inventory
 - generate required notices/attributions
 - review licenses for each first-party companion
@@ -317,7 +317,6 @@ Before a public beta/release:
 
 ## Open questions
 
-- RELAY Core license
 - SDK/adapter license
 - license for UEFN companion/toolset
 - exact Blender/Krita companion architecture

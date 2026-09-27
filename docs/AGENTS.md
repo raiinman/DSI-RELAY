@@ -66,8 +66,11 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `PHASE3_PARSER_RESOURCE_THREE_RUN_2026-09-26.json` — machine-readable three-run parser resource sample.
 - `PHASE3_PORTABLE_BENCHMARK_DRAFT.md` — local synthetic benchmark runner draft for testers without Rust/Cargo.
 - `PHASE3_CLOSURE_REVIEW.md` — active Phase 3 exit-gate review with explicit open and partial items.
+- `PHASE5_DASHBOARD_FIRST_SLICE_EVIDENCE.md` — local read-only dashboard health/project view and security-boundary evidence.
+- `PHASE4_RESULT_DESCRIPTION_EVIDENCE.md` — early metadata-only result retrieval foundation and focused verification; Phase 4 remains open.
+- `PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md` — byte-budgeted exact-fact result view, scope/privacy tests, and explicit Phase 4 limits.
 - `PUBLIC_PREVIEW_PATH.md` — scoped measurement-preview and public-beta release path, privacy-preserving report contract, and distribution gates.
-- `RELEASE_DEPENDENCY_LICENSE_INVENTORY.md` — lockfile-based Windows CLI/daemon crate versions, license expressions, and unresolved notice review.
+- `RELEASE_DEPENDENCY_LICENSE_INVENTORY.md` — lockfile-based Windows CLI/daemon crate versions and license expressions; package-level notice review is in `release/THIRD_PARTY_NOTICE_REVIEW.md`.
 - `ROADMAP.md` — staged delivery plan and milestone exit criteria.
 - `RESEARCH_PLAN.md` — academic/technical research and benchmark program.
 - `PHASE0_ADVERSARIAL_REVIEW.md` — adversarial challenge to current assumptions and required architecture changes.

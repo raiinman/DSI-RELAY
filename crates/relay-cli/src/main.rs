@@ -5,6 +5,7 @@ use relay_contracts::{
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::fs;
 use std::io::Read;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -183,7 +184,7 @@ fn execute_human(
 fn run(args: &[String]) -> Result<i32, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Err(
-            "usage: relay <status|doctor|commands|project-list|project-register|result-get|job-get|shutdown|exec>"
+            "usage: relay <status|doctor|dashboard-url|commands|project-list|project-register|result-get|job-get|shutdown|exec>"
                 .to_string(),
         );
     };
@@ -191,6 +192,23 @@ fn run(args: &[String]) -> Result<i32, String> {
     match command {
         "commands" => {
             println!("{}", registry::render_cli_catalog());
+            Ok(0)
+        }
+        "dashboard-url" => {
+            let state = load_state()?;
+            let status = client::call(&state, &make_request("system.status", json!({}), None))?;
+            if !status.ok {
+                return Err("RELAY dashboard is unavailable".to_string());
+            }
+            let path = client::state_dir().join("dashboard.json");
+            let bytes = fs::read(&path).map_err(|_| "RELAY dashboard is unavailable".to_string())?;
+            let info: Value = serde_json::from_slice(&bytes)
+                .map_err(|_| "RELAY dashboard state is invalid".to_string())?;
+            let url = info["url"].as_str().ok_or("RELAY dashboard state is invalid")?;
+            if !url.starts_with("http://127.0.0.1:") || !url.contains("/#") {
+                return Err("RELAY dashboard state is invalid".to_string());
+            }
+            println!("{url}");
             Ok(0)
         }
         "exec" if args.get(1).map(String::as_str) == Some("--stdin") => {

@@ -16,9 +16,10 @@ Own the production per-user RELAY daemon and local transport boundary.
 - Daemon records transport-safe diagnostics without persisting command arguments/results.
 - Restart must preserve Core operational state.
 - The daemon's recursive OS watcher feeds bounded file-path hints through Core and marks continuity loss stale. Startup marks persisted baselines stale before readiness; notification events never establish complete truth. Background hint hashing and recovery defer during commands with effects; read-only capability observations do not interrupt an active background scan.
-- After a quiet period, the watcher attempts one stale-project recovery while the signed-in Windows session is idle. Recovery checks user input, active RELAY commands, and the callback event epoch during enumeration, hashing, and before commit; a callback during a scan must defer that scan's commit. Recovery stops after a bounded attempt and retries after backoff. A failed watch subscription cannot restore ready state automatically.
+- After a quiet period, the watcher attempts one stale-project recovery while the signed-in Windows session is idle. Recovery checks user input, active RELAY commands, and the callback event epoch during enumeration, hashing, and before commit; a callback during a scan must defer that scan's commit. Metadata-only recovery retains a 15-second attempt limit. Required full-content verification may continue past that limit while idle and quiet so a slow project is not permanently stranded; interrupted attempts retry after backoff. A failed watch subscription cannot restore ready state automatically.
 - The daemon loads explicit digest-pinned per-project parser grants from local state at startup. Only the exact configured installed parser with a source-delivery grant receives bounded UTF-8 indexed source bytes through the sandbox. Parser dispatch waits for idle, ready project state and writes edges through Core's generation, source, and configuration guards.
 - Parser installation, quarantine, and recovery health is aggregated into live `system.status`/`system.doctor` output and fixed-code transition diagnostics without source text, paths, or project identifiers. Invalid grants fail closed for source delivery while daemon health remains inspectable. `host.json` recovery state is a startup snapshot; clients needing current health use the live commands.
+- The read-only dashboard binds to loopback with a per-start token, invokes only selected observe commands through Core, and stores its local URL in a current-user-DACL-protected `dashboard.json` while the daemon runs. CLI prints that URL through `relay dashboard-url`.
 
 # Verification
 
@@ -36,12 +37,14 @@ Own the production per-user RELAY daemon and local transport boundary.
 - Live idle recovery after hard restart detects a same-size/same-timestamp edit without a manual reconciliation command; debug-only accelerated idle timing is limited to the test fixture.
 - Live project-configuration transport test verifies versioned metadata and conflict behavior after a hard restart; parallel fixtures use distinct daemon instance names.
 - Live watcher-load tests in `tests/phase3_watcher_load.rs` cover burst uncertainty, automatic verified recovery, separate-root isolation, and a quiet four-root idle sample. Its ignored manual fixtures cover a prolonged event soak, retention of the verification requirement when a callback arrives during recovery, and foreground-write interruption followed by idle retry.
+- The watcher unit test verifies required full-content recovery remains eligible after the metadata deadline and still defers for a callback or lost idle state.
 - Repeatable five-sample scale measurements use `tests/phase3_scale_report.ps1`; record host facts and distributions without treating a single host as minimum/recommended tier certification.
 - Installed parser dispatch, Alpha/Bravo grant isolation, source reparse, target delete/restore, configuration revocation, and bad-digest rejection are covered by `tests/phase3_parser_dispatch.rs`.
 - `tests/phase3_parser_dispatch.rs` also verifies missing/malformed installation health, broker quarantine, fixed-code diagnostics, and repair/restart or source-change recovery.
 - The ignored live installed-parser resource fixture in `tests/phase3_parser_resource.rs` measures initial publication, changed-source reparse, foreground latency, idle CPU, and resident memory on one host; `tests/phase3_parser_resource_report.ps1` records repeatable samples and source fingerprints without claiming a supported hardware tier.
 - The draft portable runner in `tests/phase3_portable_benchmark.ps1` exercises a staged release daemon on another host; its smoke results are functional evidence until minimum/recommended hardware and creator-app contention are measured.
+- `src/dashboard.rs` unit tests and `tests/phase5_dashboard.rs` verify live HTTP token/origin/write rejection and parity with the named-pipe command path.
 
 # Child DOX Index
 
-- No child DOX files currently exist.
+- `dashboard/AGENTS.md` — owns static local dashboard presentation, plain-language rendering, and browser token handling.

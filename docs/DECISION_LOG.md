@@ -18,7 +18,7 @@ RELAY is not a tool for one map or project. Projects are isolated workspaces and
 
 Status: Approved
 
-Architecture, configuration, paths, documentation, and packaging decisions must be compatible with eventual public use. Public release timing and license remain undecided.
+Architecture, configuration, paths, documentation, and packaging decisions must be compatible with eventual public use. RELAY Core uses MIT; public release timing and companion licenses remain open.
 
 ## D-004 — RELAY Core owns behavior
 
@@ -633,11 +633,11 @@ Status: Approved
 
 RELAY may identify missing metadata, known conflicts, or policy drift, but does not represent automated checks as legal certification, copyright clearance, or platform approval.
 
-## D-109 — RELAY Core license selection remains open
+## D-109 — RELAY Core uses MIT with creator credit
 
 Status: Approved
 
-The Core/SDK/companion license strategy is selected only after integration boundaries, GPL companion obligations, Unreal/UEFN restrictions, contributor policy, and commercial/hosted goals are prototyped/reviewed.
+The creator selected MIT for RELAY Core and requested explicit credit as RAiiNMAN. The repository `LICENSE` and `NOTICE-RELAY.txt` carry that credit. SDK and companion licenses remain separate decisions because GPL host-plugin obligations and Unreal/UEFN distribution boundaries can differ from Core. Public binary distribution still requires third-party notices and the release review.
 
 ## D-110 — Public privacy/security claims must match tested behavior
 
@@ -1416,7 +1416,7 @@ Status: Phase 3 sixth slice accepted on a synthetic Windows restart fixture
 
 Schema 6 stores a per-project `content_verification_required` flag. An upgrade from schema 5 and every watcher continuity-loss signal mark the index stale and set the flag. Targeted hints cannot clear it. Metadata-only reconciliation is rejected while it is set; full content verification or a complete baseline rebuild restores ready. The rule prevents a same-size/same-timestamp edit during daemon downtime from being silently missed.
 
-The per-user daemon attempts one stale project after a quiet period and signed-in-session input inactivity, while no RELAY command or hint batch is active. Enumeration and content hashing can defer before commit when activity returns or a bounded attempt expires. Failed and deferred attempts back off. The Windows input signal is a conservative scheduling proxy, not proof that creator applications are free of CPU/GPU or storage pressure. Projects exceeding the attempt limit remain stale until explicit recovery or a future chunked scheduler. Supported-tier, burst, and prolonged-contention evidence is still required for Phase 3 closure.
+The per-user daemon attempts one stale project after a quiet period and signed-in-session input inactivity, while no RELAY command or hint batch is active. Enumeration and content hashing defer before commit when activity returns. The later D-172 policy keeps a 15-second limit for metadata-only recovery but lets required full-content verification finish while quiet. Failed and deferred attempts back off. The Windows input signal is a conservative scheduling proxy, not proof that creator applications are free of CPU/GPU or storage pressure. Supported-tier, burst, and prolonged-contention evidence is still required for Phase 3 closure.
 
 Evidence: `docs/PHASE3_SIXTH_SLICE_EVIDENCE.md`.
 
@@ -1452,7 +1452,7 @@ This is a synthetic local state-file installation path. Live parser health and o
 
 Status: Phase 3 live watcher-load fixture accepted on one Windows host
 
-The watcher callback advances an event epoch before queuing a notification. Background recovery checks that epoch during enumeration and hashing and after the attempt; a new callback leaves the project requiring verification even if its hint later advances a provisional generation. Read-only `observe` commands can inspect progress without cancelling recovery, while writes and analysis commands remain foreground work. A 96-file burst, one-minute event soak, callback-during-1 GiB-verification fixture, four-root quiet sample, and synthetic foreground-write interruption fixture passed. The repeated 15,000-file sample remains exploratory on one workstation; numerical supported-tier budgets, long quiet-state idle cost, creator-app interference, and recovery completion under the 15-second cap on slower tiers remain open. Evidence: `docs/PHASE3_WATCHER_LOAD_EVIDENCE.md`, `docs/PHASE3_RESOURCE_BUDGET_METHOD.md`.
+The watcher callback advances an event epoch before queuing a notification. Background recovery checks that epoch during enumeration and hashing and after the attempt; a new callback leaves the project requiring verification even if its hint later advances a provisional generation. Read-only `observe` commands can inspect progress without cancelling recovery, while writes and analysis commands remain foreground work. A 96-file burst, one-minute event soak, callback-during-1 GiB-verification fixture, four-root quiet sample, and synthetic foreground-write interruption fixture passed. The repeated 15,000-file sample remains exploratory on one workstation; numerical supported-tier budgets, long quiet-state idle cost, creator-app interference, and completion on slower tiers remain open. Evidence: `docs/PHASE3_WATCHER_LOAD_EVIDENCE.md`, `docs/PHASE3_RESOURCE_BUDGET_METHOD.md`.
 
 ## D-171 — Live parser health is bounded, and retries follow source identity
 
@@ -1461,3 +1461,15 @@ Status: Phase 3 tenth slice accepted on synthetic Windows adapter fixtures
 `system.status` and `system.doctor` expose aggregate installation, failure, quarantine, and recovery state using fixed codes and capped counts. Invalid or missing grants do not authorize source delivery, and a bad installation does not prevent the daemon from serving health commands. Bounded diagnostic events record state transitions without source text or local paths. A failed attempt is throttled only while the ready index generation and source digest remain the same; a newly indexed source can retry promptly through the same verified broker. Source and edge authority remain guarded by project configuration, generation, digest, and installed grant.
 
 The three-run installed-parser cost fixture is exploratory on one workstation, and `host.json` remains a startup snapshot rather than live health. Public installation, real adapters, supported-tier budgets, and creator-app contention remain open. Evidence: `docs/PHASE3_TENTH_SLICE_EVIDENCE.md`, `docs/PHASE3_PARSER_RESOURCE_EVIDENCE.md`.
+
+## D-172 — Required full verification may outlast the metadata recovery deadline
+
+Status: Phase 3 policy implemented on a one-host synthetic fixture
+
+The 15-second idle-attempt limit remains for metadata-only recovery. Required full-content verification may continue while the signed-in session remains idle, no RELAY foreground command is active, and no watcher callback changes the event epoch. Any such activity still defers the plan before commit. This avoids a permanent stale project solely because a full scan takes more than 15 seconds, without claiming that repeated interruptions make progress. Supported-tier completion and foreground evidence remain open. Evidence: `docs/PHASE3_WATCHER_LOAD_EVIDENCE.md`.
+
+## D-173 — The first production dashboard view is read-only and local
+
+Status: Phase 5 first slice implemented; wider dashboard acceptance remains open
+
+The production daemon serves static health and project views from a loopback listener. Browser requests carry a separate per-start token and dispatch only a fixed subset of dashboard-exposed observe commands through Core. The CLI prints the local link, while raw responses remain available under Advanced details. There is no dashboard-only business rule, write action, external asset, or telemetry call. Browser threat review, cross-user testing, accessibility, and the remaining dashboard views stay open. Evidence: `docs/PHASE5_DASHBOARD_FIRST_SLICE_EVIDENCE.md`.

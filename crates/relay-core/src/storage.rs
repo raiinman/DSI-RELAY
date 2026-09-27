@@ -158,6 +158,19 @@ pub struct ResultRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResultDescription {
+    pub id: String,
+    pub project_id: Option<String>,
+    pub kind: String,
+    pub schema_version: i64,
+    pub producer_version: String,
+    pub payload_sha256: String,
+    pub payload_bytes: i64,
+    pub trust: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobRecord {
     pub id: String,
     pub project_id: Option<String>,
@@ -1799,6 +1812,37 @@ impl RelayStorage {
             .optional()
             .map_err(|error| {
                 StorageError::sqlite("read result", error)
+            })
+    }
+
+    pub fn describe_result(
+        &self,
+        id: &str,
+    ) -> Result<Option<ResultDescription>, StorageError> {
+        self.conn
+            .query_row(
+                "SELECT id, project_id, kind, schema_version,
+                        producer_version, payload_sha256,
+                        length(CAST(payload_json AS BLOB)), trust, created_at
+                 FROM results WHERE id = ?1",
+                [id],
+                |row| {
+                    Ok(ResultDescription {
+                        id: row.get(0)?,
+                        project_id: row.get(1)?,
+                        kind: row.get(2)?,
+                        schema_version: row.get(3)?,
+                        producer_version: row.get(4)?,
+                        payload_sha256: row.get(5)?,
+                        payload_bytes: row.get(6)?,
+                        trust: row.get(7)?,
+                        created_at: row.get(8)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|error| {
+                StorageError::sqlite("describe result", error)
             })
     }
 

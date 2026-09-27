@@ -15,6 +15,8 @@ Own production RELAY Core deterministic local business logic and durable state.
 - Phase 1 schema-1 SQLite stores must migrate safely and remain readable.
 - Validation happens before business logic; incompatible command versions fail explicitly.
 - Durable result/job outputs carry provenance/trust metadata.
+- Result descriptions query stored metadata and payload byte size without loading or serializing the payload; the same project-scope rule as full result retrieval applies.
+- Compact result context preserves selected exact scalar facts under an explicit serialized byte limit, excludes path/secret-keyed and unsafe-key content, reports omissions, and retains the full result ID. It is presentation filtering, not data-egress authorization.
 - Phase 3 project baselines and change rows are project-scoped, derived state. Canonical roots stay local; machine-facing index paths are project-relative. Reconciliation treats watcher paths as hints and hashes changed candidates after authoritative metadata enumeration.
 - Schema-5 delta reads and dependency edges are bounded, project-scoped derived state. Edge replacement requires the current index generation and source content hash; source/target changes invalidate edges, and rebuild resets the delta boundary.
 - Schema-7 project configuration is separate from derived index state, versioned by format and revision, and limited to a project type plus an optional declared adapter ID/version pair. Core must not treat that declaration as installed capability or parser authority.
@@ -35,6 +37,8 @@ Own production RELAY Core deterministic local business logic and durable state.
 - Schema-5-to-6 migration and hard-restart tests preserve the verification requirement; a metadata-only commit cannot clear it. Guarded reconciliation abandons partial plans before a storage commit.
 - Schema-6-to-7 migration preserves index continuity state. Configuration tests cover revision conflict, malformed bindings, cross-project scope denial, and restart persistence.
 - Live installed-parser fixtures verify that a stale configuration guard cannot restore edges after a version change.
+- Result-description tests cover no payload/provenance exposure, UTF-8 byte size, project-scope denial, and restart persistence.
+- Result-context tests cover exact allowlisted facts, byte ceilings, deterministic ordering, unsafe path/token omission, full-payload size comparison, and project-scope denial.
 
 # Child DOX Index
 

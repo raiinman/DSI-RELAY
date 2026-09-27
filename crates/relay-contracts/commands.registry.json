@@ -368,6 +368,87 @@
       "errors": ["RESULT_NOT_FOUND", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
     },
     {
+      "id": "result.describe",
+      "version": 1,
+      "stability": "phase4",
+      "summary": "Read result identity, provenance-free metadata, and stored payload size without retrieving the payload.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["result_id"],
+        "properties": {
+          "result_id": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["id", "project_id", "kind", "schema_version", "producer_version", "payload_sha256", "payload_bytes", "trust", "created_at"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "project_id": { "type": ["string", "null"] },
+          "kind": { "type": "string" },
+          "schema_version": { "type": "integer", "minimum": 1 },
+          "producer_version": { "type": "string" },
+          "payload_sha256": { "type": "string", "minLength": 64 },
+          "payload_bytes": { "type": "integer", "minimum": 0 },
+          "trust": { "type": "string" },
+          "created_at": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["RESULT_NOT_FOUND", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "result.context",
+      "version": 1,
+      "stability": "phase4",
+      "summary": "Return allowlisted exact facts within a byte budget and a reference to the full stored result.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["result_id", "max_bytes"],
+        "properties": {
+          "result_id": { "type": "string", "minLength": 1 },
+          "max_bytes": { "type": "integer", "minimum": 512, "maximum": 16384 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["result_id", "payload_sha256", "payload_bytes", "source_trust", "full_result_command", "facts", "omitted_scalar_count", "truncated"],
+        "properties": {
+          "result_id": { "type": "string", "minLength": 1 },
+          "payload_sha256": { "type": "string", "minLength": 64 },
+          "payload_bytes": { "type": "integer", "minimum": 0 },
+          "source_trust": { "type": "string" },
+          "full_result_command": { "type": "string", "const": "result.get" },
+          "facts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["pointer", "value"],
+              "properties": {
+                "pointer": { "type": "string" },
+                "value": { "type": ["string", "number", "boolean"] }
+              },
+              "additionalProperties": false
+            }
+          },
+          "omitted_scalar_count": { "type": "integer", "minimum": 0 },
+          "truncated": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["RESULT_NOT_FOUND", "CONTEXT_BUDGET_TOO_SMALL", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
       "id": "job.checkpoint",
       "version": 1,
       "stability": "phase1",

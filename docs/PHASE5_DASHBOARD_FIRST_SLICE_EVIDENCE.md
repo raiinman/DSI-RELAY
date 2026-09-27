@@ -1,0 +1,11 @@
+# Phase 5 dashboard first slice
+
+Status: implemented as a read-only local view. Phase 5 remains open.
+
+The production `relayd` process now hosts a loopback HTTP view with no extra runtime package. `relay dashboard-url` prints a local link after checking that the daemon is reachable. The page shows overall health, doctor checks, and registered projects in plain language, with exact command results behind Advanced details. It invokes the same `system.status`, `system.doctor`, and `project.list` Core commands used by CLI clients. Browser code reads no project files or database, renders untrusted names as text, and makes no external network request.
+
+The listener uses an ephemeral loopback port and a separate random token generated for each daemon start. The token is carried in the URL fragment, removed from the visible address by browser code, and sent in a request header. The server requires the expected host and rejects a foreign Origin, missing/wrong token, unsupported content type, and commands outside its fixed read-only allowlist. Responses set no-store, no-referrer, restrictive CSP, and frame-denial headers. `dashboard.json` exists only while the daemon runs and is created with a protected current-user Windows DACL rather than relying on inherited state-directory permissions. This is a local first slice, not a completed public browser threat review or a cross-user Windows security test.
+
+Verification: dashboard unit tests exercised the live listener, wrong-token and foreign-Origin rejection, write rejection, and a real `system.status` response. A separate integration test launched the daemon and confirmed an HTTP status response alongside the named-pipe response, rejected HTTP shutdown, then checked graceful shutdown removed dashboard state. A manual local browser run showed the health and empty-project views, and `relay dashboard-url` produced the working link; the test daemon and browser tab were then closed. Full workspace tests and release build are required before accepting this slice.
+
+Open Phase 5 work includes project switching/onboarding, jobs/results, approvals, history, integrations, tests, assets, usage, pause control, progressive detail, accessibility review, and browser security review. No write or approval action is exposed by this slice.

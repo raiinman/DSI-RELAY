@@ -1,3 +1,4 @@
+mod dashboard;
 mod pipe;
 mod parser;
 mod security;
@@ -212,6 +213,23 @@ fn run() -> Result<(), String> {
         started_at_unix_ms,
     };
     state::write_state(&state_file, &state)?;
+    let mut dashboard = match dashboard::DashboardServer::start(
+        Arc::clone(&core),
+        started,
+        ipc_security.clone(),
+        parser_health.clone(),
+    ) {
+        Ok(server) => server,
+        Err(error) => {
+            state::clear_state(&state_file);
+            return Err(error);
+        }
+    };
+    if let Err(error) = state::write_dashboard_url(&state_dir, &dashboard.url()) {
+        dashboard.stop();
+        state::clear_state(&state_file);
+        return Err(error);
+    }
 
     println!(
         "{}",
@@ -246,6 +264,7 @@ fn run() -> Result<(), String> {
     while !shutdown.load(Ordering::SeqCst) {
         if let Err(error) = pipe::wait_for_client(server.raw()) {
             core.flush_diagnostics();
+            state::clear_dashboard_url(&state_dir);
             state::clear_state(&state_file);
             return Err(error);
         }
@@ -369,6 +388,8 @@ fn run() -> Result<(), String> {
     if let Some(parser) = &mut parser {
         parser.stop();
     }
+    dashboard.stop();
+    state::clear_dashboard_url(&state_dir);
     core.flush_diagnostics();
     state::clear_state(&state_file);
     Ok(())

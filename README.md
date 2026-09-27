@@ -1,12 +1,16 @@
 # DSI RELAY
 
-DSI RELAY is a planned model-independent development control and observability layer for game projects and creative toolchains.
+Created by **RAiiNMAN**. The first-party RELAY Core, daemon, CLI, and documentation are licensed under [MIT](LICENSE); see [creator credit](NOTICE-RELAY.txt).
+
+DSI RELAY is a developing model-independent control and observability layer for game projects and creative toolchains.
 
 The product exists to make AI-assisted development cheaper, more reliable, and easier to use. RELAY should do deterministic work locally, keep large results out of chat, expose a clean headless CLI, provide a plain-language dashboard, and let multiple AI clients work through the same verified project state.
 
 ## Status
 
 Phases 0–2 are complete. Phase 3 project discovery and indexing is active on `phase3/project-discovery`. The generic daemon, CLI, project index, watcher recovery, and synthetic parser dispatch are implemented and tested. The [Phase 3 closure review](docs/PHASE3_CLOSURE_REVIEW.md) remains **NOT READY** because supported hardware-tier, creator-app interference, and other operational release evidence are still open. This repository is not yet a public installer or production release.
+
+Early Phase 4 result-context and Phase 5 local dashboard work is underway. With the daemon running, `relay dashboard-url` prints a read-only local health and project link. The dashboard remains an early view, with no project actions yet.
 
 ## Core product rules
 
@@ -82,4 +86,4 @@ Start with docs/PHASE3_START_HERE.md for current development and docs/INDEX.md f
 
 ## Public-release posture
 
-Public release is a design constraint from the beginning, not a promise of immediate release. RELAY must avoid personal paths, private credentials, user-specific defaults, and single-project assumptions. Licensing, packaging, update distribution, and contribution policy remain open decisions.
+Public release is a design constraint from the beginning, not a promise of immediate release. RELAY must avoid personal paths, private credentials, user-specific defaults, and single-project assumptions. MIT and RAiiNMAN attribution are selected for the first-party Core, daemon, CLI, and documentation. Packaging, update distribution, companion licenses, and contribution policy still need release decisions.

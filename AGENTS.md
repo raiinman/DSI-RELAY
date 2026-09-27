@@ -114,4 +114,5 @@ When the user requests a durable behavior change, record it here or in the relev
 
 - `crates/AGENTS.md` — owns production Rust crates promoted from Phase 1 evidence during Phase 2 and later implementation phases.
 - `docs/AGENTS.md` — owns durable product, architecture, research, roadmap, security, UX, and operating documentation under `docs/`.
+- `release/AGENTS.md` — owns local release assembly, preview bundle contents, and package verification under `release/`.
 - `spikes/AGENTS.md` — owns Phase 1 technical spikes, benchmark harnesses/results, and prototype verification under `spikes/`.

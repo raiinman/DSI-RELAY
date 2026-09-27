@@ -765,7 +765,7 @@ mod tests {
     #[test]
     fn embedded_registry_is_valid() {
         validate_embedded_registry().expect("registry must validate");
-        assert_eq!(registry().commands.len(), 27);
+        assert_eq!(registry().commands.len(), 29);
         assert!(registry()
             .common_errors
             .iter()
@@ -879,6 +879,30 @@ mod tests {
         assert!(!commands.iter().any(|value| value["id"] == "system.shutdown"));
 
         let ai = compact_list(Some("ai"), Some("result."), 200);
-        assert_eq!(ai["commands"].as_array().unwrap().len(), 2);
+        assert_eq!(ai["commands"].as_array().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn result_context_requires_an_explicit_bounded_budget() {
+        let command = resolve_command("result.context", Some(1)).unwrap();
+        for max_bytes in [512, 16_384] {
+            validate_value(
+                &command.arguments_schema,
+                &json!({ "result_id": "RES-fixture", "max_bytes": max_bytes }),
+            )
+            .unwrap();
+        }
+        for max_bytes in [511, 16_385] {
+            assert!(validate_value(
+                &command.arguments_schema,
+                &json!({ "result_id": "RES-fixture", "max_bytes": max_bytes }),
+            )
+            .is_err());
+        }
+        assert!(validate_value(
+            &command.arguments_schema,
+            &json!({ "result_id": "RES-fixture" }),
+        )
+        .is_err());
     }
 }

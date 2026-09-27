@@ -9,7 +9,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use windows_sys::Win32::Foundation::{
     CloseHandle, FreeLibrary, GetLastError, LocalFree, ERROR_INSUFFICIENT_BUFFER,
-    FARPROC, HLOCAL, HMODULE,
+    FARPROC, HLOCAL, HMODULE, WAIT_OBJECT_0, WAIT_TIMEOUT,
 };
 use windows_sys::Win32::Security::Authorization::{
     ConvertSecurityDescriptorToStringSecurityDescriptorW,
@@ -37,7 +37,7 @@ use windows_sys::Win32::System::SystemServices::SE_GROUP_ENABLED;
 use windows_sys::Win32::System::Threading::{
     CreateProcessW, DeleteProcThreadAttributeList, GetExitCodeProcess,
     InitializeProcThreadAttributeList, ResumeThread, TerminateProcess,
-    UpdateProcThreadAttribute, LPPROC_THREAD_ATTRIBUTE_LIST,
+    UpdateProcThreadAttribute, WaitForSingleObject, LPPROC_THREAD_ATTRIBUTE_LIST,
     PROCESS_INFORMATION, STARTUPINFOEXW, CREATE_NO_WINDOW, CREATE_SUSPENDED,
     CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT,
     PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY,
@@ -48,6 +48,7 @@ const HRESULT_ALREADY_EXISTS: i32 = 0x8007_00B7u32 as i32;
 const PROC_THREAD_ATTRIBUTE_ALL_APPLICATION_PACKAGES_POLICY: usize = 0x0002_000F;
 const PROCESS_CREATION_ALL_APPLICATION_PACKAGES_OPT_OUT: u32 = 0x1;
 const WIN32K_SYSTEM_CALL_DISABLE_ALWAYS_ON: u64 = 1u64 << 28;
+const WORKER_EXIT_WAIT_MS: u32 = 1_500;
 
 #[derive(Debug, Clone)]
 pub struct StableSandboxPolicy {
@@ -779,6 +780,7 @@ pub fn run_sandboxed_worker(
         Err(error) => {
             unsafe {
                 TerminateProcess(process.hProcess, 1);
+                WaitForSingleObject(process.hProcess, WORKER_EXIT_WAIT_MS);
                 CloseHandle(process.hThread);
                 CloseHandle(process.hProcess);
             }
@@ -791,6 +793,7 @@ pub fn run_sandboxed_worker(
     if resume == u32::MAX {
         unsafe {
             TerminateProcess(process.hProcess, 1);
+            WaitForSingleObject(process.hProcess, WORKER_EXIT_WAIT_MS);
             CloseHandle(process.hThread);
             CloseHandle(process.hProcess);
         }
@@ -806,24 +809,10 @@ pub fn run_sandboxed_worker(
     let deadline = Instant::now() + Duration::from_millis(policy.timeout_ms);
     let mut exit_code = 259u32;
     let result = loop {
-        if response_path.exists() {
-            let bytes = fs::read(&response_path).map_err(|error| {
-                AdapterError::new(
-                    "STABLE_SANDBOX_RESPONSE_ERROR",
-                    format!("read stable sandbox response: {error}"),
-                )
-            })?;
-            if !bytes.is_empty() {
-                match serde_json::from_slice::<Value>(&bytes) {
-                    Ok(parsed) => break Ok(parsed),
-                    Err(error) => {
-                        break Err(AdapterError::new(
-                            "STABLE_SANDBOX_RESPONSE_INVALID",
-                            format!("worker response was not valid JSON: {error}"),
-                        ));
-                    }
-                }
-            }
+        match read_worker_response(&response_path) {
+            Ok(Some(parsed)) => break Ok(parsed),
+            Ok(None) => {}
+            Err(error) => break Err(error),
         }
 
         let exit_ok = unsafe {
@@ -838,12 +827,18 @@ pub fn run_sandboxed_worker(
             ));
         }
         if exit_code != 259 {
-            break Err(AdapterError::new(
-                "STABLE_SANDBOX_WORKER_EXITED",
-                format!(
-                    "stable AppContainer worker exited with code {exit_code} before response"
-                ),
-            ));
+            // The worker may publish its response and exit between the read
+            // above and this process-status check. Read once more after exit.
+            break match read_worker_response(&response_path) {
+                Ok(Some(parsed)) => Ok(parsed),
+                Ok(None) => Err(AdapterError::new(
+                    "STABLE_SANDBOX_WORKER_EXITED",
+                    format!(
+                        "stable AppContainer worker exited with code {exit_code} before response"
+                    ),
+                )),
+                Err(error) => Err(error),
+            };
         }
         if Instant::now() >= deadline {
             unsafe {
@@ -858,29 +853,30 @@ pub fn run_sandboxed_worker(
     };
 
 
-    if exit_code == 259 {
-        for _ in 0..100 {
-            unsafe {
-                GetExitCodeProcess(process.hProcess, &mut exit_code);
-            }
-            if exit_code != 259 {
-                break;
-            }
-            thread::sleep(Duration::from_millis(5));
-        }
-    }
-
-    if exit_code == 259 {
+    // A process handle can still report STILL_ACTIVE after TerminateProcess.
+    // Wait for the kernel to release its executable and mailbox handles before
+    // the broker removes its temporary package and mailbox paths.
+    if unsafe { WaitForSingleObject(process.hProcess, 500) } == WAIT_TIMEOUT {
         unsafe {
             TerminateProcess(process.hProcess, 0);
-            GetExitCodeProcess(process.hProcess, &mut exit_code);
         }
     }
-
+    drop(job);
+    let exit_wait = unsafe { WaitForSingleObject(process.hProcess, WORKER_EXIT_WAIT_MS) };
+    let exit_query = if exit_wait == WAIT_OBJECT_0 {
+        unsafe { GetExitCodeProcess(process.hProcess, &mut exit_code) }
+    } else {
+        0
+    };
     unsafe {
         CloseHandle(process.hProcess);
     }
-    drop(job);
+    if exit_query == 0 {
+        return Err(AdapterError::new(
+            "STABLE_SANDBOX_PROCESS_ERROR",
+            "stable AppContainer worker did not exit cleanly after termination",
+        ));
+    }
 
     let result = result?;
     drop(attributes);
@@ -903,6 +899,28 @@ pub fn run_sandboxed_worker(
         process_exit_code: exit_code,
         worker_pid: process.dwProcessId,
         result,
+    })
+}
+
+fn read_worker_response(path: &Path) -> Result<Option<Value>, AdapterError> {
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(AdapterError::new(
+                "STABLE_SANDBOX_RESPONSE_ERROR",
+                format!("read stable sandbox response: {error}"),
+            ));
+        }
+    };
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+    serde_json::from_slice(&bytes).map(Some).map_err(|error| {
+        AdapterError::new(
+            "STABLE_SANDBOX_RESPONSE_INVALID",
+            format!("worker response was not valid JSON: {error}"),
+        )
     })
 }
 

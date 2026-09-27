@@ -22,7 +22,7 @@ const BATCH_INTERVAL: Duration = Duration::from_millis(250);
 const RECOVERY_QUIET_PERIOD: Duration = Duration::from_secs(2);
 const RECOVERY_POLL_INTERVAL: Duration = Duration::from_secs(1);
 const RECOVERY_RETRY_DELAY: Duration = Duration::from_secs(30);
-const RECOVERY_ATTEMPT_LIMIT: Duration = Duration::from_secs(15);
+const METADATA_RECOVERY_ATTEMPT_LIMIT: Duration = Duration::from_secs(15);
 const RECOVERY_IDLE: Duration = Duration::from_secs(30);
 static EVENT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -243,6 +243,19 @@ fn user_idle_duration() -> Option<Duration> {
     (elapsed <= 7 * 24 * 60 * 60 * 1_000).then(|| Duration::from_millis(elapsed as u64))
 }
 
+fn recovery_may_continue(
+    verify_content: bool,
+    elapsed: Duration,
+    event_epoch_unchanged: bool,
+    session_idle: bool,
+) -> bool {
+    // Full verification must be able to finish on slower machines. Foreground
+    // work, user input, and watcher callbacks still interrupt it cooperatively.
+    (verify_content || elapsed < METADATA_RECOVERY_ATTEMPT_LIMIT)
+        && event_epoch_unchanged
+        && session_idle
+}
+
 fn recover_one_stale_project(
     core: &RelayCore,
     roots: &BTreeMap<String, PathBuf>,
@@ -282,9 +295,12 @@ fn recover_one_stale_project(
         let observed_event_epoch = event_epoch.load(Ordering::SeqCst);
         last_attempt.insert(project_id.clone(), started);
         let should_continue = || {
-            started.elapsed() < RECOVERY_ATTEMPT_LIMIT
-                && event_epoch.load(Ordering::SeqCst) == observed_event_epoch
-                && safe_to_scan()
+            recovery_may_continue(
+                state.content_verification_required,
+                started.elapsed(),
+                event_epoch.load(Ordering::SeqCst) == observed_event_epoch,
+                safe_to_scan(),
+            )
         };
         let _ = core.reconcile_index_background(
             project_id,
@@ -295,6 +311,26 @@ fn recover_one_stale_project(
             let _ = core.mark_index_stale(project_id);
         }
         break;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn full_verification_continues_after_metadata_deadline() {
+        let after_old_limit = METADATA_RECOVERY_ATTEMPT_LIMIT + Duration::from_secs(1);
+        assert!(!recovery_may_continue(false, after_old_limit, true, true));
+        assert!(recovery_may_continue(true, after_old_limit, true, true));
+        assert!(recovery_may_continue(
+            true,
+            Duration::from_secs(60 * 60),
+            true,
+            true
+        ));
+        assert!(!recovery_may_continue(true, after_old_limit, false, true));
+        assert!(!recovery_may_continue(true, after_old_limit, true, false));
     }
 }
 

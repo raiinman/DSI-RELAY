@@ -1,3 +1,4 @@
+use crate::context;
 use crate::diagnostics::{
     DiagnosticConfig, DiagnosticEvent, DiagnosticHealth,
     JsonlDiagnostics, Severity,
@@ -1109,6 +1110,12 @@ impl RelayCore {
             }
             "result.put" => self.result_put(request),
             "result.get" => self.result_get(&request.arguments, authority),
+            "result.describe" => {
+                self.result_describe(&request.arguments, authority)
+            }
+            "result.context" => {
+                self.result_context(&request.arguments, authority)
+            }
             "job.checkpoint" => self.job_checkpoint(request),
             "job.get" => self.job_get(&request.arguments, authority),
             "transaction.list" => {
@@ -2006,6 +2013,64 @@ impl RelayCore {
             )),
         }
     }
+
+    fn result_describe(
+        &self,
+        arguments: &Value,
+        authority: &ExecutionAuthority,
+    ) -> Result<Value, CoreCommandError> {
+        let id = arguments["result_id"]
+            .as_str()
+            .expect("registry validation requires result_id");
+        let description = self.with_storage(|storage| {
+            storage.describe_result(id)
+        })?;
+        match description {
+            Some(description) => {
+                authority
+                    .require_project(description.project_id.as_deref())
+                    .map_err(|error| {
+                        CoreCommandError::new(error.code, error.message)
+                    })?;
+                serde_json::to_value(description).map_err(|error| {
+                    CoreCommandError::new(
+                        "STORAGE_ERROR",
+                        format!("serialize result description: {error}"),
+                    )
+                })
+            }
+            None => Err(CoreCommandError::new(
+                "RESULT_NOT_FOUND",
+                "result not found",
+            )),
+        }
+    }
+
+    fn result_context(
+        &self,
+        arguments: &Value,
+        authority: &ExecutionAuthority,
+    ) -> Result<Value, CoreCommandError> {
+        let id = arguments["result_id"]
+            .as_str()
+            .expect("registry validation requires result_id");
+        let max_bytes = arguments["max_bytes"]
+            .as_u64()
+            .expect("registry validation requires max_bytes") as usize;
+        let result = self.with_storage(|storage| storage.get_result(id))?;
+        let result = result.ok_or_else(|| {
+            CoreCommandError::new("RESULT_NOT_FOUND", "result not found")
+        })?;
+        authority
+            .require_project(result.project_id.as_deref())
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        context::compile_result(&result, max_bytes).ok_or_else(|| {
+            CoreCommandError::new(
+                "CONTEXT_BUDGET_TOO_SMALL",
+                "the requested byte budget cannot hold the context envelope",
+            )
+        })
+    }
     fn job_checkpoint(
         &self,
         request: &CommandRequest,
@@ -2731,6 +2796,137 @@ mod tests {
             2
         );
         drop(reopened);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn result_description_omits_payload_and_enforces_project_scope() {
+        let dir = temp_dir("result-description");
+        let core = RelayCore::open(CoreConfig::new(&dir));
+        let project_id = register_project(&core);
+        let payload = json!({ "text": "é".repeat(32_768) });
+        let payload_bytes = serde_json::to_vec(&payload).unwrap().len();
+        let mut put = request(
+            "REQ-describe-put",
+            "result.put",
+            json!({
+                "project_id": project_id,
+                "kind": "TEST",
+                "payload": payload
+            }),
+        );
+        put.idempotency_key = Some("IDEMP-describe-put".to_string());
+        let stored = core.execute(put, &runtime());
+        assert!(stored.ok, "{:?}", stored.error);
+        let stored = stored.result.unwrap();
+        let result_id = stored["id"].as_str().unwrap();
+
+        let described = core.execute(
+            request(
+                "REQ-describe",
+                "result.describe",
+                json!({ "result_id": result_id }),
+            ),
+            &runtime(),
+        );
+        assert!(described.ok, "{:?}", described.error);
+        let described = described.result.unwrap();
+        assert_eq!(described["payload_sha256"], stored["payload_sha256"]);
+        assert_eq!(described["payload_bytes"], payload_bytes);
+        assert_eq!(described["project_id"], project_id);
+        assert!(described.get("payload").is_none());
+        assert!(described.get("provenance").is_none());
+        assert!(serde_json::to_vec(&described).unwrap().len() < 1_024);
+
+        let mut scoped = ExecutionAuthority::local_user("CLIENT-scoped");
+        scoped.project_ids =
+            Some(["PRJ-other".to_string()].into_iter().collect());
+        let denied = core.execute_authorized(
+            request(
+                "REQ-describe-denied",
+                "result.describe",
+                json!({ "result_id": result_id }),
+            ),
+            &runtime(),
+            &scoped,
+        );
+        assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
+
+        drop(core);
+        let reopened = RelayCore::open(CoreConfig::new(&dir));
+        let described = reopened.execute(
+            request(
+                "REQ-describe-reopened",
+                "result.describe",
+                json!({ "result_id": result_id }),
+            ),
+            &runtime(),
+        );
+        assert!(described.ok);
+        assert_eq!(described.result.unwrap()["payload_bytes"], payload_bytes);
+        drop(reopened);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn result_context_is_bounded_and_project_scoped() {
+        let dir = temp_dir("result-context");
+        let core = RelayCore::open(CoreConfig::new(&dir));
+        let project_id = register_project(&core);
+        let mut put = request(
+            "REQ-context-put",
+            "result.put",
+            json!({
+                "project_id": project_id,
+                "kind": "TEST",
+                "payload": {
+                    "result_id": "RES-exact",
+                    "failure_count": 7,
+                    "private_path": "C:\\Users\\private\\project",
+                    "api_token": "private-token",
+                    "logs": vec!["repeated narrative"; 300]
+                }
+            }),
+        );
+        put.idempotency_key = Some("IDEMP-context-put".to_string());
+        let stored = core.execute(put, &runtime());
+        assert!(stored.ok, "{:?}", stored.error);
+        let result_id = stored.result.unwrap()["id"].as_str().unwrap().to_string();
+
+        let context_request = || request(
+            "REQ-context-read",
+            "result.context",
+            json!({ "result_id": result_id, "max_bytes": 512 }),
+        );
+        let compact = core.execute(context_request(), &runtime());
+        assert!(compact.ok, "{:?}", compact.error);
+        let compact = compact.result.unwrap();
+        let serialized = serde_json::to_string(&compact).unwrap();
+        assert!(serialized.len() <= 512);
+        assert_eq!(compact["result_id"], result_id);
+        assert_eq!(compact["full_result_command"], "result.get");
+        assert!(!serialized.contains("C:\\Users"));
+        assert!(!serialized.contains("private-token"));
+        let full = core.execute(
+            request(
+                "REQ-context-full",
+                "result.get",
+                json!({ "result_id": result_id }),
+            ),
+            &runtime(),
+        );
+        assert!(full.ok);
+        assert_eq!(full.result.unwrap()["payload"]["failure_count"], 7);
+
+        let mut scoped = ExecutionAuthority::local_user("CLIENT-scoped");
+        scoped.project_ids =
+            Some(["PRJ-other".to_string()].into_iter().collect());
+        let denied = core.execute_authorized(
+            context_request(), &runtime(), &scoped,
+        );
+        assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
+
+        drop(core);
         fs::remove_dir_all(dir).unwrap();
     }
     #[test]

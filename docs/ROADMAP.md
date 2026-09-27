@@ -236,6 +236,8 @@ Exit criteria:
 
 ## Phase 4 — Context and cost engine
 
+Status: Active early foundation — `result.describe` provides a project-scoped metadata-only lookup, and `result.context` selects exact scalar facts from an authorized durable result within a requested byte budget. These are first slices; the full Context Compiler, cost benchmarks, and Phase 4 exit criteria remain open. Evidence: `PHASE4_RESULT_DESCRIPTION_EVIDENCE.md` and `PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md`.
+
 Build:
 
 - Context Compiler v1
@@ -258,6 +260,8 @@ Exit criteria:
 - token savings are reported beside local CPU/GPU/RAM/storage and human-latency costs
 
 ## Phase 5 — Dashboard
+
+Status: Active early foundation — the production daemon serves a local read-only health/project view through the same command system as the CLI. The remaining views, actions, accessibility, and security review are open. Evidence: `PHASE5_DASHBOARD_FIRST_SLICE_EVIDENCE.md`.
 
 Build first usable dashboard:
 

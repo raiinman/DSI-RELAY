@@ -1,23 +1,28 @@
 :root { color-scheme: light; font-family: system-ui, sans-serif; color: #172b2a; background: #f2f6f4; }
 * { box-sizing: border-box; }
 body { margin: 0; }
+.skip-link { position: absolute; top: -4rem; left: 1rem; z-index: 1; background: white; color: #143d39; padding: .65rem 1rem; }
+.skip-link:focus { top: 1rem; }
 header { display: flex; align-items: center; justify-content: space-between; padding: 1.25rem max(1.25rem, calc((100vw - 66rem)/2)); background: #143d39; color: white; }
 h1, h2, p { margin-top: 0; }
 h1 { margin-bottom: 0; font-size: 1.55rem; }
 h2 { font-size: 1.25rem; }
 .eyebrow { font-size: .72rem; font-weight: 800; letter-spacing: .13em; opacity: .7; margin-bottom: .4rem; }
 main { max-width: 66rem; margin: 2rem auto; padding: 0 1.25rem; }
+main:focus-visible { outline: 3px solid #146b53; outline-offset: 3px; }
 .status, .card, details { border: 1px solid #d6e2dc; border-radius: .9rem; background: white; padding: 1.5rem; box-shadow: 0 2px 16px #153d3809; }
 .status { margin-bottom: 1rem; }
 #status-message { font-size: 1.3rem; margin-bottom: 0; color: #146b53; }
 #status-message[data-state="Degraded"] { color: #a74428; }
+#status-message[data-state="Checking"] { color: #374b45; }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 ul { list-style: none; padding: 0; margin-bottom: 0; }
 li { border-top: 1px solid #e3ece7; padding: .7rem 0; }
-li small { display: block; color: #53645e; margin-top: .25rem; }
 button { background: #d7f3e5; color: #143d39; border: 0; border-radius: .5rem; padding: .65rem 1rem; font-weight: 700; cursor: pointer; }
 button:focus-visible, summary:focus-visible { outline: 3px solid #efb03c; outline-offset: 3px; }
-button:disabled { opacity: .55; cursor: wait; }
+a:focus-visible { outline: 3px solid #efb03c; outline-offset: 3px; }
+button[aria-disabled="true"] { opacity: .55; cursor: wait; }
+#next-action { margin: 1rem 0 0; font-weight: 600; }
 details { margin-top: 1rem; }
 summary { cursor: pointer; font-weight: 700; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; }

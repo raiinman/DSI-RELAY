@@ -140,10 +140,30 @@ try {
     $check = Get-Content -LiteralPath $checkPath -Raw | ConvertFrom-Json
     $stage = 'benchmark_report_read'
     $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
-    $stage = 'evidence_shape'
+    $stage = 'account_identity'
     if (-not $check.identity_matches_temporary_account -or $check.administrator_token -or
-        -not $check.nonzero_windows_session -or -not $check.profile_loaded -or
-        $report.status -ne 'passed' -or $report.runs_requested -ne 1 -or
+        -not $check.nonzero_windows_session -or -not $check.profile_loaded) {
+        throw 'Standard-account identity check failed'
+    }
+    $stage = 'benchmark_status'
+    if ($report.status -ne 'passed') {
+        $knownFailureCodes = @(
+            'BENCHMARK_CLI_LAUNCH_FAILED', 'BENCHMARK_CLI_EXIT_NONZERO',
+            'BENCHMARK_COMMAND_ERROR', 'BENCHMARK_DAEMON_EXITED',
+            'BENCHMARK_DAEMON_PIPE_ACL_REJECTED', 'BENCHMARK_DAEMON_PIPE_SECURITY_FAILED',
+            'BENCHMARK_DAEMON_DASHBOARD_LISTEN_FAILED', 'BENCHMARK_DAEMON_DASHBOARD_STATE_FAILED',
+            'BENCHMARK_DAEMON_HOST_STATE_FAILED', 'BENCHMARK_DAEMON_NOT_READY',
+            'BENCHMARK_DAEMON_LAUNCH_FAILED', 'BENCHMARK_BASELINE_FILE_COUNT',
+            'BENCHMARK_CLI_TIMEOUT', 'BENCHMARK_PREFLIGHT_FAILED',
+            'BENCHMARK_STAGE_FAILED', 'BENCHMARK_INTERRUPTED'
+        )
+        if ($report.failure_code -in $knownFailureCodes) {
+            $stage = 'benchmark_status_' + [string]$report.failure_code
+        }
+        throw 'Standard-account benchmark did not pass'
+    }
+    $stage = 'run_counts'
+    if ($report.runs_requested -ne 1 -or
         $report.runs_completed -ne 1 -or $report.file_count_per_project -ne 100 -or
         @($report.samples).Count -ne 1) {
         throw 'Standard-account evidence is incomplete'

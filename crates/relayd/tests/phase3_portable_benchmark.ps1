@@ -131,6 +131,9 @@ function Invoke-Relay {
     if ($exitCode -ne 0) {
         $script:benchmarkFailureCode = 'BENCHMARK_CLI_EXIT_NONZERO'
         Write-Host "RELAY CLI $Command exited with code $exitCode"
+        $prefixLength = [Math]::Min(4, $inputBytes.Length)
+        $prefix = if ($prefixLength -gt 0) { [BitConverter]::ToString($inputBytes, 0, $prefixLength) } else { 'EMPTY' }
+        Write-Host "RELAY CLI input length $($inputBytes.Length), first bytes $prefix"
         try {
             $cliFailure = $stderrText | ConvertFrom-Json
             $message = [string]$cliFailure.error.message

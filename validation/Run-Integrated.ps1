@@ -578,7 +578,7 @@ function Write-ReservedJson {
         $stream = New-Object System.IO.FileStream($temporary, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
         try { $stream.Write($bytes, 0, $bytes.Length) }
         finally { $stream.Dispose() }
-        [System.IO.File]::Replace($temporary, $Destination, $null)
+        [System.IO.File]::Move($temporary, $Destination, $true)
     } finally {
         if (Test-Path -LiteralPath $temporary -PathType Leaf) { Remove-Item -LiteralPath $temporary -Force }
     }
@@ -732,11 +732,20 @@ try {
                     'project.import_index' {
                         if (-not $ProjectRoot) { $status = 'untested'; $reason = 'PROJECT_ROOT_NOT_SUPPLIED'; break }
                         $null = Require-Relay 'project.import' @{ id = $ProjectId; name = 'Integrated Validation Project'; root_path = $ProjectRoot } $true
+                        Start-Sleep -Milliseconds 300
                         $script:indexMetrics = Require-Relay 'project.index.build' @{ project_id = $ProjectId } $true
                         $capabilities = Require-Relay 'project.capabilities' @{ project_id = $ProjectId }
+                        if ($capabilities.index_status -eq 'stale') {
+                            $null = Require-Relay 'project.index.reconcile' @{ project_id = $ProjectId; verify_content = $true } $true
+                            $capabilities = Require-Relay 'project.capabilities' @{ project_id = $ProjectId }
+                            Write-Warning ('INDEX_AFTER_RECONCILE_' + [string]$capabilities.index_status)
+                        }
                         $script:projectReady = ($capabilities.index_status -eq 'ready' -and $script:indexMetrics.generation -ge 1)
                         $status = if ($script:projectReady) { 'passed' } else { 'failed' }
                         $reason = if ($script:projectReady) { 'INDEX_READY' } else { 'INDEX_NOT_READY' }
+                        if (-not $script:projectReady) {
+                            Write-Warning ('INDEX_STATE_' + [string]$capabilities.index_status + '_GEN_' + [string]$script:indexMetrics.generation)
+                        }
                         $evidenceEligible = $true
                     }
                     'project.supported_host_resource' {
@@ -875,11 +884,11 @@ try {
                             project_id = $ProjectId; task_kind = 'review'; max_bytes = 8192
                             result_ids = @($script:firstResultId, $script:secondResultId)
                             approval_ids = @([string]$planRecord.approval_id)
-                            required_pointers = @(@{ result_id = $script:firstResultId; pointer = '/file_count' })
+                            required_pointers = @(@{ result_id = $script:firstResultId; pointer = '/generation' })
                             focus_terms = @('generation')
                         }
                         $hasFact = @($task.result_context.facts | Where-Object {
-                            $_.result_id -eq $script:firstResultId -and $_.pointer -eq '/file_count'
+                            $_.result_id -eq $script:firstResultId -and $_.pointer -eq '/generation'
                         }).Count -eq 1
                         $hasDecision = @($task.decision_evidence | Where-Object {
                             $_.record_id -eq $planRecord.approval_id -and $_.state -eq 'rejected' -and
@@ -1177,7 +1186,17 @@ try {
                         $null = Require-Relay 'project.import' @{
                             id = $fixtureProjectId; name = 'Integrated Direct Check Fixture'; root_path = $fixtureRoot
                         } $true
+                        Start-Sleep -Milliseconds 300
                         $baseline = Require-Relay 'project.index.build' @{ project_id = $fixtureProjectId } $true
+                        $fixtureCapabilities = Require-Relay 'project.capabilities' @{ project_id = $fixtureProjectId }
+                        if ($fixtureCapabilities.index_status -eq 'stale') {
+                            $null = Require-Relay 'project.index.reconcile' @{ project_id = $fixtureProjectId; verify_content = $true } $true
+                            $fixtureCapabilities = Require-Relay 'project.capabilities' @{ project_id = $fixtureProjectId }
+                            Write-Warning ('DIRECT_AFTER_RECONCILE_' + [string]$fixtureCapabilities.index_status)
+                            if ($fixtureCapabilities.index_status -eq 'ready') {
+                                $baseline = Require-Relay 'project.index.build' @{ project_id = $fixtureProjectId } $true
+                            }
+                        }
                         $catalog = @{
                             format_version = 1
                             checks = @(
@@ -1193,6 +1212,9 @@ try {
                         }
                         if ($initial.mode -ne 'selective' -or $initial.coverage_basis -ne 'declared_direct_paths' -or
                             @($initial.checks).Count -ne 2 -or $registered.index_generation -ne $baseline.generation) {
+                            Write-Warning ('DIRECT_PLAN_' + [string]$initial.mode + '_' + [string]$initial.fallback_reason +
+                                '_COUNT_' + [string]@($initial.checks).Count + '_REG_' + [string]$registered.index_generation +
+                                '_BASE_' + [string]$baseline.generation)
                             $status = 'failed'; $reason = 'DIRECT_BASELINE_PLAN_INVALID'; $evidenceEligible = $true; break
                         }
                         $initialRun = Require-Relay 'automation.checks.execute' @{
@@ -1204,6 +1226,7 @@ try {
                             $status = 'failed'; $reason = 'DIRECT_BASELINE_RUN_INVALID'; $evidenceEligible = $true; break
                         }
                         [System.IO.File]::WriteAllText($firstFile, 'first-v2-changed', $utf8)
+                        Start-Sleep -Milliseconds 300
                         $reconciled = Require-Relay 'project.index.reconcile' @{
                             project_id = $fixtureProjectId; verify_content = $true
                         } $true
@@ -1212,6 +1235,9 @@ try {
                         }
                         if ($reconciled.generation -le $baseline.generation -or $changed.mode -ne 'selective' -or
                             @($changed.checks).Count -ne 1 -or $changed.checks[0].check_id -ne 'check.one') {
+                            Write-Warning ('DIRECT_AFFECTED_' + [string]$changed.mode + '_' + [string]$changed.fallback_reason +
+                                '_COUNT_' + [string]@($changed.checks).Count + '_CHECK_' + [string]$changed.checks[0].check_id +
+                                '_RECON_' + [string]$reconciled.generation + '_BASE_' + [string]$baseline.generation)
                             $status = 'failed'; $reason = 'DIRECT_AFFECTED_PLAN_INVALID'; $evidenceEligible = $true; break
                         }
                         $changedRun = Require-Relay 'automation.checks.execute' @{
@@ -1274,7 +1300,7 @@ try {
                         }
                         $read = Invoke-LocalMcpRead -ToolName 'relay_result_context' -Arguments @{
                             project_id = $ProjectId; result_id = $script:firstResultId;
-                            max_bytes = 4096; required_pointers = @('/file_count')
+                            max_bytes = 4096; required_pointers = @('/generation')
                         }
                         if (-not $read.ok) {
                             $status = if ($read.attempted) { 'failed' } else { 'untested' }
@@ -1289,7 +1315,7 @@ try {
                         $matched = @($listed.result.results).Count -gt 0 -and
                             $described.result.id -eq $script:firstResultId -and
                             @($read.result.facts | Where-Object {
-                            $_.pointer -eq '/file_count' -and $_.value -eq $script:indexMetrics.file_count
+                            $_.pointer -eq '/generation' -and $_.value -eq $script:indexMetrics.generation
                         }).Count -eq 1
                         $status = if ($matched) { 'passed' } else { 'failed' }
                         $reason = if ($matched) { 'LOCAL_RESULT_CONTEXT_READ' } else { 'LOCAL_RESULT_CONTEXT_MISMATCH' }
@@ -1342,6 +1368,7 @@ try {
     Write-Output $outputFull
 } catch {
     # Preserve a machine-readable failure artifact even when orchestration fails.
+    Write-Warning ('RUNNER_EXCEPTION_TYPE_' + $_.Exception.GetType().Name)
     $completedUnixMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
     $resultIds = @{}
     foreach ($result in $script:results) { $resultIds[$result.workflow_id] = $true }
@@ -1371,8 +1398,8 @@ try {
         duration_ms = [long]($completedUnixMs - $startedUnixMs); overall_status = 'failed'
         counts = $counts; workflows = @($script:results.ToArray())
     }
-    try { Write-ReservedJson $journalFull ([ordered]@{ schema_version = 1; run_id = $runId; entries = @($script:journal.ToArray()) }) } catch { }
-    try { Write-ReservedJson $outputFull $report } catch { }
+    try { Write-ReservedJson $journalFull ([ordered]@{ schema_version = 1; run_id = $runId; entries = @($script:journal.ToArray()) }) } catch { Write-Warning ('JOURNAL_WRITE_EXCEPTION_TYPE_' + $_.Exception.GetType().Name) }
+    try { Write-ReservedJson $outputFull $report } catch { Write-Warning ('REPORT_WRITE_EXCEPTION_TYPE_' + $_.Exception.GetType().Name) }
     Write-Output $outputFull
 } finally {
     if ($script:daemon) {

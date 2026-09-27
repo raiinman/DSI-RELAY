@@ -98,11 +98,35 @@ try {
     $stage = 'secondary_logon'
     $args = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -BundleDirectory "{1}" -WorkDirectory "{2}" -ExpectedSid "{3}"' -f `
         $childScript, $stagedBundle, $workRoot, $sid
-    # The clean machine environment avoids forwarding the runner's process
-    # credentials (including artifact/runtime tokens) to the test account.
-    $child = Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') `
-        -ArgumentList $args -Credential $credential -LoadUserProfile -UseNewEnvironment -PassThru `
-        -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    # Keep the Windows user/session environment needed by secondary logon, but
+    # remove GitHub/runtime credentials and every other nonessential variable
+    # from the process environment inherited by the child. Restore the runner
+    # environment immediately after process creation.
+    $originalEnvironment = @{}
+    foreach ($entry in Get-ChildItem Env:) { $originalEnvironment[$entry.Name] = $entry.Value }
+    $safeEnvironmentNames = @(
+        'ALLUSERSPROFILE', 'APPDATA', 'COMPUTERNAME', 'ComSpec', 'HOME',
+        'HOMEDRIVE', 'HOMEPATH', 'HOMESHARE', 'LOCALAPPDATA', 'LOGONSERVER',
+        'NUMBER_OF_PROCESSORS', 'OS', 'PATH',
+        'PATHEXT', 'PROCESSOR_ARCHITECTURE', 'ProgramData', 'PSModulePath',
+        'PUBLIC', 'SESSIONNAME', 'SystemDrive', 'SystemRoot', 'TEMP', 'TMP',
+        'USERDNSDOMAIN', 'USERDOMAIN', 'USERNAME', 'USERPROFILE', 'WINDIR'
+    )
+    try {
+        foreach ($key in $originalEnvironment.Keys) {
+            if ($key -notin $safeEnvironmentNames) {
+                [Environment]::SetEnvironmentVariable($key, $null, 'Process')
+            }
+        }
+        $child = Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') `
+            -ArgumentList $args -Credential $credential -LoadUserProfile -PassThru `
+            -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    }
+    finally {
+        foreach ($key in $originalEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($key, $originalEnvironment[$key], 'Process')
+        }
+    }
     if (-not $child.WaitForExit(600000)) { throw 'Secondary-logon process timed out' }
     # Windows PowerShell 5.1 can expose a null ExitCode after redirected
     # Start-Process. The required child-produced JSON is authoritative.

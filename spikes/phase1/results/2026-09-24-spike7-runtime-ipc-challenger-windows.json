@@ -1,0 +1,255 @@
+{
+  "benchmark": "phase1-spike7-runtime-ipc-challenger-windows",
+  "recorded_at": "2026-09-25T04:52:36.375Z",
+  "decision_informed": "Whether the provisional Node per-user host should remain the runtime/IPC direction or whether a narrow Rust challenger materially improves footprint and explicit Windows IPC security enough to justify deeper porting.",
+  "hypothesis": "A synchronous Rust host using an explicit current-user named-pipe DACL can materially reduce idle memory/startup and close the IPC ACL gap without requiring an async runtime, while preserving protocol interoperability and embedded-dashboard feasibility.",
+  "runtime": {
+    "os": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "arch": "x64"
+    },
+    "node": "v24.19.0",
+    "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+    "cargo": "cargo 1.97.0 (c980f4866 2026-06-30)",
+    "cpu_model": "AMD Ryzen 7 5800X3D 8-Core Processor",
+    "logical_cpu_count": 16,
+    "total_memory_bytes": 51437408256
+  },
+  "build_and_package": {
+    "node": {
+      "interpreted_source_no_compile_step": true,
+      "declared_npm_runtime_dependencies": 0,
+      "node_executable_bytes": 92825416
+    },
+    "rust": {
+      "clean_command_elapsed_ms": 493.359,
+      "clean_release_build_ms": 12728.143,
+      "incremental_release_build_ms": 233.011,
+      "direct_dependency_count": 3,
+      "resolved_package_count_including_root": 14,
+      "release_binary_bytes": 438272
+    },
+    "source_metrics": {
+      "node_selected_host_path": {
+        "files": 8,
+        "lines": 556,
+        "bytes": 19006,
+        "unsafe_mentions": 0
+      },
+      "rust_challenger_src": {
+        "files": 7,
+        "lines": 1420,
+        "bytes": 47510,
+        "unsafe_mentions": 21
+      }
+    }
+  },
+  "startup": {
+    "node": {
+      "first_run_ms": 111.127,
+      "repeated": {
+        "n": 12,
+        "min_ms": 86.65,
+        "p50_ms": 91.34,
+        "p95_ms": 111.127,
+        "p99_ms": 111.127,
+        "max_ms": 111.127,
+        "mean_ms": 96.762
+      },
+      "graceful_state_cleanup_all_runs": true
+    },
+    "rust": {
+      "first_run_ms": 73.958,
+      "repeated": {
+        "n": 12,
+        "min_ms": 26.722,
+        "p50_ms": 29.991,
+        "p95_ms": 73.958,
+        "p99_ms": 73.958,
+        "max_ms": 73.958,
+        "mean_ms": 33.481
+      },
+      "graceful_state_cleanup_all_runs": true
+    }
+  },
+  "steady_state": {
+    "node": {
+      "startup_to_state_ms": 86.054,
+      "direct_status": {
+        "n": 500,
+        "min_ms": 0.171,
+        "p50_ms": 0.284,
+        "p95_ms": 0.506,
+        "p99_ms": 0.803,
+        "max_ms": 2.074,
+        "mean_ms": 0.315
+      },
+      "cli_process_status": {
+        "n": 30,
+        "min_ms": 138.957,
+        "p50_ms": 141.296,
+        "p95_ms": 161.066,
+        "p99_ms": 184.19,
+        "max_ms": 184.19,
+        "mean_ms": 145.625
+      },
+      "idle": {
+        "sample_ms": 5000,
+        "cpu_ms": 0,
+        "rss_bytes": 119095296,
+        "private_bytes": 158789632,
+        "rss_delta_bytes": -3964928
+      },
+      "kernel_ipc_security": null,
+      "doctor_explicit_dacl_check": null,
+      "external_acl_provider_probe": {
+        "query_ok": false,
+        "error_hresult": -2146233079
+      },
+      "wrong_auth_rejected": true,
+      "incompatible_protocol_rejected": true
+    },
+    "rust": {
+      "startup_to_state_ms": 32.312,
+      "direct_status": {
+        "n": 500,
+        "min_ms": 0.198,
+        "p50_ms": 0.265,
+        "p95_ms": 0.359,
+        "p99_ms": 0.641,
+        "max_ms": 0.802,
+        "mean_ms": 0.278
+      },
+      "cli_process_status": {
+        "n": 30,
+        "min_ms": 20.305,
+        "p50_ms": 21.476,
+        "p95_ms": 22.874,
+        "p99_ms": 24.66,
+        "max_ms": 24.66,
+        "mean_ms": 21.446
+      },
+      "idle": {
+        "sample_ms": 5000,
+        "cpu_ms": 0,
+        "rss_bytes": 6529024,
+        "private_bytes": 983040,
+        "rss_delta_bytes": 0
+      },
+      "kernel_ipc_security": {
+        "acl_ace_count": 1,
+        "auth_token": true,
+        "explicit_dacl": true,
+        "kernel_acl_verified": true,
+        "owner_current_user": true,
+        "scope": "current_user",
+        "transport": "windows_named_pipe"
+      },
+      "doctor_explicit_dacl_check": {
+        "detail": "Windows GetSecurityInfo verified a protected current-user-only DACL with 1 ACE.",
+        "id": "ipc.explicit_dacl",
+        "status": "pass"
+      },
+      "external_acl_provider_probe": {
+        "query_ok": false,
+        "error_hresult": -2146233087
+      },
+      "wrong_auth_rejected": true,
+      "incompatible_protocol_rejected": true
+    }
+  },
+  "dashboard_embedded": {
+    "node": {
+      "startup_to_state_ms": 119.547,
+      "http_status": {
+        "n": 200,
+        "min_ms": 0.633,
+        "p50_ms": 0.748,
+        "p95_ms": 1.016,
+        "p99_ms": 1.193,
+        "max_ms": 1.528,
+        "mean_ms": 0.785
+      },
+      "idle": {
+        "sample_ms": 5000,
+        "cpu_ms": 0,
+        "rss_bytes": 127373312,
+        "private_bytes": 171225088,
+        "rss_delta_bytes": 0
+      },
+      "same_process_as_host": true
+    },
+    "rust": {
+      "startup_to_state_ms": 33.319,
+      "http_status": {
+        "n": 200,
+        "min_ms": 0.466,
+        "p50_ms": 0.555,
+        "p95_ms": 0.901,
+        "p99_ms": 1.268,
+        "max_ms": 1.811,
+        "mean_ms": 0.606
+      },
+      "idle": {
+        "sample_ms": 5000,
+        "cpu_ms": 0,
+        "rss_bytes": 7036928,
+        "private_bytes": 1183744,
+        "rss_delta_bytes": 0
+      },
+      "same_process_as_host": true
+    }
+  },
+  "hard_kill_restart": {
+    "node": {
+      "original_pid_replaced": true,
+      "stale_state_present_after_hard_kill": true,
+      "replacement_state_ready_ms": 81.895,
+      "post_restart_status_ok": true
+    },
+    "rust": {
+      "original_pid_replaced": true,
+      "stale_state_present_after_hard_kill": true,
+      "replacement_state_ready_ms": 27.251,
+      "post_restart_status_ok": true
+    }
+  },
+  "protocol_interop": {
+    "node_cli_to_rust_host": {
+      "exit_code": 0,
+      "ok": true
+    },
+    "rust_cli_to_node_host": {
+      "exit_code": 0,
+      "ok": true
+    }
+  },
+  "comparisons": {
+    "idle_rss_reduction_rust_vs_node": 0.945178,
+    "embedded_dashboard_idle_rss_reduction_rust_vs_node": 0.944754,
+    "direct_status_p50_ratio_rust_to_node": 0.9331,
+    "cli_status_p50_ratio_rust_to_node": 0.152
+  },
+  "pass_fail": {
+    "rust_kernel_current_user_acl_verified": true,
+    "rust_wrong_token_fails_closed": true,
+    "rust_incompatible_protocol_fails_closed": true,
+    "node_wrong_token_fails_closed": true,
+    "node_incompatible_protocol_fails_closed": true,
+    "node_cli_can_use_rust_host": true,
+    "rust_cli_can_use_node_host": true,
+    "rust_hard_kill_restart_recovers": true,
+    "node_hard_kill_restart_recovers": true,
+    "rust_idle_rss_lower_than_node": true,
+    "rust_embedded_dashboard_rss_lower_than_node": true
+  },
+  "limitations": [
+    "The Rust challenger intentionally does not port SQLite, evidence storage, indexing, background jobs, or adapter workers. Its memory advantage is a host/runtime result, not a complete-product memory forecast.",
+    "The current Node candidate is an integrated Phase 1 prototype with storage and more commands loaded; startup and RSS comparisons therefore include functionality Rust has not yet earned permission to port.",
+    "The Rust challenger uses synchronous blocking named-pipe I/O and a small thread-per-dashboard-connection server. Concurrency/scalability beyond the narrow local control-plane workload is not yet approved.",
+    "The Rust host now calls Windows GetSecurityInfo on the created named-pipe handle and fails startup unless the kernel descriptor is protected, owned by the current user, and contains exactly one full-control ACE for that user. PowerShell Get-Acl proved unreliable for idle named-pipe paths and is retained only as a best-effort external observation. Node/libuv ACL state remains unverified rather than being classified as permissive.",
+    "Build/package evidence does not yet include signed installer size, update mechanism, crash-symbol handling, or third-party license bundling.",
+    "Only one high-end Windows workstation was benchmarked."
+  ]
+}

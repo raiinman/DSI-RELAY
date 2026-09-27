@@ -1,0 +1,367 @@
+{
+  "benchmark": "phase1-spike8-rust-storage-parity-windows",
+  "recorded_at": "2026-09-25T05:30:31.015Z",
+  "decision_informed": "Whether Rust preserves the proven SQLite operational-state contracts and enough of its Spike 7 footprint advantage to remain the preferred runtime candidate.",
+  "hypothesis": "Bundled synchronous SQLite can reproduce Node's schema-1 durability/recovery contract in Rust while keeping materially lower resident memory, at the cost of a larger binary/dependency/build surface.",
+  "runtime": {
+    "os": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "arch": "x64"
+    },
+    "node": "v24.19.0",
+    "node_sqlite": "3.53.3",
+    "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+    "cargo": "cargo 1.97.0 (c980f4866 2026-06-30)",
+    "rust_bundled_sqlite": "3.53.2",
+    "cpu_model": "AMD Ryzen 7 5800X3D 8-Core Processor",
+    "logical_cpu_count": 16,
+    "total_memory_bytes": 51437408256
+  },
+  "storage_contract": {
+    "engine": "SQLite",
+    "journal_mode": "WAL",
+    "synchronous": "FULL",
+    "foreign_keys": true,
+    "busy_timeout_ms": 3000,
+    "schema_version": 1,
+    "payload_model": "compact JSON result rows; heavyweight evidence intentionally excluded"
+  },
+  "build_and_dependency_economics": {
+    "spike7_baseline": {
+      "direct_dependency_count": 3,
+      "resolved_package_count_including_root": 14,
+      "release_binary_bytes": 438272,
+      "clean_release_build_ms": 12728.143
+    },
+    "spike8_storage_build": {
+      "clean_command_ms": 243.574,
+      "clean_release_build_ms": 32012.97,
+      "incremental_release_build_ms": 264.151,
+      "direct_dependencies": [
+        "rusqlite",
+        "serde",
+        "serde_json",
+        "sha2",
+        "windows-sys"
+      ],
+      "direct_dependency_count": 5,
+      "resolved_package_count_including_root": 34,
+      "release_binary_bytes": 2153472,
+      "selected_dependency_licenses": {
+        "rusqlite": {
+          "version": "0.40.2",
+          "license": "MIT",
+          "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        "libsqlite3-sys": {
+          "version": "0.38.2",
+          "license": "MIT",
+          "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        "sha2": {
+          "version": "0.11.0",
+          "license": "MIT OR Apache-2.0",
+          "source": "registry+https://github.com/rust-lang/crates.io-index"
+        }
+      }
+    }
+  },
+  "workload": {
+    "projects": 1,
+    "result_writes": 300,
+    "result_reads": 600,
+    "checkpoint_updates": 100,
+    "integrity_checks": 20,
+    "approximate_payload_json_bytes": 4057
+  },
+  "measurements": {
+    "node": {
+      "startup_initial_ms": 87.836,
+      "restart_startup_ms": 90.713,
+      "sqlite_version": "3.53.3",
+      "schema_version": 1,
+      "result_put_round_trip": {
+        "n": 300,
+        "min_ms": 0.818,
+        "p50_ms": 1.031,
+        "p95_ms": 1.434,
+        "p99_ms": 2.037,
+        "max_ms": 4.265,
+        "mean_ms": 1.085
+      },
+      "result_get_round_trip": {
+        "n": 600,
+        "min_ms": 0.251,
+        "p50_ms": 0.36,
+        "p95_ms": 0.603,
+        "p99_ms": 1.333,
+        "max_ms": 1.851,
+        "mean_ms": 0.401
+      },
+      "checkpoint_round_trip": {
+        "n": 100,
+        "min_ms": 0.693,
+        "p50_ms": 0.794,
+        "p95_ms": 1.054,
+        "p99_ms": 1.198,
+        "max_ms": 1.224,
+        "mean_ms": 0.822
+      },
+      "quick_check_round_trip": {
+        "n": 20,
+        "min_ms": 0.351,
+        "p50_ms": 0.382,
+        "p95_ms": 0.499,
+        "p99_ms": 0.5,
+        "max_ms": 0.5,
+        "mean_ms": 0.391
+      },
+      "files_before_hard_kill": {
+        "db_bytes": 933888,
+        "wal_bytes": 4136512,
+        "shm_bytes": 32768
+      },
+      "files_after_clean_close": {
+        "db_bytes": 1462272,
+        "wal_bytes": 0,
+        "shm_bytes": 0
+      },
+      "host_after_work": {
+        "rss_bytes": 131301376,
+        "private_bytes": 172609536,
+        "cpu_ms": 468.75,
+        "handle_count": 355,
+        "thread_count": 28
+      },
+      "host_after_restart": {
+        "rss_bytes": 120496128,
+        "private_bytes": 159240192,
+        "cpu_ms": 140.625,
+        "handle_count": 220,
+        "thread_count": 28
+      },
+      "idle_after_restart": {
+        "sample_ms": 5000,
+        "cpu_ms": 0,
+        "rss_bytes": 120500224,
+        "private_bytes": 159240192,
+        "rss_delta_bytes": 0,
+        "handle_count": 213,
+        "thread_count": 28
+      },
+      "pass_fail": {
+        "project_registry": true,
+        "durable_result_after_hard_kill": true,
+        "durable_checkpoint_after_hard_kill": true,
+        "project_list_after_hard_kill": true,
+        "integrity_after_hard_kill": true,
+        "schema_version": true
+      }
+    },
+    "rust": {
+      "startup_initial_ms": 46.915,
+      "restart_startup_ms": 47.205,
+      "sqlite_version": "3.53.2",
+      "schema_version": 1,
+      "result_put_round_trip": {
+        "n": 300,
+        "min_ms": 0.785,
+        "p50_ms": 1.002,
+        "p95_ms": 1.358,
+        "p99_ms": 2.094,
+        "max_ms": 5.331,
+        "mean_ms": 1.056
+      },
+      "result_get_round_trip": {
+        "n": 600,
+        "min_ms": 0.285,
+        "p50_ms": 0.343,
+        "p95_ms": 0.479,
+        "p99_ms": 0.671,
+        "max_ms": 2.743,
+        "mean_ms": 0.374
+      },
+      "checkpoint_round_trip": {
+        "n": 100,
+        "min_ms": 0.734,
+        "p50_ms": 1.563,
+        "p95_ms": 2.874,
+        "p99_ms": 3.814,
+        "max_ms": 3.984,
+        "mean_ms": 1.69
+      },
+      "quick_check_round_trip": {
+        "n": 20,
+        "min_ms": 0.328,
+        "p50_ms": 0.363,
+        "p95_ms": 0.424,
+        "p99_ms": 0.488,
+        "max_ms": 0.488,
+        "mean_ms": 0.371
+      },
+      "files_before_hard_kill": {
+        "db_bytes": 933888,
+        "wal_bytes": 4128272,
+        "shm_bytes": 32768
+      },
+      "files_after_clean_close": {
+        "db_bytes": 1462272,
+        "wal_bytes": 0,
+        "shm_bytes": 0
+      },
+      "host_after_work": {
+        "rss_bytes": 10231808,
+        "private_bytes": 3788800,
+        "cpu_ms": 312.5,
+        "handle_count": 108,
+        "thread_count": 4
+      },
+      "host_after_restart": {
+        "rss_bytes": 9367552,
+        "private_bytes": 2838528,
+        "cpu_ms": 46.875,
+        "handle_count": 107,
+        "thread_count": 4
+      },
+      "idle_after_restart": {
+        "sample_ms": 5000,
+        "cpu_ms": 0,
+        "rss_bytes": 9367552,
+        "private_bytes": 2838528,
+        "rss_delta_bytes": 0,
+        "handle_count": 107,
+        "thread_count": 4
+      },
+      "pass_fail": {
+        "project_registry": true,
+        "durable_result_after_hard_kill": true,
+        "durable_checkpoint_after_hard_kill": true,
+        "project_list_after_hard_kill": true,
+        "integrity_after_hard_kill": true,
+        "schema_version": true
+      }
+    }
+  },
+  "failure_recovery": {
+    "corrupted_store": {
+      "node": {
+        "recovery_state": "Degraded",
+        "status_recovery_state": "Degraded",
+        "doctor_healthy": false,
+        "write_ok": false,
+        "write_error_code": "STORAGE_UNAVAILABLE",
+        "original_bytes_preserved": true
+      },
+      "rust": {
+        "recovery_state": "Degraded",
+        "status_recovery_state": "Degraded",
+        "doctor_healthy": false,
+        "write_ok": false,
+        "write_error_code": "STORAGE_UNAVAILABLE",
+        "original_bytes_preserved": true
+      }
+    },
+    "future_schema": {
+      "node": {
+        "recovery_state": "Degraded",
+        "status_recovery_state": "Degraded",
+        "write_ok": false,
+        "write_error_code": "STORAGE_UNAVAILABLE",
+        "schema_version_preserved": 999
+      },
+      "rust": {
+        "recovery_state": "Degraded",
+        "status_recovery_state": "Degraded",
+        "write_ok": false,
+        "write_error_code": "STORAGE_UNAVAILABLE",
+        "schema_version_preserved": 999
+      }
+    }
+  },
+  "database_interoperability": {
+    "node_writes_rust_reads": {
+      "writer": {
+        "project_id": "PRJ-cross-runtime",
+        "result_id": "RES-91ae8c3d-3593-414d-a0e8-7e7357740658",
+        "result_sha256": "4a7d555e9d7abd3a91d03bdafa38496dec8491a6d37c98ea881c5ba24bd10e7c",
+        "result_producer_version": "0.1.0-spike2-node",
+        "job_id": "JOB-5f55c5aa-72c4-444a-961f-a05abca62124",
+        "sqlite_version": "3.53.3"
+      },
+      "reader": {
+        "result_ok": true,
+        "result_payload_writer": "node",
+        "result_exact_number": 73,
+        "result_sha256_preserved": true,
+        "producer_version_preserved": true,
+        "job_ok": true,
+        "checkpoint_writer": "node",
+        "checkpoint_cursor": 17,
+        "project_count": 1,
+        "project_id_preserved": true,
+        "integrity_ok": true,
+        "schema_version": 1,
+        "reader_sqlite_version": "3.53.2"
+      },
+      "pass": true
+    },
+    "rust_writes_node_reads": {
+      "writer": {
+        "project_id": "PRJ-cross-runtime",
+        "result_id": "RES-af71303a113131c899129cb796a0d0c6",
+        "result_sha256": "60266f4aef12a2096ebc333eb4d035ae4418ebe8f8839290e4c7b1cceb13ac55",
+        "result_producer_version": "0.1.0-phase1-rust",
+        "job_id": "JOB-85949c0174a6f6c7c34c72c1d33c0873",
+        "sqlite_version": "3.53.2"
+      },
+      "reader": {
+        "result_ok": true,
+        "result_payload_writer": "rust",
+        "result_exact_number": 73,
+        "result_sha256_preserved": true,
+        "producer_version_preserved": true,
+        "job_ok": true,
+        "checkpoint_writer": "rust",
+        "checkpoint_cursor": 17,
+        "project_count": 1,
+        "project_id_preserved": true,
+        "integrity_ok": true,
+        "schema_version": 1,
+        "reader_sqlite_version": "3.53.3"
+      },
+      "pass": true
+    }
+  },
+  "comparisons": {
+    "post_storage_idle_rss_reduction_rust_vs_node": 0.922261,
+    "result_put_p50_ratio_rust_to_node": 0.971872,
+    "result_get_p50_ratio_rust_to_node": 0.952778,
+    "checkpoint_p50_ratio_rust_to_node": 1.968514,
+    "quick_check_p50_ratio_rust_to_node": 0.950262,
+    "rust_release_binary_growth_ratio_from_spike7": 3.913551,
+    "rust_resolved_package_growth": 20
+  },
+  "pass_fail": {
+    "node_workload_contracts": true,
+    "rust_workload_contracts": true,
+    "node_corrupt_store_degrades_and_blocks_writes": true,
+    "rust_corrupt_store_degrades_and_blocks_writes": true,
+    "node_future_schema_degrades_without_downgrade": true,
+    "rust_future_schema_degrades_without_downgrade": true,
+    "node_database_readable_by_rust": true,
+    "rust_database_readable_by_node": true,
+    "rust_storage_memory_advantage_survives": true,
+    "rust_storage_idle_cpu_near_zero": true,
+    "both_schema_version_one": true
+  },
+  "limitations": [
+    "Single high-end Windows workstation and local NVMe-class storage only; synced/network-backed project state is not evaluated.",
+    "The workload is single-host/single-writer. Concurrent readers/writers, long-reader WAL checkpoint behavior, VACUUM, and maintenance interruption remain open.",
+    "Disk-full injection, backup/restore, and interrupted future migrations are not covered by this narrow schema-1 parity spike.",
+    "SQLite holds operational metadata and compact result JSON only; heavyweight evidence remains outside the database by the Spike 3 decision.",
+    "Rust uses rusqlite with default features disabled and bundled SQLite enabled. This increases the release/build dependency surface and statically compiles SQLite C code into the candidate.",
+    "Selected dependency license metadata is captured from Cargo metadata, but final installer notice generation and release-license auditing remain packaging gates.",
+    "Cross-runtime compatibility proves schema-1 database exchange in both directions; it does not approve arbitrary mixed-version rolling upgrades."
+  ]
+}

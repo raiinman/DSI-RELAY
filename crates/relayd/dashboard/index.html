@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>RELAY</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header>
+    <div><p class="eyebrow">LOCAL WORKSPACE</p><h1>RELAY</h1></div>
+    <button id="refresh" type="button">Refresh</button>
+  </header>
+  <main>
+    <section class="status" aria-labelledby="status-title">
+      <p class="eyebrow">OVERVIEW</p>
+      <h2 id="status-title">Is RELAY working?</h2>
+      <p id="status-message" role="status">Checking…</p>
+    </section>
+    <div class="grid">
+      <section class="card" aria-labelledby="health-title">
+        <h2 id="health-title">Health</h2>
+        <p id="health-summary">Checking…</p>
+        <ul id="health-checks"></ul>
+      </section>
+      <section class="card" aria-labelledby="projects-title">
+        <h2 id="projects-title">Projects</h2>
+        <p id="project-count">Checking…</p>
+        <ul id="projects"></ul>
+      </section>
+    </div>
+    <details>
+      <summary>Advanced details</summary>
+      <pre id="details"></pre>
+    </details>
+  </main>
+  <footer>Read-only local preview · Your project files stay on this computer.</footer>
+</body>
+</html>

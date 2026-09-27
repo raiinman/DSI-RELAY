@@ -1,0 +1,223 @@
+{
+  "benchmark": "phase1-spike11-windows-adapter-sandbox",
+  "recorded_at": "2026-09-25T08:39:27.547Z",
+  "decision_informed": "Which Windows OS-enforced capability/egress boundary should RELAY use for synthetic untrusted adapter workers after Spike 10 established the broker/Job Object foundation.",
+  "hypothesis": "Windows AppContainer/process sandboxing with explicit filesystem grants, default-deny network, broker-allowlisted capabilities, a sanitized environment, and outer Job Object limits can strongly restrict synthetic adapter workers while preserving a narrow mailbox data path.",
+  "runtime": {
+    "os": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "arch": "x64"
+    },
+    "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+    "cargo": "cargo 1.97.0 (c980f4866 2026-06-30)",
+    "cpu_model": "AMD Ryzen 7 5800X3D 8-Core Processor",
+    "logical_cpu_count": 16,
+    "total_memory_bytes": 51437408256,
+    "processmodel_dll": {
+      "version": "10.0.26100.9444 (WinBuild.160101.0800)",
+      "bytes": 315392
+    }
+  },
+  "selected_boundary": {
+    "backend": "Experimental_CreateProcessInSandbox from processmodel.dll on the measured Windows fixture",
+    "sandbox_spec_version": "0.1.0",
+    "app_container": true,
+    "filesystem": {
+      "mailbox": "explicit read/write grant",
+      "worker_directory": "explicit read-only grant",
+      "outside_grants": "default deny"
+    },
+    "network": {
+      "default": "deny",
+      "granted": "broker allowlist + internetClient token capability + SandboxSpec egress default-allow"
+    },
+    "environment": "custom Unicode environment block; no inherited handles; synthetic parent secret and USERPROFILE omitted",
+    "process": {
+      "outer_job_active_process_limit": 1,
+      "outer_job_memory_limit_bytes": 33554432,
+      "outer_job_kill_on_close": true
+    },
+    "fallback": "fail closed; never silently launch unrestricted"
+  },
+  "measurements": {
+    "api_available": true,
+    "deny_launch": {
+      "max_ms": 60.3623,
+      "mean_ms": 32.31075333333334,
+      "min_ms": 27.5654,
+      "n": 30,
+      "p50_ms": 30.037000000000003,
+      "p95_ms": 53.1485,
+      "p99_ms": 60.3623
+    },
+    "deny_total": {
+      "max_ms": 110.5791,
+      "mean_ms": 68.09588666666666,
+      "min_ms": 59.7979,
+      "n": 30,
+      "p50_ms": 63.200199999999995,
+      "p95_ms": 108.50880000000001,
+      "p99_ms": 110.5791
+    },
+    "unsandboxed_spike10_invocation_p50_ms": 7.424,
+    "sandbox_overhead_p50_ms": 55.776,
+    "sandbox_vs_unsandboxed_p50_ratio": 8.513,
+    "deny_result": {
+      "allowed_read_ok": true,
+      "allowed_write_ok": true,
+      "blocked_read_ok": false,
+      "blocked_write_ok": false,
+      "capability_count": 1,
+      "child_process_created": false,
+      "child_process_error": 1816,
+      "environment_keys": [
+        "APPDATA",
+        "LOCALAPPDATA",
+        "NUMBER_OF_PROCESSORS",
+        "PATHEXT",
+        "PROCESSOR_ARCHITECTURE",
+        "Path",
+        "ProgramFiles",
+        "RELAY_SANDBOX_MARKER",
+        "SystemDrive",
+        "SystemRoot",
+        "TEMP",
+        "TMP",
+        "USERDOMAIN",
+        "USERNAME",
+        "WINDIR"
+      ],
+      "is_app_container": true,
+      "network_connect_ok": false,
+      "network_error_code": 10013,
+      "parent_secret_visible": false,
+      "pid": 25932,
+      "read_only_write_ok": false,
+      "user_profile_visible": false
+    },
+    "job_limits": {
+      "active_process_limit": 1,
+      "kill_on_close": true,
+      "process_memory_limit_bytes": 33554432
+    },
+    "host_network_baseline": true,
+    "network_grant": {
+      "job_limits": {
+        "active_process_limit": 1,
+        "kill_on_close": true,
+        "process_memory_limit_bytes": 33554432
+      },
+      "result": {
+        "allowed_read_ok": true,
+        "allowed_write_ok": true,
+        "blocked_read_ok": false,
+        "blocked_write_ok": false,
+        "capability_count": 2,
+        "child_process_created": false,
+        "child_process_error": 1816,
+        "environment_keys": [
+          "APPDATA",
+          "LOCALAPPDATA",
+          "NUMBER_OF_PROCESSORS",
+          "PATHEXT",
+          "PROCESSOR_ARCHITECTURE",
+          "Path",
+          "ProgramFiles",
+          "RELAY_SANDBOX_MARKER",
+          "SystemDrive",
+          "SystemRoot",
+          "TEMP",
+          "TMP",
+          "USERDOMAIN",
+          "USERNAME",
+          "WINDIR"
+        ],
+        "is_app_container": true,
+        "network_connect_ok": true,
+        "network_error_code": null,
+        "parent_secret_visible": false,
+        "pid": 14528,
+        "read_only_write_ok": false,
+        "user_profile_visible": false
+      },
+      "total_ms": 98.1061
+    },
+    "invalid_spec_error_code": "SANDBOX_SPEC_INCOMPATIBLE",
+    "unknown_capability_error_code": "SANDBOX_CAPABILITY_UNSUPPORTED"
+  },
+  "build_and_complexity": {
+    "spike10_baseline": {
+      "direct_dependency_count": 5,
+      "resolved_package_count": 34,
+      "core_release_binary_bytes": 2271744
+    },
+    "spike11": {
+      "clean_release_all_bins_ms": 36074.051,
+      "direct_dependency_count": 6,
+      "resolved_package_count": 37,
+      "core_release_binary_bytes": 2271744,
+      "sandbox_worker_binary_bytes": 256000,
+      "sandbox_probe_binary_bytes": 374272,
+      "source_metrics": {
+        "files": 2,
+        "lines": 653,
+        "bytes": 19439,
+        "unsafe_mentions": 25
+      }
+    },
+    "deltas_vs_spike10": {
+      "direct_dependencies": 1,
+      "resolved_packages": 3,
+      "core_release_binary_bytes": 0
+    }
+  },
+  "failure_evidence": {
+    "integration_tests_exit_code": 0,
+    "integration_test_count": 4,
+    "unsupported_spec": "SANDBOX_SPEC_INCOMPATIBLE",
+    "unsupported_capability": "SANDBOX_CAPABILITY_UNSUPPORTED",
+    "exploratory_platform_quirks": [
+      "On this fixture, internetClient capability alone reached the AppContainer token but raw TCP still failed with WSAEACCES 10013; adding SandboxSpec egress default-allow produced the explicit grant path used by the final probe.",
+      "During exploratory probing, Windows accepted an unknown capability string instead of failing launch as expected; the final RELAY path therefore allowlists supported capability names before calling the experimental API."
+    ]
+  },
+  "pass_fail": {
+    "integration_tests_pass": true,
+    "experimental_api_available": true,
+    "appcontainer_verified": true,
+    "allowed_mailbox_read_works": true,
+    "allowed_mailbox_write_works": true,
+    "read_only_worker_write_denied": true,
+    "ungranted_file_read_denied": true,
+    "ungranted_file_write_denied": true,
+    "default_network_denied": true,
+    "default_network_denied_by_os": true,
+    "parent_secret_not_inherited": true,
+    "userprofile_not_inherited": true,
+    "child_process_creation_denied": true,
+    "outer_job_active_process_limit": true,
+    "outer_job_memory_limit": true,
+    "outer_job_kill_on_close": true,
+    "host_network_baseline_available": true,
+    "explicit_network_grant_works": true,
+    "network_grant_keeps_filesystem_denied": true,
+    "network_grant_keeps_child_process_denied": true,
+    "incompatible_spec_fails_closed": true,
+    "unknown_capability_fails_in_relay": true,
+    "sandbox_p50_under_150ms": true,
+    "sandbox_p95_under_250ms": true,
+    "dependency_growth_bounded": true,
+    "core_binary_growth_bounded": true
+  },
+  "limitations": [
+    "Experimental_CreateProcessInSandbox is explicitly experimental Microsoft API surface and may change or disappear; D-156 must not treat the export itself as a permanent public RELAY compatibility promise.",
+    "The selected security semantics are stronger than Spike 10, but real UEFN/Blender/Krita adapter compatibility has not been tested inside this AppContainer/process sandbox.",
+    "The mailbox filesystem channel is a synthetic proof that a narrow brokered data path remains usable; it is not yet the final adapter transport.",
+    "The positive network grant uses external TCP reachability to 1.1.1.1:443 and is therefore fixture/network dependent; the benchmark separately verifies host baseline reachability.",
+    "Only internetClient is allowlisted in the Spike 11 RELAY sandbox policy. Additional Windows capability names require their own evidence before use.",
+    "Filesystem isolation behavior is measured on this Windows build; Windows process-container implementations may use different underlying enforcement/fallback mechanisms across supported OS tiers.",
+    "The worker still depends on Windows system libraries available to AppContainer and on a sanitized set of standard Windows environment variables.",
+    "Only one high-end Windows workstation was benchmarked."
+  ]
+}

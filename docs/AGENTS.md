@@ -36,7 +36,43 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `LEGAL_LICENSING_AND_DISTRIBUTION.md` — platform terms, redistribution, copyleft boundaries, asset provenance, AI output rights, privacy claims, and public-release legal gates.
 - `VERSIONING_AND_COMPATIBILITY.md` — contract stability, version skew, schema evolution, deprecation, migrations, support windows, and compatibility debt.
 - `PERFORMANCE_AND_RESOURCE_ECONOMICS.md` — foreground priority, indexing scale, local AI contention, storage maintenance, hardware tiers, and resource budgets.
-- `PHASE1_START_HERE.md` — active Phase 1 execution order, prototype gates, and fresh-chat handoff.
+- `PHASE1_START_HERE.md` — closed Phase 1 spike/stack-selection record and handoff.
+- `PHASE2_START_HERE.md` — closed Phase 2 implementation record and promotion order.
+- `PHASE2_FIRST_SLICE.md` — acceptance contract for the first production-shaped Core vertical.
+- `PHASE2_FIRST_SLICE_EVIDENCE.md` — accepted first-slice verification, restart, compatibility, and resource evidence.
+- `PHASE2_SECOND_SLICE.md` — acceptance contract for authority, policy, transaction, usage, egress, and credential-handle foundations.
+- `PHASE2_SECOND_SLICE_EVIDENCE.md` — accepted second-slice verification, migration, restart, security, and resource evidence.
+- `PHASE2_THIRD_SLICE.md` — acceptance contract for generic adapter lifecycle and strong Windows worker isolation promotion.
+- `PHASE2_THIRD_SLICE_EVIDENCE.md` — accepted third-slice adapter lifecycle, sandbox, concurrency, and resource evidence.
+- `PHASE2_PROMOTION_LEDGER.md` — maps Phase 1 evidence to deliberate Phase 2 production promotion gates.
+- `PHASE2_CLOSURE_REVIEW.md` — final Phase 2 exit-criteria review and production-foundation closure record.
+- `PHASE3_START_HERE.md` — active Phase 3 project discovery/indexing implementation authority.
+- `PHASE3_FIRST_SLICE.md` — acceptance contract for the first generic multi-project discovery/baseline/changed-only indexing vertical.
+- `PHASE3_FIRST_SLICE_EVIDENCE.md` — accepted synthetic two-project verification, migration, restart, isolation, and resource evidence.
+- `PHASE3_SECOND_SLICE_EVIDENCE.md` — accepted schema-5 change-delta, dependency-edge, migration, isolation, and restart evidence.
+- `PHASE3_THIRD_SLICE_EVIDENCE.md` — accepted provisional targeted hint-update, stale-state, recovery, and scale-fixture evidence.
+- `PHASE3_FOURTH_SLICE_EVIDENCE.md` — accepted explicit full-content verification for uncertain index continuity.
+- `PHASE3_FIFTH_SLICE_EVIDENCE.md` — accepted Windows watcher delivery, bounded hint batching, stale-state signals, and restart evidence.
+- `PHASE3_SCALE_BENCHMARK_EVIDENCE.md` — one-host 15,000-file production-fixture resource sample and repeatable tier harness.
+- `PHASE3_SIXTH_SLICE_EVIDENCE.md` — durable schema-6 continuity requirement and bounded idle recovery evidence.
+- `PHASE3_SEVENTH_SLICE_EVIDENCE.md` — schema-7 project configuration and declared adapter version metadata evidence.
+- `PHASE3_EIGHTH_SLICE_EVIDENCE.md` — sandboxed generic dependency parser operation and bounded observation validation evidence.
+- `PHASE3_NINTH_SLICE_EVIDENCE.md` — installed and authorized parser dispatch, guarded edge replacement, and stale-edge invalidation evidence.
+- `PHASE3_TENTH_SLICE_EVIDENCE.md` — live parser health, code-only diagnostics, and installation/quarantine recovery evidence.
+- `PHASE3_WATCHER_LOAD_EVIDENCE.md` — live burst, prolonged event activity, and recovery callback-race observations and limits.
+- `PHASE3_RESOURCE_BUDGET_METHOD.md` — repeatable scale measurements, release-gate method, and hardware-tier proof plan.
+- `PHASE3_SCALE_FIVE_RUN_2026-09-26.json` — machine-readable five-run scale sample from one workstation.
+- `PHASE3_PARSER_RESOURCE_EVIDENCE.md` — one-host installed-parser latency, idle cost, and measurement limitations.
+- `PHASE3_PARSER_RESOURCE_THREE_RUN_2026-09-26.json` — machine-readable three-run parser resource sample.
+- `PHASE3_PORTABLE_BENCHMARK_DRAFT.md` — local synthetic benchmark runner draft for testers without Rust/Cargo.
+- `PHASE3_CLOSURE_REVIEW.md` — active Phase 3 exit-gate review with explicit open and partial items.
+- `PHASE5_DASHBOARD_FIRST_SLICE_EVIDENCE.md` — local read-only dashboard health/project view and security-boundary evidence.
+- `PHASE4_RESULT_DESCRIPTION_EVIDENCE.md` — early metadata-only result retrieval foundation and focused verification; Phase 4 remains open.
+- `PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md` — byte-budgeted exact-fact result view, scope/privacy tests, and explicit Phase 4 limits.
+- `PUBLIC_PREVIEW_PATH.md` — scoped measurement-preview and public-beta release path, privacy-preserving report contract, and distribution gates.
+- `MEASUREMENT_PREVIEW_CI_PLAN.md` — branch-only hosted Windows package validation plan and evidence limits.
+- `VOLUNTEER_BENCHMARK_INTAKE.md` — opt-in public issue report contract and triage criteria for synthetic hardware observations.
+- `RELEASE_DEPENDENCY_LICENSE_INVENTORY.md` — lockfile-based Windows CLI/daemon crate versions and license expressions; package-level notice review is in `release/THIRD_PARTY_NOTICE_REVIEW.md`.
 - `ROADMAP.md` — staged delivery plan and milestone exit criteria.
 - `RESEARCH_PLAN.md` — academic/technical research and benchmark program.
 - `PHASE0_ADVERSARIAL_REVIEW.md` — adversarial challenge to current assumptions and required architecture changes.

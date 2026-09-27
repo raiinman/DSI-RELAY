@@ -1,0 +1,181 @@
+{
+  "benchmark": "phase1-spike10-adapter-broker-windows",
+  "recorded_at": "2026-09-25T08:06:59.605Z",
+  "decision_informed": "Which synthetic adapter-worker isolation, manifest, broker, lifecycle, and resource-containment foundation should RELAY carry forward before real tool adapters are implemented.",
+  "hypothesis": "A manifest-validated out-of-process worker launched on demand and contained by a Windows Job Object can provide fault/lifecycle/resource isolation with near-zero inactive cost, while keeping command semantics in RELAY's trusted registry and leaving stronger filesystem/network sandboxing as a separate security gate.",
+  "runtime": {
+    "os": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "arch": "x64"
+    },
+    "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+    "cargo": "cargo 1.97.0 (c980f4866 2026-06-30)",
+    "cpu_model": "AMD Ryzen 7 5800X3D 8-Core Processor",
+    "logical_cpu_count": 16,
+    "total_memory_bytes": 51437408256
+  },
+  "selected_foundation": {
+    "adapter_manifest_format": 1,
+    "adapter_protocol_min": 1,
+    "adapter_protocol_max": 1,
+    "launch_model": "on-demand out-of-process worker per invocation",
+    "command_semantics": "trusted RELAY command registry",
+    "artifact_integrity": "SHA-256 verified before launch",
+    "resource_containment": {
+      "mechanism": "Windows Job Object",
+      "kill_on_broker_close": true,
+      "active_process_limit": 1,
+      "process_memory_limit_bytes": 33554432
+    },
+    "broker_policy_defaults_for_fixture": {
+      "network": false,
+      "subprocess": false,
+      "credentials": [],
+      "project_read": [],
+      "project_write": [],
+      "external_apps": []
+    }
+  },
+  "measurements": {
+    "manifest_validation": {
+      "max_ms": 0.7117,
+      "mean_ms": 0.3109075999999998,
+      "min_ms": 0.26039999999999996,
+      "n": 500,
+      "p50_ms": 0.2906,
+      "p95_ms": 0.4016,
+      "p99_ms": 0.5537
+    },
+    "normal_invocation": {
+      "max_ms": 50.0216,
+      "mean_ms": 8.136327499999997,
+      "min_ms": 6.4193,
+      "n": 80,
+      "p50_ms": 7.424,
+      "p95_ms": 9.103,
+      "p99_ms": 50.0216
+    },
+    "out_of_process": true,
+    "job_limits": {
+      "active_process_limit": 1,
+      "kill_on_close": true,
+      "process_memory_limit_bytes": 33554432
+    },
+    "stderr_marked_untrusted": true,
+    "memory_reservation_succeeded": false,
+    "crash": {
+      "elapsed_ms": 6.2033000000000005,
+      "error_code": "ADAPTER_WORKER_EXITED"
+    },
+    "invalid_message_error_code": "ADAPTER_INVALID_MESSAGE",
+    "hang": {
+      "elapsed_ms": 122.0967,
+      "error_code": "ADAPTER_TIMEOUT"
+    },
+    "inactive_zero_adapters": {
+      "installed_adapters": 0,
+      "install_ms": 0,
+      "sample_ms": 5000,
+      "cpu_ms": 0,
+      "rss_bytes": 4460544,
+      "private_bytes": 581632,
+      "rss_delta_bytes": 0,
+      "handle_count": 57,
+      "thread_count": 4,
+      "child_processes_while_idle": 1,
+      "adapter_worker_processes_while_idle": 0,
+      "child_process_names_while_idle": [
+        "conhost.exe"
+      ]
+    },
+    "inactive_one_hundred_adapters": {
+      "installed_adapters": 100,
+      "install_ms": 56.487,
+      "sample_ms": 5000,
+      "cpu_ms": 0,
+      "rss_bytes": 5275648,
+      "private_bytes": 1236992,
+      "rss_delta_bytes": 0,
+      "handle_count": 57,
+      "thread_count": 4,
+      "child_processes_while_idle": 1,
+      "adapter_worker_processes_while_idle": 0,
+      "child_process_names_while_idle": [
+        "conhost.exe"
+      ]
+    },
+    "inactive_100_minus_0_rss_bytes": 815104
+  },
+  "build_and_complexity": {
+    "spike9_core_baseline": {
+      "direct_dependency_count": 5,
+      "resolved_package_count": 34,
+      "release_binary_bytes": 2271744
+    },
+    "spike10": {
+      "clean_release_all_bins_ms": 37502.825,
+      "direct_dependency_count": 5,
+      "resolved_package_count": 34,
+      "core_release_binary_bytes": 2271744,
+      "synthetic_worker_binary_bytes": 215040,
+      "benchmark_probe_binary_bytes": 590336,
+      "source_metrics": {
+        "files": 2,
+        "lines": 1242,
+        "bytes": 39686,
+        "unsafe_mentions": 2
+      }
+    },
+    "deltas_vs_spike9_core": {
+      "direct_dependencies": 0,
+      "resolved_packages": 0,
+      "core_release_binary_bytes": 0
+    }
+  },
+  "failure_evidence": {
+    "integration_tests_exit_code": 0,
+    "integration_test_count": 8,
+    "crash_error_code": "ADAPTER_WORKER_EXITED",
+    "crash_elapsed_ms": 6.203,
+    "invalid_message_error_code": "ADAPTER_INVALID_MESSAGE",
+    "hang_error_code": "ADAPTER_TIMEOUT",
+    "hang_elapsed_ms": 122.097,
+    "quarantine_backoff_tested": true,
+    "over_permission_manifest_tested": true,
+    "incompatible_manifest_tested": true,
+    "bad_digest_manifest_tested": true,
+    "bad_result_schema_tested": true,
+    "undeclared_worker_error_tested": true
+  },
+  "pass_fail": {
+    "integration_tests_pass": true,
+    "worker_is_out_of_process": true,
+    "job_active_process_limit_verified": true,
+    "job_memory_limit_verified": true,
+    "job_kill_on_close_verified": true,
+    "large_memory_reservation_blocked": true,
+    "hostile_stderr_remains_untrusted": true,
+    "crash_is_contained": true,
+    "invalid_message_is_contained": true,
+    "hang_times_out": true,
+    "zero_inactive_workers_for_zero_installed": true,
+    "zero_inactive_workers_for_one_hundred_installed": true,
+    "inactive_zero_adapters_cpu_near_zero": true,
+    "inactive_one_hundred_adapters_cpu_near_zero": true,
+    "hundred_adapter_rss_delta_bounded": true,
+    "manifest_validation_p50_under_2ms": true,
+    "invocation_p50_under_20ms": true,
+    "no_new_direct_runtime_dependency": true,
+    "no_new_resolved_runtime_package": true
+  },
+  "limitations": [
+    "Windows Job Objects provide process lifecycle/resource containment, not a complete security sandbox. The worker still runs under the signed-in user's token and therefore stronger filesystem, registry, IPC, and network restrictions remain a separate gate.",
+    "The fixture policy denies network, credentials, subprocess, project, and external-app permissions at the broker/manifest layer, but this spike does not yet provide OS-enforced network or filesystem denial for a malicious worker.",
+    "The active-process Job Object limit is queried back from Windows, but the synthetic fixture does not execute a child-process escape attempt.",
+    "The 32 MiB process-memory cap and 400 ms default timeout are synthetic spike values, not final product defaults.",
+    "The selected launch model starts a fresh worker per invocation. Persistent worker pooling may be benchmarked later for integrations where startup cost materially affects throughput.",
+    "All behavior is synthetic. No UEFN, Fortnite, Blender, Krita, or other real adapter product behavior is implemented or inferred from this result.",
+    "Only one high-end Windows workstation was benchmarked."
+  ]
+}

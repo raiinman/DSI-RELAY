@@ -1,0 +1,94 @@
+name: Measurement preview review
+
+on:
+  push:
+    branches:
+      - phase3/project-discovery
+
+permissions: {}
+
+jobs:
+  build-and-smoke:
+    name: Build and smoke on fresh Windows runner
+    runs-on: windows-2025
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: write
+    env:
+      PREVIEW_VERSION: 0.1.0-preview.${{ github.run_id }}.${{ github.run_attempt }}
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: Check out committed source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Select stable Windows Rust toolchain
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Output "Windows runner session ID: $((Get-Process -Id $PID).SessionId)"
+          rustup toolchain install stable-x86_64-pc-windows-msvc --profile minimal
+          if ($LASTEXITCODE -ne 0) { throw 'Stable Rust toolchain installation failed' }
+          rustup default stable-x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { throw 'Stable Rust toolchain selection failed' }
+          rustc --version
+          cargo --version
+
+      - name: Build locked review bundle
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & .\release\Build-MeasurementPreview.ps1 `
+            -Version $env:PREVIEW_VERSION `
+            -OutputDirectory (Join-Path $env:RUNNER_TEMP 'relay-preview-ci-out')
+
+      - name: Check standalone CLI feature set
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo check -p relay --locked
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone CLI check failed' }
+
+      - name: Verify archive and run contained synthetic smoke
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & .\.github\Validate-PreviewRunner.ps1 `
+            -Version $env:PREVIEW_VERSION `
+            -BundleOutputDirectory (Join-Path $env:RUNNER_TEMP 'relay-preview-ci-out') `
+            -ReviewDirectory (Join-Path $env:RUNNER_TEMP 'relay-preview-ci-review')
+
+      - name: Upload sanitized hosted-runner smoke report
+        uses: actions/upload-artifact@v7
+        with:
+          name: relay-measurement-preview-smoke-report
+          path: ${{ runner.temp }}/relay-preview-ci-review/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Run contained smoke as temporary standard Windows account
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & .\.github\Validate-PreviewStandardAccount.ps1 `
+            -Version $env:PREVIEW_VERSION `
+            -BundleOutputDirectory (Join-Path $env:RUNNER_TEMP 'relay-preview-ci-out') `
+            -ReviewDirectory (Join-Path $env:RUNNER_TEMP 'relay-preview-standard-account-review')
+
+      - name: Upload screened standard-account JSON evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: relay-measurement-preview-standard-account-smoke
+          path: ${{ runner.temp }}/relay-preview-standard-account-review/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload public dependency diagnostics after a failed check
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: relay-preview-dependency-diagnostics
+          path: |
+            ${{ runner.temp }}/relay-preview-ci-out/relay-measurement-preview-${{ env.PREVIEW_VERSION }}-windows-x64/bundle-manifest.json
+            ${{ runner.temp }}/relay-preview-ci-out/relay-measurement-preview-${{ env.PREVIEW_VERSION }}-windows-x64/THIRD-PARTY-INVENTORY.json
+          if-no-files-found: ignore
+          retention-days: 1

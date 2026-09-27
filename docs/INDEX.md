@@ -2,11 +2,25 @@
 
 ## Start here
 
-1. PHASE1_START_HERE.md — active Phase 1 execution order and fresh-chat handoff.
+1. PHASE3_START_HERE.md — active Phase 3 execution order and fresh-chat handoff.
 2. PROJECT_PLAN.md — consolidated plan and current delivery target.
 3. PRODUCT_VISION.md — what RELAY is, who it serves, and what it must not become.
 4. SYSTEM_ARCHITECTURE.md — technical boundaries and data flow.
 5. ROADMAP.md — implementation order and milestone exit criteria.
+
+The Phase 3 baseline, dependency-edge, provisional hint-update, content-verification, OS-watcher, idle recovery, project configuration, parser-contract, authorized parser-dispatch, and live parser-health results are in PHASE3_FIRST_SLICE.md and the ten PHASE3_*_SLICE_EVIDENCE.md records.
+The larger indexing sample and current NOT READY closure verdict are in PHASE3_SCALE_BENCHMARK_EVIDENCE.md and PHASE3_CLOSURE_REVIEW.md.
+Live burst, prolonged watcher activity, and recovery callback-race observations are in PHASE3_WATCHER_LOAD_EVIDENCE.md.
+The repeatable resource measurement method and one-host five-run sample are in PHASE3_RESOURCE_BUDGET_METHOD.md and PHASE3_SCALE_FIVE_RUN_2026-09-26.json.
+Parser health and recovery evidence is in PHASE3_TENTH_SLICE_EVIDENCE.md. One-host parser cost evidence and its raw three-run report are in PHASE3_PARSER_RESOURCE_EVIDENCE.md and PHASE3_PARSER_RESOURCE_THREE_RUN_2026-09-26.json.
+PHASE3_PORTABLE_BENCHMARK_DRAFT.md records the local no-Cargo synthetic benchmark draft and remaining package gates.
+PUBLIC_PREVIEW_PATH.md separates a synthetic measurement preview from a public RELAY beta and lists the release controls needed before distributing binaries.
+MEASUREMENT_PREVIEW_CI_PLAN.md records the branch-only hosted Windows package check and its limits; it is not a desktop-account or hardware-tier result.
+VOLUNTEER_BENCHMARK_INTAKE.md describes optional public report submission and how to classify synthetic hardware observations.
+The current Rust release dependency and license-expression inventory is in RELEASE_DEPENDENCY_LICENSE_INVENTORY.md.
+PHASE4_RESULT_DESCRIPTION_EVIDENCE.md records the early metadata-only result lookup; Phase 4 remains open.
+PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md records the first byte-budgeted exact-fact view by result ID and its test limits.
+PHASE5_DASHBOARD_FIRST_SLICE_EVIDENCE.md records the first local read-only dashboard view; Phase 5 remains open.
 
 ## Core design
 

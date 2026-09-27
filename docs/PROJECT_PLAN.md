@@ -215,13 +215,17 @@ From the first implementation:
 - deprecated compatibility surfaces have migration and retirement plans
 - historical results/configuration remain interpretable or explicitly marked unsupported
 
+## Phase 1 implementation selections
+
+D-153 selects Rust as the local host/runtime foundation and bundled SQLite through minimal `rusqlite` for operational metadata, compact results, jobs/checkpoints, and migration state. The Node implementation remains a compatibility/reference fixture during Phase 1.
+
+The dashboard command/transport boundary is selected as a thin static/HTTP surface hosted by the same local core process, but the final desktop renderer/wrapper technology is intentionally still open.
+
 ## Open implementation decisions
 
 These are intentionally not fixed yet:
 
-- primary implementation language/runtime
-- local database technology
-- dashboard framework
+- final dashboard desktop renderer/wrapper technology
 - remote-gateway hosting design
 - authentication implementation
 - packaging/update technology

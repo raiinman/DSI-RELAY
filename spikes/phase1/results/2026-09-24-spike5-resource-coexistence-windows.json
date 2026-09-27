@@ -1,0 +1,2336 @@
+{
+  "benchmark": "phase1-spike5-resource-coexistence-windows",
+  "recorded_at": "2026-09-25T02:35:43.807Z",
+  "decision_informed": "Which Windows-native scheduling controls and RELAY backoff policy best protect creator responsiveness while preserving useful background throughput.",
+  "hypothesis": "Foreground-safe deferral plus soft OS scheduling hints should protect UEFN responsiveness with less pathological background latency than hard CPU caps; inactive projects should add negligible active compute.",
+  "runtime": {
+    "os": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "arch": "x64"
+    },
+    "node": "v24.19.0",
+    "cpu_model": "AMD Ryzen 7 5800X3D 8-Core Processor",
+    "logical_cpu_count": 16,
+    "total_memory_bytes": 51437408256,
+    "creators_detected": [
+      {
+        "Id": 27544,
+        "ProcessName": "UnrealEditorFortnite-Win64-Shipping",
+        "MainWindowHandle": 1363479644,
+        "MainWindowTitle": "Unreal Editor for Fortnite",
+        "WorkingSet64": 1224650752,
+        "CPU": 10461.109375,
+        "PriorityClass": 32
+      }
+    ],
+    "uefn_target": {
+      "pid": 27544,
+      "process_name": "UnrealEditorFortnite-Win64-Shipping",
+      "window_title": "Unreal Editor for Fortnite",
+      "working_set_bytes_at_start": 1224650752
+    },
+    "gpu_at_start": {
+      "name": "NVIDIA GeForce RTX 5060 Ti",
+      "utilization_percent": 18,
+      "memory_used_mib": 6667,
+      "memory_total_mib": 16311,
+      "temperature_c": 52,
+      "power_draw_w": 30.67
+    }
+  },
+  "policy": {
+    "detected_mode": {
+      "mode": "foreground_safe",
+      "reason": "creator_workload_active",
+      "creator_processes": [
+        "UnrealEditorFortnite-Win64-Shipping"
+      ]
+    },
+    "local_ai_decision": {
+      "action": "defer",
+      "reason": "foreground_creator_workload",
+      "mode": "foreground_safe"
+    },
+    "deep_index_decision": {
+      "action": "defer",
+      "reason": "foreground_creator_workload",
+      "mode": "foreground_safe"
+    },
+    "worker_concurrency": 12,
+    "worker_duration_ms": 3000,
+    "saturation_worker_concurrency": 16,
+    "saturation_worker_duration_ms": 2500,
+    "probe": "SendMessageTimeout(WM_NULL) against UEFN main window; no editor clicks or project mutations"
+  },
+  "scenarios": {
+    "baseline": {
+      "uefn_message_p50_ms": {
+        "n": 3,
+        "min": 2.513,
+        "p50": 2.566,
+        "p95": 2.95,
+        "max": 2.95,
+        "mean": 2.676
+      },
+      "uefn_message_p95_ms": {
+        "n": 3,
+        "min": 4.567,
+        "p50": 5.011,
+        "p95": 5.033,
+        "max": 5.033,
+        "mean": 4.87
+      },
+      "uefn_message_p99_ms": {
+        "n": 3,
+        "min": 5.022,
+        "p50": 5.032,
+        "p95": 5.445,
+        "max": 5.445,
+        "mean": 5.166
+      },
+      "uefn_timeouts": {
+        "total": 0,
+        "per_run": [
+          0,
+          0,
+          0
+        ]
+      },
+      "worker_hashed_mib_per_second": {
+        "n": 0
+      },
+      "median_p95_ratio_vs_baseline": 1
+    },
+    "normal": {
+      "uefn_message_p50_ms": {
+        "n": 3,
+        "min": 2.536,
+        "p50": 2.793,
+        "p95": 2.825,
+        "max": 2.825,
+        "mean": 2.718
+      },
+      "uefn_message_p95_ms": {
+        "n": 3,
+        "min": 4.882,
+        "p50": 4.992,
+        "p95": 5.095,
+        "max": 5.095,
+        "mean": 4.99
+      },
+      "uefn_message_p99_ms": {
+        "n": 3,
+        "min": 5.052,
+        "p50": 6.652,
+        "p95": 8.51,
+        "max": 8.51,
+        "mean": 6.738
+      },
+      "uefn_timeouts": {
+        "total": 0,
+        "per_run": [
+          0,
+          0,
+          0
+        ]
+      },
+      "worker_hashed_mib_per_second": {
+        "n": 3,
+        "min": 13252.996,
+        "p50": 13257.105,
+        "p95": 13519.67,
+        "max": 13519.67,
+        "mean": 13343.257
+      },
+      "median_p95_ratio_vs_baseline": 0.9962
+    },
+    "below_normal": {
+      "uefn_message_p50_ms": {
+        "n": 3,
+        "min": 2.468,
+        "p50": 2.474,
+        "p95": 2.993,
+        "max": 2.993,
+        "mean": 2.645
+      },
+      "uefn_message_p95_ms": {
+        "n": 3,
+        "min": 4.894,
+        "p50": 4.934,
+        "p95": 4.962,
+        "max": 4.962,
+        "mean": 4.93
+      },
+      "uefn_message_p99_ms": {
+        "n": 3,
+        "min": 5.246,
+        "p50": 5.44,
+        "p95": 5.867,
+        "max": 5.867,
+        "mean": 5.518
+      },
+      "uefn_timeouts": {
+        "total": 0,
+        "per_run": [
+          0,
+          0,
+          0
+        ]
+      },
+      "worker_hashed_mib_per_second": {
+        "n": 3,
+        "min": 10405.908,
+        "p50": 11255.572,
+        "p95": 11474.028,
+        "max": 11474.028,
+        "mean": 11045.169
+      },
+      "median_p95_ratio_vs_baseline": 0.9846
+    },
+    "ecoqos_soft": {
+      "uefn_message_p50_ms": {
+        "n": 3,
+        "min": 2.738,
+        "p50": 2.845,
+        "p95": 2.849,
+        "max": 2.849,
+        "mean": 2.811
+      },
+      "uefn_message_p95_ms": {
+        "n": 3,
+        "min": 4.66,
+        "p50": 4.938,
+        "p95": 4.952,
+        "max": 4.952,
+        "mean": 4.85
+      },
+      "uefn_message_p99_ms": {
+        "n": 3,
+        "min": 4.996,
+        "p50": 5.155,
+        "p95": 5.356,
+        "max": 5.356,
+        "mean": 5.169
+      },
+      "uefn_timeouts": {
+        "total": 0,
+        "per_run": [
+          0,
+          0,
+          0
+        ]
+      },
+      "worker_hashed_mib_per_second": {
+        "n": 3,
+        "min": 10971.984,
+        "p50": 12049.887,
+        "p95": 12078.653,
+        "max": 12078.653,
+        "mean": 11700.175
+      },
+      "median_p95_ratio_vs_baseline": 0.9854
+    },
+    "job_weight_1": {
+      "uefn_message_p50_ms": {
+        "n": 3,
+        "min": 2.633,
+        "p50": 2.728,
+        "p95": 3.096,
+        "max": 3.096,
+        "mean": 2.819
+      },
+      "uefn_message_p95_ms": {
+        "n": 3,
+        "min": 4.783,
+        "p50": 4.783,
+        "p95": 4.955,
+        "max": 4.955,
+        "mean": 4.84
+      },
+      "uefn_message_p99_ms": {
+        "n": 3,
+        "min": 5.023,
+        "p50": 5.604,
+        "p95": 5.639,
+        "max": 5.639,
+        "mean": 5.422
+      },
+      "uefn_timeouts": {
+        "total": 0,
+        "per_run": [
+          0,
+          0,
+          0
+        ]
+      },
+      "worker_hashed_mib_per_second": {
+        "n": 3,
+        "min": 10698.459,
+        "p50": 11110.83,
+        "p95": 11244.489,
+        "max": 11244.489,
+        "mean": 11017.926
+      },
+      "median_p95_ratio_vs_baseline": 0.9545
+    },
+    "job_hardcap_25": {
+      "uefn_message_p50_ms": {
+        "n": 3,
+        "min": 2.553,
+        "p50": 2.809,
+        "p95": 2.999,
+        "max": 2.999,
+        "mean": 2.787
+      },
+      "uefn_message_p95_ms": {
+        "n": 3,
+        "min": 4.873,
+        "p50": 4.885,
+        "p95": 4.993,
+        "max": 4.993,
+        "mean": 4.917
+      },
+      "uefn_message_p99_ms": {
+        "n": 3,
+        "min": 5.071,
+        "p50": 5.311,
+        "p95": 5.422,
+        "max": 5.422,
+        "mean": 5.268
+      },
+      "uefn_timeouts": {
+        "total": 0,
+        "per_run": [
+          0,
+          0,
+          0
+        ]
+      },
+      "worker_hashed_mib_per_second": {
+        "n": 3,
+        "min": 6318.147,
+        "p50": 6388.532,
+        "p95": 6511.29,
+        "max": 6511.29,
+        "mean": 6405.99
+      },
+      "median_p95_ratio_vs_baseline": 0.9749
+    },
+    "foreground_safe_deferred": {
+      "uefn_message_p50_ms": {
+        "n": 1,
+        "min": 2.989,
+        "p50": 2.989,
+        "p95": 2.989,
+        "max": 2.989,
+        "mean": 2.989
+      },
+      "uefn_message_p95_ms": {
+        "n": 1,
+        "min": 5.043,
+        "p50": 5.043,
+        "p95": 5.043,
+        "max": 5.043,
+        "mean": 5.043
+      },
+      "uefn_message_p99_ms": {
+        "n": 1,
+        "min": 5.483,
+        "p50": 5.483,
+        "p95": 5.483,
+        "max": 5.483,
+        "mean": 5.483
+      },
+      "uefn_timeouts": {
+        "total": 0,
+        "per_run": [
+          0
+        ]
+      },
+      "worker_hashed_mib_per_second": {
+        "n": 0
+      },
+      "median_p95_ratio_vs_baseline": 1.0064
+    }
+  },
+  "saturation": {
+    "baseline": {
+      "uefn_message_p95_ms": {
+        "n": 2,
+        "min": 4.955,
+        "p50": 4.955,
+        "p95": 4.998,
+        "max": 4.998,
+        "mean": 4.976
+      },
+      "uefn_message_p99_ms": {
+        "n": 2,
+        "min": 5.022,
+        "p50": 5.022,
+        "p95": 5.045,
+        "max": 5.045,
+        "mean": 5.034
+      },
+      "uefn_timeouts": {
+        "total": 0,
+        "per_run": [
+          0,
+          0
+        ]
+      },
+      "worker_hashed_mib_per_second": {
+        "n": 0
+      },
+      "median_p95_ratio_vs_saturation_baseline": 1
+    },
+    "normal": {
+      "uefn_message_p95_ms": {
+        "n": 2,
+        "min": 4.932,
+        "p50": 4.932,
+        "p95": 4.962,
+        "max": 4.962,
+        "mean": 4.947
+      },
+      "uefn_message_p99_ms": {
+        "n": 2,
+        "min": 5.051,
+        "p50": 5.051,
+        "p95": 5.353,
+        "max": 5.353,
+        "mean": 5.202
+      },
+      "uefn_timeouts": {
+        "total": 0,
+        "per_run": [
+          0,
+          0
+        ]
+      },
+      "worker_hashed_mib_per_second": {
+        "n": 2,
+        "min": 14130.878,
+        "p50": 14130.878,
+        "p95": 14318.805,
+        "max": 14318.805,
+        "mean": 14224.842
+      },
+      "median_p95_ratio_vs_saturation_baseline": 0.9954
+    },
+    "ecoqos_soft": {
+      "uefn_message_p95_ms": {
+        "n": 2,
+        "min": 4.891,
+        "p50": 4.891,
+        "p95": 4.9,
+        "max": 4.9,
+        "mean": 4.896
+      },
+      "uefn_message_p99_ms": {
+        "n": 2,
+        "min": 6.19,
+        "p50": 6.19,
+        "p95": 9.091,
+        "max": 9.091,
+        "mean": 7.64
+      },
+      "uefn_timeouts": {
+        "total": 0,
+        "per_run": [
+          0,
+          0
+        ]
+      },
+      "worker_hashed_mib_per_second": {
+        "n": 2,
+        "min": 10144.299,
+        "p50": 10144.299,
+        "p95": 11296.449,
+        "max": 11296.449,
+        "mean": 10720.374
+      },
+      "median_p95_ratio_vs_saturation_baseline": 0.9871
+    },
+    "job_hardcap_25": {
+      "uefn_message_p95_ms": {
+        "n": 2,
+        "min": 4.895,
+        "p50": 4.895,
+        "p95": 4.949,
+        "max": 4.949,
+        "mean": 4.922
+      },
+      "uefn_message_p99_ms": {
+        "n": 2,
+        "min": 12.794,
+        "p50": 12.794,
+        "p95": 15.088,
+        "max": 15.088,
+        "mean": 13.941
+      },
+      "uefn_timeouts": {
+        "total": 0,
+        "per_run": [
+          0,
+          0
+        ]
+      },
+      "worker_hashed_mib_per_second": {
+        "n": 2,
+        "min": 6098.79,
+        "p50": 6098.79,
+        "p95": 6271.52,
+        "max": 6271.52,
+        "mean": 6185.155
+      },
+      "median_p95_ratio_vs_saturation_baseline": 0.9879
+    }
+  },
+  "raw_runs": {
+    "baseline": [
+      {
+        "name": "baseline",
+        "scheduling_decision": null,
+        "worker": null,
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 104,
+          "timeouts": 0,
+          "duration_ms": 3259.435,
+          "p50_ms": 2.513,
+          "p95_ms": 4.567,
+          "p99_ms": 5.022,
+          "max_ms": 5.193,
+          "mean_ms": 2.7
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 359.375,
+          "rss_before_bytes": 1224654848,
+          "rss_after_bytes": 1224720384,
+          "rss_delta_bytes": 65536,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 19,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 49,
+            "power_draw_w": 30.41
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 49,
+            "power_draw_w": 29.47
+          }
+        }
+      },
+      {
+        "name": "baseline",
+        "scheduling_decision": null,
+        "worker": null,
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 104,
+          "timeouts": 0,
+          "duration_ms": 3272.874,
+          "p50_ms": 2.95,
+          "p95_ms": 5.011,
+          "p99_ms": 5.032,
+          "max_ms": 5.188,
+          "mean_ms": 2.833
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 265.625,
+          "rss_before_bytes": 1224720384,
+          "rss_after_bytes": 1224720384,
+          "rss_delta_bytes": 0,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 17,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 49,
+            "power_draw_w": 29.48
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 20,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 49,
+            "power_draw_w": 30.12
+          }
+        }
+      },
+      {
+        "name": "baseline",
+        "scheduling_decision": null,
+        "worker": null,
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 104,
+          "timeouts": 0,
+          "duration_ms": 3264.58,
+          "p50_ms": 2.566,
+          "p95_ms": 5.033,
+          "p99_ms": 5.445,
+          "max_ms": 5.523,
+          "mean_ms": 2.73
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 218.75,
+          "rss_before_bytes": 1224724480,
+          "rss_after_bytes": 1224732672,
+          "rss_delta_bytes": 8192,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 49,
+            "power_draw_w": 30.37
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 17,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 49,
+            "power_draw_w": 29.54
+          }
+        }
+      }
+    ],
+    "normal": [
+      {
+        "name": "normal",
+        "policy": {
+          "target_pid": 14324,
+          "priority_requested": "normal",
+          "priority_value": 32,
+          "priority_query_error": 0,
+          "ecoqos_requested": false,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 0,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 5,
+          "memory_priority": 5,
+          "memory_query_error": 0,
+          "job_mode": "none",
+          "job_value_requested": 0,
+          "job_flags": 0,
+          "job_value": 0,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 3000,
+          "elapsed_ms": 3097.358,
+          "concurrency": 12,
+          "buffer_bytes": 2097152,
+          "cycles": 20531,
+          "hashedBytes": 43056627712,
+          "compressedInputBytes": 10773069824,
+          "compressedOutputBytes": 1222606,
+          "hashed_mib_per_second": 13257.105
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 105,
+          "timeouts": 0,
+          "duration_ms": 3278.806,
+          "p50_ms": 2.536,
+          "p95_ms": 4.992,
+          "p99_ms": 5.052,
+          "max_ms": 5.105,
+          "mean_ms": 2.776
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 359.375,
+          "rss_before_bytes": 1224732672,
+          "rss_after_bytes": 1224744960,
+          "rss_delta_bytes": 12288,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 17,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 49,
+            "power_draw_w": 29.47
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 20,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 49,
+            "power_draw_w": 30.85
+          }
+        }
+      },
+      {
+        "name": "normal",
+        "policy": {
+          "target_pid": 30968,
+          "priority_requested": "normal",
+          "priority_value": 32,
+          "priority_query_error": 0,
+          "ecoqos_requested": false,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 0,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 5,
+          "memory_priority": 5,
+          "memory_query_error": 0,
+          "job_mode": "none",
+          "job_value_requested": 0,
+          "job_flags": 0,
+          "job_value": 0,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 3000,
+          "elapsed_ms": 3116.053,
+          "concurrency": 12,
+          "buffer_bytes": 2097152,
+          "cycles": 21064,
+          "hashedBytes": 44174409728,
+          "compressedInputBytes": 11056185344,
+          "compressedOutputBytes": 1254736,
+          "hashed_mib_per_second": 13519.67
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 104,
+          "timeouts": 0,
+          "duration_ms": 3268.535,
+          "p50_ms": 2.825,
+          "p95_ms": 4.882,
+          "p99_ms": 6.652,
+          "max_ms": 10.273,
+          "mean_ms": 2.904
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 250,
+          "rss_before_bytes": 1224744960,
+          "rss_after_bytes": 1224749056,
+          "rss_delta_bytes": 4096,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 49,
+            "power_draw_w": 30.38
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 17,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 49,
+            "power_draw_w": 30.2
+          }
+        }
+      },
+      {
+        "name": "normal",
+        "policy": {
+          "target_pid": 31316,
+          "priority_requested": "normal",
+          "priority_value": 32,
+          "priority_query_error": 0,
+          "ecoqos_requested": false,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 0,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 5,
+          "memory_priority": 5,
+          "memory_query_error": 0,
+          "job_mode": "none",
+          "job_value_requested": 0,
+          "job_flags": 0,
+          "job_value": 0,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 3000,
+          "elapsed_ms": 3126.689,
+          "concurrency": 12,
+          "buffer_bytes": 2097152,
+          "cycles": 20719,
+          "hashedBytes": 43450892288,
+          "compressedInputBytes": 10875830272,
+          "compressedOutputBytes": 1234268,
+          "hashed_mib_per_second": 13252.996
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 105,
+          "timeouts": 0,
+          "duration_ms": 3275.445,
+          "p50_ms": 2.793,
+          "p95_ms": 5.095,
+          "p99_ms": 8.51,
+          "max_ms": 8.526,
+          "mean_ms": 2.853
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 312.5,
+          "rss_before_bytes": 1224749056,
+          "rss_after_bytes": 1224806400,
+          "rss_delta_bytes": 57344,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 49,
+            "power_draw_w": 29.77
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 50,
+            "power_draw_w": 30.75
+          }
+        }
+      }
+    ],
+    "below_normal": [
+      {
+        "name": "below_normal",
+        "policy": {
+          "target_pid": 31448,
+          "priority_requested": "belownormal",
+          "priority_value": 16384,
+          "priority_query_error": 0,
+          "ecoqos_requested": false,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 0,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 4,
+          "memory_priority": 4,
+          "memory_query_error": 0,
+          "job_mode": "none",
+          "job_value_requested": 0,
+          "job_flags": 0,
+          "job_value": 0,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 3000,
+          "elapsed_ms": 3150.44,
+          "concurrency": 12,
+          "buffer_bytes": 2097152,
+          "cycles": 17730,
+          "hashedBytes": 37182504960,
+          "compressedInputBytes": 9305063424,
+          "compressedOutputBytes": 1056006,
+          "hashed_mib_per_second": 11255.572
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 105,
+          "timeouts": 0,
+          "duration_ms": 3270.577,
+          "p50_ms": 2.993,
+          "p95_ms": 4.894,
+          "p99_ms": 5.867,
+          "max_ms": 9.234,
+          "mean_ms": 2.88
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 187.5,
+          "rss_before_bytes": 1224806400,
+          "rss_after_bytes": 1224814592,
+          "rss_delta_bytes": 8192,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 50,
+            "power_draw_w": 30.75
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 16,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 50,
+            "power_draw_w": 30.22
+          }
+        }
+      },
+      {
+        "name": "below_normal",
+        "policy": {
+          "target_pid": 45492,
+          "priority_requested": "belownormal",
+          "priority_value": 16384,
+          "priority_query_error": 0,
+          "ecoqos_requested": false,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 0,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 4,
+          "memory_priority": 4,
+          "memory_query_error": 0,
+          "job_mode": "none",
+          "job_value_requested": 0,
+          "job_flags": 0,
+          "job_value": 0,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 3000,
+          "elapsed_ms": 3172.382,
+          "concurrency": 12,
+          "buffer_bytes": 2097152,
+          "cycles": 18200,
+          "hashedBytes": 38168166400,
+          "compressedInputBytes": 9552527360,
+          "compressedOutputBytes": 1084090,
+          "hashed_mib_per_second": 11474.028
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 104,
+          "timeouts": 0,
+          "duration_ms": 3252.516,
+          "p50_ms": 2.474,
+          "p95_ms": 4.962,
+          "p99_ms": 5.246,
+          "max_ms": 6.345,
+          "mean_ms": 2.671
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 187.5,
+          "rss_before_bytes": 1224822784,
+          "rss_after_bytes": 1224826880,
+          "rss_delta_bytes": 4096,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 17,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 50,
+            "power_draw_w": 29.77
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 19,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 50,
+            "power_draw_w": 30.26
+          }
+        }
+      },
+      {
+        "name": "below_normal",
+        "policy": {
+          "target_pid": 51640,
+          "priority_requested": "belownormal",
+          "priority_value": 16384,
+          "priority_query_error": 0,
+          "ecoqos_requested": false,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 0,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 4,
+          "memory_priority": 4,
+          "memory_query_error": 0,
+          "job_mode": "none",
+          "job_value_requested": 0,
+          "job_flags": 0,
+          "job_value": 0,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 3000,
+          "elapsed_ms": 3172.428,
+          "concurrency": 12,
+          "buffer_bytes": 2097152,
+          "cycles": 16506,
+          "hashedBytes": 34615590912,
+          "compressedInputBytes": 8665432064,
+          "compressedOutputBytes": 983416,
+          "hashed_mib_per_second": 10405.908
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 105,
+          "timeouts": 0,
+          "duration_ms": 3271.623,
+          "p50_ms": 2.468,
+          "p95_ms": 4.934,
+          "p99_ms": 5.44,
+          "max_ms": 7.594,
+          "mean_ms": 2.689
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 203.125,
+          "rss_before_bytes": 1224826880,
+          "rss_after_bytes": 1224826880,
+          "rss_delta_bytes": 0,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 19,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 50,
+            "power_draw_w": 30.49
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 50,
+            "power_draw_w": 30.74
+          }
+        }
+      }
+    ],
+    "ecoqos_soft": [
+      {
+        "name": "ecoqos_soft",
+        "policy": {
+          "target_pid": 48172,
+          "priority_requested": "belownormal",
+          "priority_value": 16384,
+          "priority_query_error": 0,
+          "ecoqos_requested": true,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 1,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 2,
+          "memory_priority": 2,
+          "memory_query_error": 0,
+          "job_mode": "none",
+          "job_value_requested": 0,
+          "job_flags": 0,
+          "job_value": 0,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 3000,
+          "elapsed_ms": 3175.299,
+          "concurrency": 12,
+          "buffer_bytes": 2097152,
+          "cycles": 19131,
+          "hashedBytes": 40120614912,
+          "compressedInputBytes": 10045358080,
+          "compressedOutputBytes": 1140020,
+          "hashed_mib_per_second": 12049.887
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 104,
+          "timeouts": 0,
+          "duration_ms": 3257.655,
+          "p50_ms": 2.845,
+          "p95_ms": 4.938,
+          "p99_ms": 5.155,
+          "max_ms": 6.896,
+          "mean_ms": 2.737
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 171.875,
+          "rss_before_bytes": 1224826880,
+          "rss_after_bytes": 1224830976,
+          "rss_delta_bytes": 4096,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 17,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 50,
+            "power_draw_w": 30.22
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 50,
+            "power_draw_w": 30.15
+          }
+        }
+      },
+      {
+        "name": "ecoqos_soft",
+        "policy": {
+          "target_pid": 36152,
+          "priority_requested": "belownormal",
+          "priority_value": 16384,
+          "priority_query_error": 0,
+          "ecoqos_requested": true,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 1,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 2,
+          "memory_priority": 2,
+          "memory_query_error": 0,
+          "job_mode": "none",
+          "job_value_requested": 0,
+          "job_flags": 0,
+          "job_value": 0,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 3000,
+          "elapsed_ms": 3179.006,
+          "concurrency": 12,
+          "buffer_bytes": 2097152,
+          "cycles": 17440,
+          "hashedBytes": 36574330880,
+          "compressedInputBytes": 9151971328,
+          "compressedOutputBytes": 1038632,
+          "hashed_mib_per_second": 10971.984
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 105,
+          "timeouts": 0,
+          "duration_ms": 3278.101,
+          "p50_ms": 2.849,
+          "p95_ms": 4.66,
+          "p99_ms": 4.996,
+          "max_ms": 5.046,
+          "mean_ms": 2.707
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 281.25,
+          "rss_before_bytes": 1224830976,
+          "rss_after_bytes": 1224835072,
+          "rss_delta_bytes": 4096,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 19,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 50,
+            "power_draw_w": 29.97
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 50,
+            "power_draw_w": 30.7
+          }
+        }
+      },
+      {
+        "name": "ecoqos_soft",
+        "policy": {
+          "target_pid": 49600,
+          "priority_requested": "belownormal",
+          "priority_value": 16384,
+          "priority_query_error": 0,
+          "ecoqos_requested": true,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 1,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 2,
+          "memory_priority": 2,
+          "memory_query_error": 0,
+          "job_mode": "none",
+          "job_value_requested": 0,
+          "job_flags": 0,
+          "job_value": 0,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 3000,
+          "elapsed_ms": 3181.48,
+          "concurrency": 12,
+          "buffer_bytes": 2097152,
+          "cycles": 19214,
+          "hashedBytes": 40294678528,
+          "compressedInputBytes": 10081009664,
+          "compressedOutputBytes": 1144066,
+          "hashed_mib_per_second": 12078.653
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 104,
+          "timeouts": 0,
+          "duration_ms": 3257.042,
+          "p50_ms": 2.738,
+          "p95_ms": 4.952,
+          "p99_ms": 5.356,
+          "max_ms": 5.832,
+          "mean_ms": 2.731
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 203.125,
+          "rss_before_bytes": 1224835072,
+          "rss_after_bytes": 1224802304,
+          "rss_delta_bytes": -32768,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 50,
+            "power_draw_w": 30.4
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 17,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.34
+          }
+        }
+      }
+    ],
+    "job_weight_1": [
+      {
+        "name": "job_weight_1",
+        "policy": {
+          "target_pid": 56096,
+          "priority_requested": "belownormal",
+          "priority_value": 16384,
+          "priority_query_error": 0,
+          "ecoqos_requested": true,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 1,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 2,
+          "memory_priority": 2,
+          "memory_query_error": 0,
+          "job_mode": "weight",
+          "job_value_requested": 1,
+          "job_flags": 3,
+          "job_value": 1,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 3000,
+          "elapsed_ms": 3166.173,
+          "concurrency": 12,
+          "buffer_bytes": 2097152,
+          "cycles": 17801,
+          "hashedBytes": 37331402752,
+          "compressedInputBytes": 9349103616,
+          "compressedOutputBytes": 1061004,
+          "hashed_mib_per_second": 11244.489
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 104,
+          "timeouts": 0,
+          "duration_ms": 3251.692,
+          "p50_ms": 2.728,
+          "p95_ms": 4.783,
+          "p99_ms": 5.639,
+          "max_ms": 10.55,
+          "mean_ms": 2.808
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 187.5,
+          "rss_before_bytes": 1224785920,
+          "rss_after_bytes": 1224802304,
+          "rss_delta_bytes": 16384,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 16,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 50,
+            "power_draw_w": 30.14
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 17,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.92
+          }
+        }
+      },
+      {
+        "name": "job_weight_1",
+        "policy": {
+          "target_pid": 34776,
+          "priority_requested": "belownormal",
+          "priority_value": 16384,
+          "priority_query_error": 0,
+          "ecoqos_requested": true,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 1,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 2,
+          "memory_priority": 2,
+          "memory_query_error": 0,
+          "job_mode": "weight",
+          "job_value_requested": 1,
+          "job_flags": 3,
+          "job_value": 1,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 3000,
+          "elapsed_ms": 3250.522,
+          "concurrency": 12,
+          "buffer_bytes": 2097152,
+          "cycles": 18058,
+          "hashedBytes": 37870370816,
+          "compressedInputBytes": 9481224192,
+          "compressedOutputBytes": 1075998,
+          "hashed_mib_per_second": 11110.83
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 104,
+          "timeouts": 0,
+          "duration_ms": 3250.791,
+          "p50_ms": 3.096,
+          "p95_ms": 4.955,
+          "p99_ms": 5.023,
+          "max_ms": 5.2,
+          "mean_ms": 2.905
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 78.125,
+          "rss_before_bytes": 1224802304,
+          "rss_after_bytes": 1224802304,
+          "rss_delta_bytes": 0,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 19,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.61
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 17,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.27
+          }
+        }
+      },
+      {
+        "name": "job_weight_1",
+        "policy": {
+          "target_pid": 6704,
+          "priority_requested": "belownormal",
+          "priority_value": 16384,
+          "priority_query_error": 0,
+          "ecoqos_requested": true,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 1,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 2,
+          "memory_priority": 2,
+          "memory_query_error": 0,
+          "job_mode": "weight",
+          "job_value_requested": 1,
+          "job_flags": 3,
+          "job_value": 1,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 3000,
+          "elapsed_ms": 3210.556,
+          "concurrency": 12,
+          "buffer_bytes": 2097152,
+          "cycles": 17174,
+          "hashedBytes": 36016488448,
+          "compressedInputBytes": 9017753600,
+          "compressedOutputBytes": 1023400,
+          "hashed_mib_per_second": 10698.459
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 105,
+          "timeouts": 0,
+          "duration_ms": 3279.043,
+          "p50_ms": 2.633,
+          "p95_ms": 4.783,
+          "p99_ms": 5.604,
+          "max_ms": 6.741,
+          "mean_ms": 2.696
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 265.625,
+          "rss_before_bytes": 1224802304,
+          "rss_after_bytes": 1224802304,
+          "rss_delta_bytes": 0,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.2
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 31.28
+          }
+        }
+      }
+    ],
+    "job_hardcap_25": [
+      {
+        "name": "job_hardcap_25",
+        "policy": {
+          "target_pid": 13036,
+          "priority_requested": "belownormal",
+          "priority_value": 16384,
+          "priority_query_error": 0,
+          "ecoqos_requested": true,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 1,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 2,
+          "memory_priority": 2,
+          "memory_query_error": 0,
+          "job_mode": "hardcap",
+          "job_value_requested": 2500,
+          "job_flags": 5,
+          "job_value": 2500,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 3000,
+          "elapsed_ms": 3417.458,
+          "concurrency": 12,
+          "buffer_bytes": 2097152,
+          "cycles": 10796,
+          "hashedBytes": 22640852992,
+          "compressedInputBytes": 5674893312,
+          "compressedOutputBytes": 644028,
+          "hashed_mib_per_second": 6318.147
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 104,
+          "timeouts": 0,
+          "duration_ms": 3253.495,
+          "p50_ms": 2.809,
+          "p95_ms": 4.885,
+          "p99_ms": 5.311,
+          "max_ms": 5.565,
+          "mean_ms": 2.82
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 218.75,
+          "rss_before_bytes": 1224802304,
+          "rss_after_bytes": 1224814592,
+          "rss_delta_bytes": 12288,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 20,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.79
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.27
+          }
+        }
+      },
+      {
+        "name": "job_hardcap_25",
+        "policy": {
+          "target_pid": 54144,
+          "priority_requested": "belownormal",
+          "priority_value": 16384,
+          "priority_query_error": 0,
+          "ecoqos_requested": true,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 1,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 2,
+          "memory_priority": 2,
+          "memory_query_error": 0,
+          "job_mode": "hardcap",
+          "job_value_requested": 2500,
+          "job_flags": 5,
+          "job_value": 2500,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 3000,
+          "elapsed_ms": 3253.426,
+          "concurrency": 12,
+          "buffer_bytes": 2097152,
+          "cycles": 10592,
+          "hashedBytes": 22213033984,
+          "compressedInputBytes": 5561647104,
+          "compressedOutputBytes": 631176,
+          "hashed_mib_per_second": 6511.29
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 104,
+          "timeouts": 0,
+          "duration_ms": 3256.41,
+          "p50_ms": 2.553,
+          "p95_ms": 4.993,
+          "p99_ms": 5.422,
+          "max_ms": 5.488,
+          "mean_ms": 2.77
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 421.875,
+          "rss_before_bytes": 1224814592,
+          "rss_after_bytes": 1224814592,
+          "rss_delta_bytes": 0,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 17,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.04
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6668,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.74
+          }
+        }
+      },
+      {
+        "name": "job_hardcap_25",
+        "policy": {
+          "target_pid": 21712,
+          "priority_requested": "belownormal",
+          "priority_value": 16384,
+          "priority_query_error": 0,
+          "ecoqos_requested": true,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 1,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 2,
+          "memory_priority": 2,
+          "memory_query_error": 0,
+          "job_mode": "hardcap",
+          "job_value_requested": 2500,
+          "job_flags": 5,
+          "job_value": 2500,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 3000,
+          "elapsed_ms": 3224.841,
+          "concurrency": 12,
+          "buffer_bytes": 2097152,
+          "cycles": 10301,
+          "hashedBytes": 21602762752,
+          "compressedInputBytes": 5410652160,
+          "compressedOutputBytes": 614040,
+          "hashed_mib_per_second": 6388.532
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 104,
+          "timeouts": 0,
+          "duration_ms": 3261.058,
+          "p50_ms": 2.999,
+          "p95_ms": 4.873,
+          "p99_ms": 5.071,
+          "max_ms": 5.346,
+          "mean_ms": 3.005
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 328.125,
+          "rss_before_bytes": 1224814592,
+          "rss_after_bytes": 1224814592,
+          "rss_delta_bytes": 0,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6668,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.72
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 17,
+            "memory_used_mib": 6668,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.24
+          }
+        }
+      }
+    ],
+    "foreground_safe_deferred": [
+      {
+        "name": "foreground_safe_deferred",
+        "scheduling_decision": {
+          "action": "defer",
+          "reason": "foreground_creator_workload",
+          "mode": "foreground_safe"
+        },
+        "worker": null,
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 104,
+          "timeouts": 0,
+          "duration_ms": 3267.385,
+          "p50_ms": 2.989,
+          "p95_ms": 5.043,
+          "p99_ms": 5.483,
+          "max_ms": 5.498,
+          "mean_ms": 2.941
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 140.625,
+          "rss_before_bytes": 1224818688,
+          "rss_after_bytes": 1224974336,
+          "rss_delta_bytes": 155648,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6668,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.19
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.63
+          }
+        }
+      }
+    ]
+  },
+  "raw_saturation_runs": {
+    "baseline": [
+      {
+        "name": "saturation_baseline",
+        "scheduling_decision": null,
+        "worker": null,
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 88,
+          "timeouts": 0,
+          "duration_ms": 2764.294,
+          "p50_ms": 2.963,
+          "p95_ms": 4.955,
+          "p99_ms": 5.022,
+          "max_ms": 5.022,
+          "mean_ms": 2.863
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 93.75,
+          "rss_before_bytes": 1224974336,
+          "rss_after_bytes": 1224982528,
+          "rss_delta_bytes": 8192,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 20,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.67
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.61
+          }
+        }
+      },
+      {
+        "name": "saturation_baseline",
+        "scheduling_decision": null,
+        "worker": null,
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 88,
+          "timeouts": 0,
+          "duration_ms": 2754.747,
+          "p50_ms": 2.958,
+          "p95_ms": 4.998,
+          "p99_ms": 5.045,
+          "max_ms": 5.045,
+          "mean_ms": 2.894
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 140.625,
+          "rss_before_bytes": 1224982528,
+          "rss_after_bytes": 1224994816,
+          "rss_delta_bytes": 12288,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 16,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.27
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 17,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 52,
+            "power_draw_w": 30.04
+          }
+        }
+      }
+    ],
+    "normal": [
+      {
+        "name": "normal",
+        "policy": {
+          "target_pid": 29272,
+          "priority_requested": "normal",
+          "priority_value": 32,
+          "priority_query_error": 0,
+          "ecoqos_requested": false,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 0,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 5,
+          "memory_priority": 5,
+          "memory_query_error": 0,
+          "job_mode": "none",
+          "job_value_requested": 0,
+          "job_flags": 0,
+          "job_value": 0,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 2500,
+          "elapsed_ms": 2668.199,
+          "concurrency": 16,
+          "buffer_bytes": 2097152,
+          "cycles": 18852,
+          "hashedBytes": 39535509504,
+          "compressedInputBytes": 9900654592,
+          "compressedOutputBytes": 1123598,
+          "hashed_mib_per_second": 14130.878
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 89,
+          "timeouts": 0,
+          "duration_ms": 2776.673,
+          "p50_ms": 2.914,
+          "p95_ms": 4.932,
+          "p99_ms": 5.051,
+          "max_ms": 5.051,
+          "mean_ms": 2.809
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 421.875,
+          "rss_before_bytes": 1224998912,
+          "rss_after_bytes": 1224998912,
+          "rss_delta_bytes": 0,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 16,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 51,
+            "power_draw_w": 30.1
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 19,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 52,
+            "power_draw_w": 31.32
+          }
+        }
+      },
+      {
+        "name": "normal",
+        "policy": {
+          "target_pid": 23976,
+          "priority_requested": "normal",
+          "priority_value": 32,
+          "priority_query_error": 0,
+          "ecoqos_requested": false,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 0,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 5,
+          "memory_priority": 5,
+          "memory_query_error": 0,
+          "job_mode": "none",
+          "job_value_requested": 0,
+          "job_flags": 0,
+          "job_value": 0,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 2500,
+          "elapsed_ms": 2653.154,
+          "concurrency": 16,
+          "buffer_bytes": 2097152,
+          "cycles": 18995,
+          "hashedBytes": 39835402240,
+          "compressedInputBytes": 9971957760,
+          "compressedOutputBytes": 1131690,
+          "hashed_mib_per_second": 14318.805
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 89,
+          "timeouts": 0,
+          "duration_ms": 2769.008,
+          "p50_ms": 2.94,
+          "p95_ms": 4.962,
+          "p99_ms": 5.353,
+          "max_ms": 5.353,
+          "mean_ms": 2.894
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 437.5,
+          "rss_before_bytes": 1225003008,
+          "rss_after_bytes": 1225007104,
+          "rss_delta_bytes": 4096,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 52,
+            "power_draw_w": 30.81
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 16,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 52,
+            "power_draw_w": 30.53
+          }
+        }
+      }
+    ],
+    "ecoqos_soft": [
+      {
+        "name": "ecoqos_soft",
+        "policy": {
+          "target_pid": 40440,
+          "priority_requested": "belownormal",
+          "priority_value": 16384,
+          "priority_query_error": 0,
+          "ecoqos_requested": true,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 1,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 2,
+          "memory_priority": 2,
+          "memory_query_error": 0,
+          "job_mode": "none",
+          "job_value_requested": 0,
+          "job_flags": 0,
+          "job_value": 0,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 2500,
+          "elapsed_ms": 3007.671,
+          "concurrency": 16,
+          "buffer_bytes": 2097152,
+          "cycles": 16988,
+          "hashedBytes": 35626418176,
+          "compressedInputBytes": 8919187456,
+          "compressedOutputBytes": 1012214,
+          "hashed_mib_per_second": 11296.449
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 88,
+          "timeouts": 0,
+          "duration_ms": 2752.192,
+          "p50_ms": 2.521,
+          "p95_ms": 4.9,
+          "p99_ms": 6.19,
+          "max_ms": 6.19,
+          "mean_ms": 2.758
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 500,
+          "rss_before_bytes": 1225011200,
+          "rss_after_bytes": 1225015296,
+          "rss_delta_bytes": 4096,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 16,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 52,
+            "power_draw_w": 30.1
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 52,
+            "power_draw_w": 30.97
+          }
+        }
+      },
+      {
+        "name": "ecoqos_soft",
+        "policy": {
+          "target_pid": 50596,
+          "priority_requested": "belownormal",
+          "priority_value": 16384,
+          "priority_query_error": 0,
+          "ecoqos_requested": true,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 1,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 2,
+          "memory_priority": 2,
+          "memory_query_error": 0,
+          "job_mode": "none",
+          "job_value_requested": 0,
+          "job_flags": 0,
+          "job_value": 0,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 2500,
+          "elapsed_ms": 3186.026,
+          "concurrency": 16,
+          "buffer_bytes": 2097152,
+          "cycles": 16160,
+          "hashedBytes": 33889976320,
+          "compressedInputBytes": 8485076992,
+          "compressedOutputBytes": 962948,
+          "hashed_mib_per_second": 10144.299
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 89,
+          "timeouts": 0,
+          "duration_ms": 2769.033,
+          "p50_ms": 2.894,
+          "p95_ms": 4.891,
+          "p99_ms": 9.091,
+          "max_ms": 9.091,
+          "mean_ms": 2.808
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 562.5,
+          "rss_before_bytes": 1225015296,
+          "rss_after_bytes": 1225015296,
+          "rss_delta_bytes": 0,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 52,
+            "power_draw_w": 30.75
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 52,
+            "power_draw_w": 30.77
+          }
+        }
+      }
+    ],
+    "job_hardcap_25": [
+      {
+        "name": "job_hardcap_25",
+        "policy": {
+          "target_pid": 28800,
+          "priority_requested": "belownormal",
+          "priority_value": 16384,
+          "priority_query_error": 0,
+          "ecoqos_requested": true,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 1,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 2,
+          "memory_priority": 2,
+          "memory_query_error": 0,
+          "job_mode": "hardcap",
+          "job_value_requested": 2500,
+          "job_flags": 5,
+          "job_value": 2500,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 2500,
+          "elapsed_ms": 2836.314,
+          "concurrency": 16,
+          "buffer_bytes": 2097152,
+          "cycles": 8894,
+          "hashedBytes": 18652069888,
+          "compressedInputBytes": 4676648960,
+          "compressedOutputBytes": 530740,
+          "hashed_mib_per_second": 6271.52
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 88,
+          "timeouts": 0,
+          "duration_ms": 2768.227,
+          "p50_ms": 2.664,
+          "p95_ms": 4.895,
+          "p99_ms": 12.794,
+          "max_ms": 12.794,
+          "mean_ms": 2.798
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 296.875,
+          "rss_before_bytes": 1225015296,
+          "rss_after_bytes": 1225019392,
+          "rss_delta_bytes": 4096,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 17,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 52,
+            "power_draw_w": 30.38
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 17,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 52,
+            "power_draw_w": 30.47
+          }
+        }
+      },
+      {
+        "name": "job_hardcap_25",
+        "policy": {
+          "target_pid": 49428,
+          "priority_requested": "belownormal",
+          "priority_value": 16384,
+          "priority_query_error": 0,
+          "ecoqos_requested": true,
+          "ecoqos_control_mask": 1,
+          "ecoqos_state_mask": 1,
+          "ecoqos_query_error": 0,
+          "memory_priority_requested": 2,
+          "memory_priority": 2,
+          "memory_query_error": 0,
+          "job_mode": "hardcap",
+          "job_value_requested": 2500,
+          "job_flags": 5,
+          "job_value": 2500,
+          "job_query_error": 0,
+          "errors": ""
+        },
+        "worker": {
+          "duration_requested_ms": 2500,
+          "elapsed_ms": 2896.312,
+          "concurrency": 16,
+          "buffer_bytes": 2097152,
+          "cycles": 8832,
+          "hashedBytes": 18522046464,
+          "compressedInputBytes": 4649385984,
+          "compressedOutputBytes": 527646,
+          "hashed_mib_per_second": 6098.79
+        },
+        "uefn_probe": {
+          "ok": true,
+          "pid": 27544,
+          "window_handle": 1363479644,
+          "samples": 88,
+          "timeouts": 0,
+          "duration_ms": 2752.116,
+          "p50_ms": 2.677,
+          "p95_ms": 4.949,
+          "p99_ms": 15.088,
+          "max_ms": 15.088,
+          "mean_ms": 2.999
+        },
+        "uefn_process": {
+          "cpu_delta_ms": 406.25,
+          "rss_before_bytes": 1225023488,
+          "rss_after_bytes": 1225023488,
+          "rss_delta_bytes": 0,
+          "priority_before": "Normal",
+          "priority_after": "Normal"
+        },
+        "gpu": {
+          "before": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 18,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 52,
+            "power_draw_w": 30.75
+          },
+          "after": {
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "utilization_percent": 19,
+            "memory_used_mib": 6667,
+            "memory_total_mib": 16311,
+            "temperature_c": 52,
+            "power_draw_w": 31.24
+          }
+        }
+      }
+    ]
+  },
+  "inactive_project_idle": {
+    "one_project": {
+      "registered_projects": 1,
+      "startup_to_state_ms": 81.359,
+      "idle_sample_ms": 3000,
+      "idle_cpu_ms": 0,
+      "rss_bytes": 118325248,
+      "private_bytes": 157577216,
+      "rss_delta_during_idle_bytes": 0
+    },
+    "one_hundred_projects": {
+      "registered_projects": 100,
+      "startup_to_state_ms": 97.47,
+      "idle_sample_ms": 3000,
+      "idle_cpu_ms": 0,
+      "rss_bytes": 118505472,
+      "private_bytes": 157769728,
+      "rss_delta_during_idle_bytes": 0
+    }
+  },
+  "pass_fail": {
+    "real_uefn_process_measured": true,
+    "no_uefn_probe_timeouts": true,
+    "no_saturation_probe_timeouts": true,
+    "below_normal_applied": true,
+    "ecoqos_applied": true,
+    "job_weight_applied": true,
+    "hardcap_applied": true,
+    "local_ai_deferred_with_uefn_active": true,
+    "deep_index_deferred_with_uefn_active": true,
+    "inactive_project_idle_cpu_near_zero": true
+  },
+  "limitations": [
+    "UEFN was open and its real main-window message pump was measured, but no Fortnite play session was active; this is not a frame-time benchmark.",
+    "WM_NULL round-trip latency measures editor message-pump responsiveness, not mouse/input-to-render latency.",
+    "The synthetic RELAY worker stresses CPU hashing/compression and does not represent a GPU local-LLM workload.",
+    "Memory priority was verified as applied but this workstation was not placed under artificial memory pressure, so trimming behavior is not performance-approved.",
+    "Power/thermal readings are limited to available NVIDIA GPU telemetry; CPU package energy was not directly measured.",
+    "One high-end workstation cannot establish public resource budgets; minimum/recommended hardware fixtures remain required."
+  ]
+}

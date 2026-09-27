@@ -1,0 +1,183 @@
+{
+  "benchmark": "phase1-spike6-dashboard-shell-windows",
+  "recorded_at": "2026-09-25T03:17:43.711Z",
+  "decision_informed": "Whether RELAY's Phase 1 dashboard should run as a separate local process or as a thin HTTP/static client surface hosted by relayd, while preserving one structured command system.",
+  "hypothesis": "A dependency-free dashboard shell hosted inside relayd will preserve command-contract parity with materially less idle memory than a standalone dashboard proxy process.",
+  "runtime": {
+    "os": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "arch": "x64"
+    },
+    "node": "v24.19.0",
+    "cpu_model": "AMD Ryzen 7 5800X3D 8-Core Processor",
+    "logical_cpu_count": 16,
+    "total_memory_bytes": 51437408256
+  },
+  "shell": {
+    "asset_sizes": {
+      "files": {
+        "index.html": 2122,
+        "app.js": 4284,
+        "styles.css": 3109
+      },
+      "total_bytes": 9515
+    },
+    "declared_runtime_dependencies": 0,
+    "exposed_commands": [
+      "system.status",
+      "system.doctor",
+      "project.list",
+      "result.get"
+    ],
+    "authentication": "per-start random dashboard token injected only into same-origin HTML; API requires X-Relay-Dashboard-Token",
+    "security_headers": {
+      "csp_present": true,
+      "frame_ancestors_none": true
+    }
+  },
+  "baseline_host_only": {
+    "startup_to_state_ms": 98.304,
+    "direct_named_pipe_status": {
+      "n": 300,
+      "min_ms": 0.241,
+      "p50_ms": 0.321,
+      "p95_ms": 0.525,
+      "p99_ms": 0.882,
+      "max_ms": 1.649,
+      "mean_ms": 0.354
+    },
+    "idle": {
+      "sample_ms": 5000,
+      "processes": [
+        {
+          "pid": 2024,
+          "cpu_ms": 0,
+          "rss_bytes": 121917440,
+          "private_bytes": 162131968,
+          "rss_delta_bytes": 0
+        }
+      ],
+      "total_rss_bytes": 121917440,
+      "total_private_bytes": 162131968,
+      "total_cpu_ms": 0
+    }
+  },
+  "standalone_proxy": {
+    "host_startup_to_state_ms": 96.626,
+    "dashboard_startup_to_ready_ms": 107.009,
+    "direct_named_pipe_status": {
+      "n": 300,
+      "min_ms": 0.237,
+      "p50_ms": 0.311,
+      "p95_ms": 0.505,
+      "p99_ms": 0.882,
+      "max_ms": 1.657,
+      "mean_ms": 0.341
+    },
+    "dashboard_http_status": {
+      "n": 300,
+      "min_ms": 1.225,
+      "p50_ms": 1.404,
+      "p95_ms": 1.691,
+      "p99_ms": 2.003,
+      "max_ms": 2.084,
+      "mean_ms": 1.445
+    },
+    "root_asset_request": {
+      "n": 50,
+      "min_ms": 0.262,
+      "p50_ms": 0.291,
+      "p95_ms": 0.377,
+      "p99_ms": 1.088,
+      "max_ms": 1.088,
+      "mean_ms": 0.312
+    },
+    "idle": {
+      "sample_ms": 5000,
+      "processes": [
+        {
+          "pid": 53416,
+          "cpu_ms": 0,
+          "rss_bytes": 122941440,
+          "private_bytes": 163229696,
+          "rss_delta_bytes": 0
+        },
+        {
+          "pid": 43076,
+          "cpu_ms": 0,
+          "rss_bytes": 132997120,
+          "private_bytes": 173690880,
+          "rss_delta_bytes": 0
+        }
+      ],
+      "total_rss_bytes": 255938560,
+      "total_private_bytes": 336920576,
+      "total_cpu_ms": 0
+    },
+    "extra_rss_vs_host_only_bytes": 134021120,
+    "process_count": 2
+  },
+  "embedded_host": {
+    "startup_to_state_ms": 131.596,
+    "direct_named_pipe_status": {
+      "n": 300,
+      "min_ms": 0.244,
+      "p50_ms": 0.316,
+      "p95_ms": 0.503,
+      "p99_ms": 0.784,
+      "max_ms": 1.036,
+      "mean_ms": 0.345
+    },
+    "dashboard_http_status": {
+      "n": 300,
+      "min_ms": 0.347,
+      "p50_ms": 0.457,
+      "p95_ms": 0.567,
+      "p99_ms": 0.75,
+      "max_ms": 0.849,
+      "mean_ms": 0.463
+    },
+    "root_asset_request": {
+      "n": 50,
+      "min_ms": 0.278,
+      "p50_ms": 0.325,
+      "p95_ms": 0.396,
+      "p99_ms": 0.926,
+      "max_ms": 0.926,
+      "mean_ms": 0.339
+    },
+    "idle": {
+      "sample_ms": 5000,
+      "processes": [
+        {
+          "pid": 38468,
+          "cpu_ms": 0,
+          "rss_bytes": 132100096,
+          "private_bytes": 173158400,
+          "rss_delta_bytes": 0
+        }
+      ],
+      "total_rss_bytes": 132100096,
+      "total_private_bytes": 173158400,
+      "total_cpu_ms": 0
+    },
+    "extra_rss_vs_host_only_bytes": 10182656,
+    "process_count": 1
+  },
+  "pass_fail": {
+    "zero_runtime_dependencies": true,
+    "strict_csp_present": true,
+    "embedded_dashboard_exposes_only_read_commands": true,
+    "embedded_adds_less_rss_than_standalone": true,
+    "embedded_idle_cpu_under_20ms_over_5s": true,
+    "standalone_idle_cpu_under_20ms_over_5s": true
+  },
+  "limitations": [
+    "This spike benchmarks HTTP/API/static-shell overhead, not full browser renderer memory; Chrome/Edge process cost belongs to the user's existing browser environment.",
+    "The dashboard is intentionally read-only and minimal; approvals, configuration writes, live streaming/WebSocket updates, and accessibility/usability studies remain later work.",
+    "The embedded HTTP adapter currently uses an in-process shared dispatcher while standalone mode proxies over named-pipe IPC. Both were parity-tested against the same command semantics, but final authorization/client-identity plumbing is still open.",
+    "Loopback binding plus same-origin token/CSP is a Phase 1 local-shell boundary, not a completed public threat model. Explicit browser/client identity and installer/update hardening remain open.",
+    "One high-end Windows workstation cannot establish public dashboard resource budgets."
+  ]
+}

@@ -1,0 +1,512 @@
+#![cfg(windows)]
+
+use relay::client;
+use relay_contracts::{CommandRequest, CommandResponse, LocalHostState, RequestContext};
+use relay_core::storage::RelayStorage;
+use serde_json::{Value, json};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+fn fixture_dir() -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    std::env::temp_dir().join(format!("relay-phase3-edges-{}-{nanos}", std::process::id()))
+}
+
+fn request(
+    id: &str,
+    command: &str,
+    arguments: Value,
+    idempotency_key: Option<&str>,
+) -> CommandRequest {
+    CommandRequest {
+        request_id: id.to_string(),
+        command: command.to_string(),
+        command_version: Some(1),
+        arguments,
+        idempotency_key: idempotency_key.map(str::to_string),
+        context: RequestContext::default(),
+    }
+}
+
+fn call(state: &LocalHostState, request: CommandRequest) -> CommandResponse {
+    client::call(state, &request).expect("daemon command")
+}
+
+fn spawn_host(state_dir: &Path) -> (Child, LocalHostState) {
+    let instance = state_dir.parent().unwrap().file_name().unwrap().to_string_lossy();
+    let child = Command::new(env!("CARGO_BIN_EXE_relayd"))
+        .env("RELAY_TEST_DISABLE_WATCHER", "1")
+        .env("RELAY_STATE_DIR", state_dir)
+        .env("RELAY_INSTANCE", instance.as_ref())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn relayd");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        if let Ok(bytes) = fs::read(state_dir.join("host.json")) {
+            if let Ok(state) = serde_json::from_slice::<LocalHostState>(&bytes) {
+                if state.pid == child.id() {
+                    return (child, state);
+                }
+            }
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    panic!("daemon did not become ready");
+}
+
+#[test]
+fn versioned_project_configuration_survives_daemon_restart() {
+    let dir = fixture_dir();
+    let state_dir = dir.join("state");
+    let root = dir.join("project");
+    fs::create_dir_all(&root).unwrap();
+    let (mut first, state) = spawn_host(&state_dir);
+    let imported = call(&state, request(
+        "REQ-config-import", "project.import",
+        json!({ "id": "PRJ-config", "name": "Configuration fixture", "root_path": root.to_string_lossy() }),
+        Some("IDEMP-config-import"),
+    ));
+    assert!(imported.ok, "{:?}", imported.error);
+    let written = call(&state, request(
+        "REQ-config-put", "project.configuration.put",
+        json!({
+            "project_id": "PRJ-config", "expected_revision": 0, "format_version": 1,
+            "project_type": "synthetic.project", "adapter_id": "fixture.parser",
+            "adapter_version": "1.2.0"
+        }),
+        Some("IDEMP-config-put"),
+    ));
+    assert!(written.ok, "{:?}", written.error);
+    assert_eq!(written.result.unwrap()["revision"], 1);
+    first.kill().unwrap();
+    first.wait().unwrap();
+
+    let (mut second, state) = spawn_host(&state_dir);
+    assert_eq!(state.storage_schema_version, Some(7));
+    let read = call(&state, request(
+        "REQ-config-get", "project.configuration.get",
+        json!({ "project_id": "PRJ-config" }), None,
+    ));
+    assert!(read.ok, "{:?}", read.error);
+    let config = read.result.unwrap();
+    assert_eq!(config["revision"], 1);
+    assert_eq!(config["adapter_version"], "1.2.0");
+    let stale = call(&state, request(
+        "REQ-config-stale", "project.configuration.put",
+        json!({
+            "project_id": "PRJ-config", "expected_revision": 0, "format_version": 1,
+            "project_type": "synthetic.other"
+        }),
+        Some("IDEMP-config-stale"),
+    ));
+    assert_eq!(stale.error.unwrap().code, "PROJECT_CONFIG_CONFLICT");
+    let stopped = call(&state, request("REQ-config-stop", "system.shutdown", json!({}), None));
+    assert!(stopped.ok);
+    assert!(second.wait().unwrap().success());
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn project_edges_and_deltas_survive_hard_restart_without_scope_leakage() {
+    let dir = fixture_dir();
+    let root_a = dir.join("alpha");
+    let root_b = dir.join("bravo");
+    let state_dir = dir.join("state");
+    fs::create_dir_all(&root_a).unwrap();
+    fs::create_dir_all(&root_b).unwrap();
+    fs::create_dir_all(&state_dir).unwrap();
+    fs::write(root_a.join("source.txt"), b"source A").unwrap();
+    fs::write(root_a.join("target.txt"), b"target A").unwrap();
+    fs::write(root_b.join("source.txt"), b"source B").unwrap();
+    fs::write(root_b.join("target.txt"), b"target B").unwrap();
+
+    let (mut first, state) = spawn_host(&state_dir);
+    assert_eq!(state.storage_schema_version, Some(7));
+    for (project_id, root) in [("PRJ-alpha", &root_a), ("PRJ-bravo", &root_b)] {
+        let imported = call(
+            &state,
+            request(
+                &format!("REQ-import-{project_id}"),
+                "project.import",
+                json!({
+                    "id": project_id,
+                    "name": project_id,
+                    "root_path": root.to_string_lossy()
+                }),
+                Some(&format!("IDEMP-import-{project_id}")),
+            ),
+        );
+        assert!(imported.ok);
+        let built = call(
+            &state,
+            request(
+                &format!("REQ-build-{project_id}"),
+                "project.index.build",
+                json!({ "project_id": project_id }),
+                Some(&format!("IDEMP-build-{project_id}")),
+            ),
+        );
+        assert!(built.ok);
+    }
+
+    let storage = RelayStorage::open(state_dir.join("relay.sqlite3")).unwrap();
+    let source_sha = storage
+        .list_project_files("PRJ-alpha")
+        .unwrap()
+        .into_iter()
+        .find(|file| file.relative_path == "source.txt")
+        .unwrap()
+        .content_sha256;
+    drop(storage);
+
+    let replaced = call(
+        &state,
+        request(
+            "REQ-edges-replace",
+            "project.dependencies.replace",
+            json!({
+                "project_id": "PRJ-alpha",
+                "expected_generation": 1,
+                "source_path": "source.txt",
+                "source_sha256": source_sha,
+                "producer_id": "fixture.parser",
+                "producer_version": "1",
+                "targets": ["target.txt"]
+            }),
+            Some("IDEMP-edges-replace"),
+        ),
+    );
+    assert!(replaced.ok, "{:?}", replaced.error);
+    let alpha_edges = call(
+        &state,
+        request(
+            "REQ-alpha-edges",
+            "project.dependencies.list",
+            json!({ "project_id": "PRJ-alpha" }),
+            None,
+        ),
+    );
+    let bravo_edges = call(
+        &state,
+        request(
+            "REQ-bravo-edges",
+            "project.dependencies.list",
+            json!({ "project_id": "PRJ-bravo" }),
+            None,
+        ),
+    );
+    assert_eq!(
+        alpha_edges.result.unwrap()["edges"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        bravo_edges.result.unwrap()["edges"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+
+    fs::write(root_a.join("target.txt"), b"target A changed").unwrap();
+    let reconciled = call(
+        &state,
+        request(
+            "REQ-alpha-reconcile",
+            "project.index.reconcile",
+            json!({ "project_id": "PRJ-alpha" }),
+            Some("IDEMP-alpha-reconcile"),
+        ),
+    );
+    assert!(reconciled.ok);
+    assert_eq!(reconciled.result.unwrap()["generation"], 2);
+    let alpha_edges = call(
+        &state,
+        request(
+            "REQ-alpha-edges-invalidated",
+            "project.dependencies.list",
+            json!({ "project_id": "PRJ-alpha" }),
+            None,
+        ),
+    );
+    assert!(
+        alpha_edges.result.unwrap()["edges"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+
+    let replaced_again = call(
+        &state,
+        request(
+            "REQ-edges-replace-again",
+            "project.dependencies.replace",
+            json!({
+                "project_id": "PRJ-alpha",
+                "expected_generation": 2,
+                "source_path": "source.txt",
+                "source_sha256": source_sha,
+                "producer_id": "fixture.parser",
+                "producer_version": "1",
+                "targets": ["target.txt"]
+            }),
+            Some("IDEMP-edges-replace-again"),
+        ),
+    );
+    assert!(replaced_again.ok);
+    fs::rename(root_a.join("source.txt"), root_a.join("source-renamed.txt")).unwrap();
+    fs::remove_file(root_a.join("target.txt")).unwrap();
+    let reconciled_again = call(
+        &state,
+        request(
+            "REQ-alpha-reconcile-again",
+            "project.index.reconcile",
+            json!({ "project_id": "PRJ-alpha" }),
+            Some("IDEMP-alpha-reconcile-again"),
+        ),
+    );
+    assert!(reconciled_again.ok);
+    assert_eq!(reconciled_again.result.unwrap()["generation"], 3);
+    let alpha_edges = call(
+        &state,
+        request(
+            "REQ-alpha-edges-after-rename",
+            "project.dependencies.list",
+            json!({ "project_id": "PRJ-alpha" }),
+            None,
+        ),
+    );
+    assert!(
+        alpha_edges.result.unwrap()["edges"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+
+    first.kill().unwrap();
+    first.wait().unwrap();
+    let (mut second, state) = spawn_host(&state_dir);
+    assert_eq!(state.storage_schema_version, Some(7));
+    let alpha_delta = call(
+        &state,
+        request(
+            "REQ-alpha-delta",
+            "project.changes",
+            json!({ "project_id": "PRJ-alpha", "after_generation": 1 }),
+            None,
+        ),
+    );
+    assert!(alpha_delta.ok);
+    let changes = alpha_delta.result.unwrap()["changes"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(changes.len(), 3);
+    assert!(changes.iter().any(|change| {
+        change["change_kind"] == "modified" && change["relative_path"] == "target.txt"
+    }));
+    assert!(changes.iter().any(|change| {
+        change["change_kind"] == "renamed"
+            && change["previous_path"] == "source.txt"
+            && change["relative_path"] == "source-renamed.txt"
+    }));
+    assert!(changes.iter().any(|change| {
+        change["change_kind"] == "deleted" && change["relative_path"] == "target.txt"
+    }));
+    let bravo_delta = call(
+        &state,
+        request(
+            "REQ-bravo-delta",
+            "project.changes",
+            json!({ "project_id": "PRJ-bravo", "after_generation": 1 }),
+            None,
+        ),
+    );
+    assert!(
+        bravo_delta.result.unwrap()["changes"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+
+    fs::create_dir_all(root_a.join("nested")).unwrap();
+    let directory_hint = call(
+        &state,
+        request(
+            "REQ-alpha-directory-hint",
+            "project.index.apply_hints",
+            json!({ "project_id": "PRJ-alpha", "hints": ["nested"] }),
+            Some("IDEMP-alpha-directory-hint"),
+        ),
+    );
+    assert_eq!(directory_hint.error.unwrap().code, "INDEX_HINT_DIRECTORY");
+    let ready = call(
+        &state,
+        request(
+            "REQ-alpha-ready-after-error",
+            "project.capabilities",
+            json!({ "project_id": "PRJ-alpha" }),
+            None,
+        ),
+    );
+    assert_eq!(ready.result.unwrap()["index_status"], "ready");
+
+    fs::write(root_a.join("hinted.txt"), b"hinted addition").unwrap();
+    fs::write(
+        root_a.join("source-renamed.txt"),
+        b"source A changed without a hint",
+    )
+    .unwrap();
+    let hinted = call(
+        &state,
+        request(
+            "REQ-alpha-apply-hints",
+            "project.index.apply_hints",
+            json!({ "project_id": "PRJ-alpha", "hints": ["hinted.txt"] }),
+            Some("IDEMP-alpha-apply-hints"),
+        ),
+    );
+    assert!(hinted.ok, "{:?}", hinted.error);
+    let hinted = hinted.result.unwrap();
+    assert_eq!(hinted["generation"], 4);
+    assert_eq!(hinted["files_hashed"], 1);
+    assert_eq!(hinted["index_status"], "stale");
+    assert_eq!(hinted["changes"][0]["relative_path"], "hinted.txt");
+    let stale_delta = call(
+        &state,
+        request(
+            "REQ-alpha-stale-delta",
+            "project.changes",
+            json!({ "project_id": "PRJ-alpha", "after_generation": 3 }),
+            None,
+        ),
+    );
+    assert_eq!(
+        stale_delta.error.unwrap().code,
+        "INDEX_RECONCILIATION_REQUIRED"
+    );
+    let stale_edges = call(
+        &state,
+        request(
+            "REQ-alpha-stale-edges",
+            "project.dependencies.list",
+            json!({ "project_id": "PRJ-alpha" }),
+            None,
+        ),
+    );
+    assert_eq!(
+        stale_edges.error.unwrap().code,
+        "INDEX_RECONCILIATION_REQUIRED"
+    );
+
+    second.kill().unwrap();
+    second.wait().unwrap();
+    let (mut third, state) = spawn_host(&state_dir);
+    let caps = call(
+        &state,
+        request(
+            "REQ-alpha-stale-capabilities",
+            "project.capabilities",
+            json!({ "project_id": "PRJ-alpha" }),
+            None,
+        ),
+    );
+    assert_eq!(caps.result.unwrap()["index_status"], "stale");
+    let recovered = call(
+        &state,
+        request(
+            "REQ-alpha-recover-missed-hint",
+            "project.index.reconcile",
+            json!({ "project_id": "PRJ-alpha" }),
+            Some("IDEMP-alpha-recover-missed-hint"),
+        ),
+    );
+    assert!(recovered.ok);
+    let recovered = recovered.result.unwrap();
+    assert_eq!(recovered["files_hashed"], 1);
+    assert_eq!(
+        recovered["changes"][0]["relative_path"],
+        "source-renamed.txt"
+    );
+    let final_delta = call(
+        &state,
+        request(
+            "REQ-alpha-final-delta",
+            "project.changes",
+            json!({ "project_id": "PRJ-alpha", "after_generation": 3 }),
+            None,
+        ),
+    );
+    assert_eq!(
+        final_delta.result.unwrap()["changes"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+
+    let preserved_path = root_a.join("hinted.txt");
+    let previous_modified = fs::metadata(&preserved_path).unwrap().modified().unwrap();
+    fs::write(&preserved_path, b"hinted revision").unwrap();
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&preserved_path)
+        .unwrap()
+        .set_times(fs::FileTimes::new().set_modified(previous_modified))
+        .unwrap();
+    let preserved_metadata = fs::metadata(&preserved_path).unwrap();
+    assert_eq!(preserved_metadata.len(), 15);
+    assert_eq!(preserved_metadata.modified().unwrap(), previous_modified);
+    let metadata_only = call(
+        &state,
+        request(
+            "REQ-alpha-metadata-only",
+            "project.index.reconcile",
+            json!({ "project_id": "PRJ-alpha" }),
+            Some("IDEMP-alpha-metadata-only"),
+        ),
+    );
+    assert!(metadata_only.ok);
+    let metadata_only = metadata_only.result.unwrap();
+    assert_eq!(metadata_only["files_hashed"], 0);
+    assert!(metadata_only["changes"].as_array().unwrap().is_empty());
+    let content_verified = call(
+        &state,
+        request(
+            "REQ-alpha-content-verified",
+            "project.index.reconcile",
+            json!({ "project_id": "PRJ-alpha", "verify_content": true }),
+            Some("IDEMP-alpha-content-verified"),
+        ),
+    );
+    assert!(content_verified.ok, "{:?}", content_verified.error);
+    let content_verified = content_verified.result.unwrap();
+    assert_eq!(content_verified["verify_content"], true);
+    assert_eq!(
+        content_verified["files_hashed"],
+        content_verified["file_count"]
+    );
+    assert_eq!(content_verified["changes"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        content_verified["changes"][0]["relative_path"],
+        "hinted.txt"
+    );
+
+    let stopped = call(
+        &state,
+        request("REQ-shutdown", "system.shutdown", json!({}), None),
+    );
+    assert!(stopped.ok);
+    assert!(third.wait().unwrap().success());
+    fs::remove_dir_all(dir).unwrap();
+}

@@ -1,0 +1,1106 @@
+{
+  "registry_format": 1,
+  "registry_id": "dsi.relay.commands",
+  "schema_dialect": "https://json-schema.org/draft/2020-12/schema",
+  "compatibility": {
+    "default_command_version_when_omitted": "latest",
+    "unknown_fields": "schema-controlled",
+    "additive_optional_fields": "compatible",
+    "required_field_removal": "breaking",
+    "type_change": "breaking"
+  },
+  "reserved_command_ids": [
+    "relay.internal.raw_shell",
+    "relay.internal.unvalidated_execute"
+  ],
+  "deprecated_command_ids": [],
+  "common_errors": [
+    "PERMISSION_DENIED",
+    "EFFECT_NOT_ALLOWED",
+    "PROJECT_SCOPE_DENIED",
+    "PROJECT_SCOPE_REQUIRED",
+    "TRANSACTION_RECORD_INCOMPLETE",
+    "IDEMPOTENCY_CONFLICT",
+    "IDEMPOTENCY_PERSIST_FAILED",
+    "INTERNAL_CONTRACT_VIOLATION"
+  ],
+  "error_schema": {
+    "type": "object",
+    "required": ["code", "message"],
+    "properties": {
+      "code": { "type": "string", "minLength": 1 },
+      "message": { "type": "string" }
+    },
+    "additionalProperties": false
+  },
+  "commands": [
+    {
+      "id": "system.status",
+      "version": 1,
+      "stability": "phase1",
+      "summary": "Return host, recovery, protocol, capability, IPC, and storage health.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["process_health", "recovery_state", "pid", "version", "protocol", "capabilities", "ipc_security", "storage", "uptime_ms"],
+        "properties": {
+          "process_health": { "type": "string", "enum": ["running"] },
+          "recovery_state": { "type": "string", "enum": ["Healthy", "Degraded"] },
+          "pid": { "type": "integer", "minimum": 1 },
+          "version": { "type": "string", "minLength": 1 },
+          "protocol": { "type": "object" },
+          "capabilities": { "type": "array", "items": { "type": "string" } },
+          "ipc_security": { "type": "object" },
+          "storage": { "type": "object" },
+          "host_components": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "state", "error_code", "installed_count", "declared_count", "unavailable_count", "quarantined_count", "failure_count", "success_count"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "state": { "type": "string", "enum": ["not_configured", "healthy", "degraded"] },
+                "error_code": { "type": ["string", "null"] },
+                "installed_count": { "type": "integer", "minimum": 0 },
+                "declared_count": { "type": "integer", "minimum": 0 },
+                "unavailable_count": { "type": "integer", "minimum": 0 },
+                "quarantined_count": { "type": "integer", "minimum": 0 },
+                "failure_count": { "type": "integer", "minimum": 0 },
+                "success_count": { "type": "integer", "minimum": 0 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "uptime_ms": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": true
+      },
+      "errors": []
+    },
+    {
+      "id": "system.doctor",
+      "version": 1,
+      "stability": "phase1",
+      "summary": "Return compact diagnostics and the next repair action when needed.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "result_schema": {
+        "type": "object",
+        "required": ["healthy", "summary", "checks", "next_action"],
+        "properties": {
+          "healthy": { "type": "boolean" },
+          "summary": { "type": "string" },
+          "checks": { "type": "array", "items": { "type": "object" } },
+          "next_action": { "type": ["string", "null"] }
+        },
+        "additionalProperties": true
+      },
+      "errors": []
+    },
+    {
+      "id": "system.echo",
+      "version": 1,
+      "stability": "phase1",
+      "summary": "Echo a structured object for transport and compatibility tests.",
+      "effect_class": "analyze",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "adapter"],
+      "arguments_schema": { "type": "object", "additionalProperties": true },
+      "result_schema": {
+        "type": "object",
+        "required": ["echo"],
+        "properties": { "echo": {} },
+        "additionalProperties": false
+      },
+      "errors": []
+    },
+    {
+      "id": "system.shutdown",
+      "version": 1,
+      "stability": "phase1",
+      "summary": "Request a graceful stop of the local RELAY host.",
+      "effect_class": "relay_self_repair",
+      "permission": "host_control",
+      "idempotency": "safe",
+      "surfaces": ["cli"],
+      "arguments_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "result_schema": {
+        "type": "object",
+        "required": ["shutting_down"],
+        "properties": { "shutting_down": { "type": "boolean", "const": true } },
+        "additionalProperties": false
+      },
+      "errors": []
+    },
+    {
+      "id": "storage.integrity",
+      "version": 1,
+      "stability": "phase1",
+      "summary": "Run SQLite quick_check and report the operational schema/version state.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "result_schema": {
+        "type": "object",
+        "required": ["ok", "check", "schema_version", "sqlite_version"],
+        "properties": {
+          "ok": { "type": "boolean" },
+          "check": { "type": "string" },
+          "schema_version": { "type": ["integer", "null"] },
+          "sqlite_version": { "type": ["string", "null"] },
+          "error": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "project.register",
+      "version": 1,
+      "stability": "phase1",
+      "summary": "Add or update one project registry entry.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed",
+      "surfaces": ["cli", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["name", "root_uri"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "root_uri": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["id", "name", "root_uri", "created_at", "updated_at"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string" },
+          "root_uri": { "type": "string" },
+          "created_at": { "type": "string" },
+          "updated_at": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["VALIDATION_FAILED", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "project.list",
+      "version": 1,
+      "stability": "phase1",
+      "summary": "List registered projects in deterministic order.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "result_schema": {
+        "type": "object",
+        "required": ["projects"],
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": { "type": "object" }
+          }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "project.configuration.put",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Set a versioned project type and declared adapter binding with a revision guard.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id", "expected_revision", "format_version", "project_type"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "expected_revision": { "type": "integer", "minimum": 0 },
+          "format_version": { "type": "integer", "const": 1 },
+          "project_type": { "type": "string", "minLength": 1 },
+          "adapter_id": { "type": "string", "minLength": 1 },
+          "adapter_version": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["project_id", "configured", "revision", "format_version", "project_type", "adapter_id", "adapter_version", "updated_at"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "configured": { "type": "boolean", "const": true },
+          "revision": { "type": "integer", "minimum": 1 },
+          "format_version": { "type": "integer", "const": 1 },
+          "project_type": { "type": "string" },
+          "adapter_id": { "type": ["string", "null"] },
+          "adapter_version": { "type": ["string", "null"] },
+          "updated_at": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["PROJECT_NOT_FOUND", "PROJECT_CONFIG_CONFLICT", "VALIDATION_FAILED", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "project.configuration.get",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Read project-scoped configuration and declared adapter version metadata.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": { "project_id": { "type": "string", "minLength": 1 } },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["project_id", "configured", "revision", "format_version", "project_type", "adapter_id", "adapter_version", "updated_at"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "configured": { "type": "boolean" },
+          "revision": { "type": "integer", "minimum": 0 },
+          "format_version": { "type": "integer", "const": 1 },
+          "project_type": { "type": ["string", "null"] },
+          "adapter_id": { "type": ["string", "null"] },
+          "adapter_version": { "type": ["string", "null"] },
+          "updated_at": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["PROJECT_NOT_FOUND", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "result.put",
+      "version": 1,
+      "stability": "phase1",
+      "summary": "Store one compact normalized result and return its durable ID.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "creates_id",
+      "surfaces": ["cli", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["payload"],
+        "properties": {
+          "project_id": { "type": ["string", "null"] },
+          "kind": { "type": "string", "minLength": 1 },
+          "payload": {}
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["id", "kind", "schema_version", "producer_version", "payload_sha256", "created_at", "payload"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "project_id": { "type": ["string", "null"] },
+          "kind": { "type": "string" },
+          "schema_version": { "type": "integer", "minimum": 1 },
+          "producer_version": { "type": "string" },
+          "payload_json": { "type": "string" },
+          "payload_sha256": { "type": "string", "minLength": 64 },
+          "created_at": { "type": "string" },
+          "payload": {}
+        },
+        "additionalProperties": true
+      },
+      "errors": ["STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "result.get",
+      "version": 1,
+      "stability": "phase1",
+      "summary": "Retrieve one durable result by opaque result ID.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["result_id"],
+        "properties": {
+          "result_id": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["id", "kind", "schema_version", "producer_version", "payload_sha256", "created_at", "payload"],
+        "properties": {
+          "id": { "type": "string" },
+          "project_id": { "type": ["string", "null"] },
+          "kind": { "type": "string" },
+          "schema_version": { "type": "integer" },
+          "producer_version": { "type": "string" },
+          "payload_json": { "type": "string" },
+          "payload_sha256": { "type": "string" },
+          "created_at": { "type": "string" },
+          "payload": {}
+        },
+        "additionalProperties": true
+      },
+      "errors": ["RESULT_NOT_FOUND", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "result.describe",
+      "version": 1,
+      "stability": "phase4",
+      "summary": "Read result identity, provenance-free metadata, and stored payload size without retrieving the payload.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["result_id"],
+        "properties": {
+          "result_id": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["id", "project_id", "kind", "schema_version", "producer_version", "payload_sha256", "payload_bytes", "trust", "created_at"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "project_id": { "type": ["string", "null"] },
+          "kind": { "type": "string" },
+          "schema_version": { "type": "integer", "minimum": 1 },
+          "producer_version": { "type": "string" },
+          "payload_sha256": { "type": "string", "minLength": 64 },
+          "payload_bytes": { "type": "integer", "minimum": 0 },
+          "trust": { "type": "string" },
+          "created_at": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["RESULT_NOT_FOUND", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "result.context",
+      "version": 1,
+      "stability": "phase4",
+      "summary": "Return allowlisted exact facts within a byte budget and a reference to the full stored result.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["result_id", "max_bytes"],
+        "properties": {
+          "result_id": { "type": "string", "minLength": 1 },
+          "max_bytes": { "type": "integer", "minimum": 512, "maximum": 16384 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["result_id", "payload_sha256", "payload_bytes", "source_trust", "full_result_command", "facts", "omitted_scalar_count", "truncated"],
+        "properties": {
+          "result_id": { "type": "string", "minLength": 1 },
+          "payload_sha256": { "type": "string", "minLength": 64 },
+          "payload_bytes": { "type": "integer", "minimum": 0 },
+          "source_trust": { "type": "string" },
+          "full_result_command": { "type": "string", "const": "result.get" },
+          "facts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["pointer", "value"],
+              "properties": {
+                "pointer": { "type": "string" },
+                "value": { "type": ["string", "number", "boolean"] }
+              },
+              "additionalProperties": false
+            }
+          },
+          "omitted_scalar_count": { "type": "integer", "minimum": 0 },
+          "truncated": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["RESULT_NOT_FOUND", "CONTEXT_BUDGET_TOO_SMALL", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "job.checkpoint",
+      "version": 1,
+      "stability": "phase1",
+      "summary": "Create or update a durable job checkpoint.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed",
+      "surfaces": ["cli", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["command", "state"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "project_id": { "type": ["string", "null"] },
+          "command": { "type": "string", "minLength": 1 },
+          "state": { "type": "string", "minLength": 1 },
+          "checkpoint": {},
+          "result_id": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["id", "command", "state", "checkpoint", "created_at", "updated_at"],
+        "properties": {
+          "id": { "type": "string" },
+          "project_id": { "type": ["string", "null"] },
+          "command": { "type": "string" },
+          "state": { "type": "string" },
+          "checkpoint_json": { "type": "string" },
+          "result_id": { "type": ["string", "null"] },
+          "created_at": { "type": "string" },
+          "updated_at": { "type": "string" },
+          "checkpoint": {}
+        },
+        "additionalProperties": true
+      },
+      "errors": ["VALIDATION_FAILED", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "job.get",
+      "version": 1,
+      "stability": "phase1",
+      "summary": "Retrieve one durable job/checkpoint by opaque job ID.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["job_id"],
+        "properties": {
+          "job_id": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["id", "command", "state", "checkpoint", "created_at", "updated_at"],
+        "properties": {
+          "id": { "type": "string" },
+          "project_id": { "type": ["string", "null"] },
+          "command": { "type": "string" },
+          "state": { "type": "string" },
+          "checkpoint_json": { "type": "string" },
+          "result_id": { "type": ["string", "null"] },
+          "created_at": { "type": "string" },
+          "updated_at": { "type": "string" },
+          "checkpoint": {}
+        },
+        "additionalProperties": true
+      },
+      "errors": ["JOB_NOT_FOUND", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "transaction.list",
+      "version": 1,
+      "stability": "phase2",
+      "summary": "List recent durable transaction records within the granted project scope.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": ["string", "null"] },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["transactions"],
+        "properties": {
+          "transactions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id", "request_id", "command", "effect_class",
+                "permission", "state", "actor_id", "client_id",
+                "request_sha256", "intended_summary", "verification",
+                "rollback_status", "created_at", "updated_at"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "usage.summary",
+      "version": 1,
+      "stability": "phase2",
+      "summary": "Return aggregate local command, byte, replay, remote-call, and model-token counters.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": [
+          "command_count", "success_count", "failure_count",
+          "replay_count", "total_elapsed_ms", "total_request_bytes",
+          "total_response_bytes", "remote_calls",
+          "model_tokens_in", "model_tokens_out"
+        ],
+        "properties": {
+          "command_count": { "type": "integer", "minimum": 0 },
+          "success_count": { "type": "integer", "minimum": 0 },
+          "failure_count": { "type": "integer", "minimum": 0 },
+          "replay_count": { "type": "integer", "minimum": 0 },
+          "total_elapsed_ms": { "type": "integer", "minimum": 0 },
+          "total_request_bytes": { "type": "integer", "minimum": 0 },
+          "total_response_bytes": { "type": "integer", "minimum": 0 },
+          "remote_calls": { "type": "integer", "minimum": 0 },
+          "model_tokens_in": { "type": "integer", "minimum": 0 },
+          "model_tokens_out": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "policy.egress.check",
+      "version": 1,
+      "stability": "phase2",
+      "summary": "Evaluate a proposed outbound data scope against trusted local egress policy and record the decision metadata.",
+      "effect_class": "analyze",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["destination", "data_classes", "purpose"],
+        "properties": {
+          "destination": { "type": "string", "minLength": 1 },
+          "project_id": { "type": ["string", "null"] },
+          "data_classes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["public", "project", "sensitive", "credential"]
+            }
+          },
+          "modalities": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "approx_bytes": { "type": "integer", "minimum": 0 },
+          "approx_tokens": { "type": "integer", "minimum": 0 },
+          "source_refs": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "purpose": { "type": "string", "minLength": 1 },
+          "credential_handle": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": [
+          "allowed", "reason", "strongest_class",
+          "destination", "ledger_id"
+        ],
+        "properties": {
+          "allowed": { "type": "boolean" },
+          "reason": { "type": "string" },
+          "strongest_class": {
+            "type": "string",
+            "enum": ["public", "project", "sensitive", "credential"]
+          },
+          "destination": { "type": "string" },
+          "ledger_id": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      },
+      "errors": [
+        "STORAGE_UNAVAILABLE", "STORAGE_ERROR",
+        "CREDENTIAL_HANDLE_DENIED", "CREDENTIAL_HANDLE_REVOKED",
+        "CREDENTIAL_SCOPE_DENIED"
+      ]
+    },
+    {
+      "id": "project.import",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Import one local project root after deterministic canonicalization.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["name", "root_path"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "root_path": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["id", "name", "root_canonicalized", "baseline_state"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string" },
+          "root_canonicalized": { "type": "boolean", "const": true },
+          "baseline_state": { "type": "string", "enum": ["missing"] }
+        },
+        "additionalProperties": false
+      },
+      "errors": [
+        "PROJECT_PATH_INVALID", "PROJECT_PATH_NOT_DIRECTORY",
+        "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
+      ]
+    },
+    {
+      "id": "project.index.build",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Build or rebuild the authoritative derived baseline for one project.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": [
+          "project_id", "generation", "file_count", "total_bytes",
+          "files_hashed", "symlinks_skipped", "elapsed_ms", "mode"
+        ],
+        "properties": {
+          "project_id": { "type": "string" },
+          "generation": { "type": "integer", "minimum": 1 },
+          "file_count": { "type": "integer", "minimum": 0 },
+          "total_bytes": { "type": "integer", "minimum": 0 },
+          "files_hashed": { "type": "integer", "minimum": 0 },
+          "symlinks_skipped": { "type": "integer", "minimum": 0 },
+          "elapsed_ms": { "type": "integer", "minimum": 0 },
+          "mode": { "type": "string", "const": "baseline" }
+        },
+        "additionalProperties": false
+      },
+      "errors": [
+        "PROJECT_NOT_FOUND", "PROJECT_PATH_INVALID",
+        "PROJECT_PATH_NOT_DIRECTORY", "PROJECT_FILE_UNREADABLE",
+        "PROJECT_PATH_ESCAPE", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
+      ]
+    },
+    {
+      "id": "project.index.apply_hints",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Apply bounded watcher-path hints without a full metadata walk; mark the index stale until reconciliation.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id", "hints"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "hints": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": [
+          "project_id", "generation", "file_count", "files_hashed",
+          "hint_count", "changes", "elapsed_ms", "index_status"
+        ],
+        "properties": {
+          "project_id": { "type": "string" },
+          "generation": { "type": "integer", "minimum": 1 },
+          "file_count": { "type": "integer", "minimum": 0 },
+          "files_hashed": { "type": "integer", "minimum": 0 },
+          "hint_count": { "type": "integer", "minimum": 1 },
+          "changes": { "type": "array", "items": { "type": "object" } },
+          "elapsed_ms": { "type": "integer", "minimum": 0 },
+          "index_status": { "type": "string", "const": "stale" }
+        },
+        "additionalProperties": false
+      },
+      "errors": [
+        "PROJECT_NOT_FOUND", "INDEX_BASELINE_MISSING",
+        "INDEX_GENERATION_CONFLICT", "INDEX_HINT_INVALID",
+        "INDEX_HINT_DIRECTORY", "PROJECT_PATH_INVALID",
+        "PROJECT_PATH_NOT_DIRECTORY", "PROJECT_PATH_ESCAPE",
+        "PROJECT_FILE_UNREADABLE", "INDEX_METADATA_OVERFLOW",
+        "VALIDATION_FAILED",
+        "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
+      ]
+    },
+    {
+      "id": "project.index.reconcile",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Reconcile filesystem metadata or explicitly verify all file content after uncertain continuity.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "verify_content": { "type": "boolean" },
+          "hints": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": [
+          "project_id", "generation", "file_count", "total_bytes",
+          "files_hashed", "files_unchanged", "hint_count", "hint_hits",
+          "changes", "elapsed_ms", "mode"
+        ],
+        "properties": {
+          "project_id": { "type": "string" },
+          "generation": { "type": "integer", "minimum": 1 },
+          "file_count": { "type": "integer", "minimum": 0 },
+          "total_bytes": { "type": "integer", "minimum": 0 },
+          "files_hashed": { "type": "integer", "minimum": 0 },
+          "files_unchanged": { "type": "integer", "minimum": 0 },
+          "hint_count": { "type": "integer", "minimum": 0 },
+          "hint_hits": { "type": "integer", "minimum": 0 },
+          "changes": { "type": "array", "items": { "type": "object" } },
+          "elapsed_ms": { "type": "integer", "minimum": 0 },
+          "verify_content": { "type": "boolean" },
+          "mode": { "type": "string", "const": "reconcile" }
+        },
+        "additionalProperties": false
+      },
+      "errors": [
+        "PROJECT_NOT_FOUND", "INDEX_BASELINE_MISSING",
+        "INDEX_GENERATION_CONFLICT", "INDEX_CONTENT_VERIFICATION_REQUIRED", "INDEX_HINT_INVALID",
+        "PROJECT_PATH_INVALID", "PROJECT_PATH_NOT_DIRECTORY",
+        "PROJECT_FILE_UNREADABLE", "PROJECT_PATH_ESCAPE",
+        "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
+      ]
+    },
+    {
+      "id": "project.changes",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Read a bounded, project-scoped change delta since an index generation.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "after_generation": { "type": "integer", "minimum": 0 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 500 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["project_id", "baseline_generation", "current_generation", "changes"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "baseline_generation": { "type": "integer", "minimum": 1 },
+          "current_generation": { "type": "integer", "minimum": 1 },
+          "changes": { "type": "array", "items": { "type": "object" } }
+        },
+        "additionalProperties": false
+      },
+      "errors": [
+        "PROJECT_NOT_FOUND", "INDEX_BASELINE_MISSING",
+        "INDEX_CONTINUITY_LOST", "INDEX_RECONCILIATION_REQUIRED",
+        "INDEX_GENERATION_CONFLICT",
+        "INDEX_DELTA_TOO_LARGE", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
+      ]
+    },
+    {
+      "id": "project.dependencies.replace",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Replace derived dependency edges for one indexed source and producer.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": [
+          "project_id", "expected_generation", "source_path",
+          "source_sha256", "producer_id", "producer_version", "targets"
+        ],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "expected_generation": { "type": "integer", "minimum": 1 },
+          "source_path": { "type": "string", "minLength": 1 },
+          "source_sha256": { "type": "string", "minLength": 64 },
+          "producer_id": { "type": "string", "minLength": 1 },
+          "producer_version": { "type": "string", "minLength": 1 },
+          "expected_configuration_revision": { "type": "integer", "minimum": 1 },
+          "expected_adapter_id": { "type": "string", "minLength": 1 },
+          "expected_adapter_version": { "type": "string", "minLength": 1 },
+          "targets": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["project_id", "generation", "source_path", "producer_id", "edge_count"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "generation": { "type": "integer", "minimum": 1 },
+          "source_path": { "type": "string" },
+          "producer_id": { "type": "string" },
+          "edge_count": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": false
+      },
+      "errors": [
+        "PROJECT_NOT_FOUND", "PROJECT_PATH_INVALID", "PROJECT_PATH_ESCAPE",
+        "INDEX_BASELINE_MISSING", "INDEX_GENERATION_CONFLICT",
+        "INDEX_RECONCILIATION_REQUIRED",
+        "INDEX_FILE_NOT_FOUND", "INDEX_SOURCE_CHANGED", "PROJECT_CONFIG_CONFLICT",
+        "VALIDATION_FAILED", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
+      ]
+    },
+    {
+      "id": "adapter.dependencies.parse",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Sandboxed adapter operation that observes dependency targets in one source file.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["adapter"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["source_path", "source_sha256", "project_type", "content_utf8"],
+        "properties": {
+          "source_path": { "type": "string", "minLength": 1 },
+          "source_sha256": { "type": "string", "minLength": 64 },
+          "project_type": { "type": "string", "minLength": 1 },
+          "content_utf8": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["source_path", "source_sha256", "targets"],
+        "properties": {
+          "source_path": { "type": "string", "minLength": 1 },
+          "source_sha256": { "type": "string", "minLength": 64 },
+          "targets": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["ADAPTER_PARSE_FAILED", "ADAPTER_INPUT_UNSUPPORTED"]
+    },
+    {
+      "id": "project.dependencies.list",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Read bounded project-scoped derived dependency edges.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "source_path": { "type": "string", "minLength": 1 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 500 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["project_id", "generation", "edges"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "generation": { "type": "integer", "minimum": 1 },
+          "edges": { "type": "array", "items": { "type": "object" } }
+        },
+        "additionalProperties": false
+      },
+      "errors": [
+        "PROJECT_NOT_FOUND", "PROJECT_PATH_INVALID", "PROJECT_PATH_ESCAPE",
+        "INDEX_BASELINE_MISSING", "INDEX_RECONCILIATION_REQUIRED",
+        "INDEX_EDGE_LIMIT_EXCEEDED",
+        "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
+      ]
+    },
+    {
+      "id": "project.capabilities",
+      "version": 1,
+      "stability": "phase3",
+      "summary": "Return deterministic generic project discovery/index capability states.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["project_id", "baseline_state", "capabilities"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "index_status": {
+            "type": "string",
+            "enum": ["missing", "ready", "stale", "unavailable"]
+          },
+          "content_verification_required": { "type": "boolean" },
+          "baseline_state": {
+            "type": "string",
+            "enum": ["missing", "ready", "unavailable"]
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "state", "detail"],
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["PROJECT_NOT_FOUND", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "registry.list",
+      "version": 1,
+      "stability": "phase1",
+      "summary": "Return compact command discovery metadata without loading full schemas.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "properties": {
+          "surface": {
+            "type": "string",
+            "enum": ["cli", "dashboard", "adapter", "ai"]
+          },
+          "prefix": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["registry_format", "commands"],
+        "properties": {
+          "registry_format": { "type": "integer", "const": 1 },
+          "commands": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "version", "summary", "effect_class"],
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["VALIDATION_FAILED"]
+    },
+    {
+      "id": "registry.describe",
+      "version": 1,
+      "stability": "phase1",
+      "summary": "Return the full contract for one command and contract version.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["command"],
+        "properties": {
+          "command": { "type": "string", "minLength": 1 },
+          "version": { "type": "integer", "minimum": 1 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["registry_format", "command"],
+        "properties": {
+          "registry_format": { "type": "integer", "const": 1 },
+          "command": { "type": "object" }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["COMMAND_UNKNOWN", "COMMAND_VERSION_INCOMPATIBLE", "VALIDATION_FAILED"]
+    }
+  ]
+}

@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "captured_utc": "2026-09-26T23:45:20.2960589Z",
+  "source_revision": "c2fec0d7c72888e532434ebfbfb1ab57bc4d6953",
+  "rust_source_sha256": "79c273f6878c0be0d6a95d526a53a0653a50af39dbc2b6a7687d3c89f5b21120",
+  "working_tree_dirty": true,
+  "build_profile": "debug",
+  "run_count": 3,
+  "host_class": {
+    "os": "Microsoft Windows 11 Home",
+    "cpu_model": "AMD Ryzen 7 5800X3D 8-Core Processor",
+    "physical_cores": 8,
+    "logical_processors": 16,
+    "ram_bytes": 51437408256
+  },
+  "caveats": [
+    "One 28-byte synthetic JSON source and two target files; one installed digest-pinned sandboxed parser grant.",
+    "Publication latency begins after reconciliation and includes idle scheduling, sandbox worker launch, Core commit, and client polling.",
+    "Five-second CPU/RSS windows are short; unbound and installed samples are sequential daemon processes with different histories.",
+    "The debug fixture accelerates user-idle eligibility to one millisecond; production uses thirty seconds.",
+    "No creator application, minimum/recommended hardware tier, large-file parser input, or long-run poll measurement."
+  ],
+  "summary": {
+    "initial_publish_ms_after_reconcile": {
+      "count": 3,
+      "min": 1338.0,
+      "median": 1349.0,
+      "max": 1378.0
+    },
+    "unbound_idle_rss_bytes": {
+      "count": 3,
+      "min": 11894784.0,
+      "median": 11894784.0,
+      "max": 11907072.0
+    },
+    "unbound_idle_cpu_ms": {
+      "count": 3,
+      "min": 0.0,
+      "median": 0.0,
+      "max": 0.0
+    },
+    "installed_idle_rss_bytes": {
+      "count": 3,
+      "min": 16166912.0,
+      "median": 16261120.0,
+      "max": 16289792.0
+    },
+    "installed_idle_cpu_ms": {
+      "count": 3,
+      "min": 0.0,
+      "median": 0.0,
+      "max": 16.0
+    },
+    "reparse_publish_ms_after_reconcile": {
+      "count": 15,
+      "min": 1121.0,
+      "median": 1134.0,
+      "max": 1159.0
+    }
+  },
+  "samples": [
+    {
+      "idle_sample_ms": 5000,
+      "initial_publish_ms_after_reconcile": 1378,
+      "installed_idle_cpu_ms": 0,
+      "installed_idle_rss_bytes": 16166912,
+      "parser_grants": 1,
+      "reparse_publish_ms_after_reconcile": [
+        1124,
+        1131,
+        1134,
+        1133,
+        1140
+      ],
+      "source_bytes": 28,
+      "source_files": 1,
+      "unbound_idle_cpu_ms": 0,
+      "unbound_idle_rss_bytes": 11894784
+    },
+    {
+      "idle_sample_ms": 5000,
+      "initial_publish_ms_after_reconcile": 1338,
+      "installed_idle_cpu_ms": 0,
+      "installed_idle_rss_bytes": 16261120,
+      "parser_grants": 1,
+      "reparse_publish_ms_after_reconcile": [
+        1136,
+        1121,
+        1132,
+        1134,
+        1135
+      ],
+      "source_bytes": 28,
+      "source_files": 1,
+      "unbound_idle_cpu_ms": 0,
+      "unbound_idle_rss_bytes": 11894784
+    },
+    {
+      "idle_sample_ms": 5000,
+      "initial_publish_ms_after_reconcile": 1349,
+      "installed_idle_cpu_ms": 16,
+      "installed_idle_rss_bytes": 16289792,
+      "parser_grants": 1,
+      "reparse_publish_ms_after_reconcile": [
+        1150,
+        1159,
+        1146,
+        1144,
+        1134
+      ],
+      "source_bytes": 28,
+      "source_files": 1,
+      "unbound_idle_cpu_ms": 0,
+      "unbound_idle_rss_bytes": 11907072
+    }
+  ]
+}

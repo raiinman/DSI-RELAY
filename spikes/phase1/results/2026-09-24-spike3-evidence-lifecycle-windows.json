@@ -1,0 +1,583 @@
+{
+  "benchmark": "phase1-spike3-evidence-storage-lifecycle-windows",
+  "recorded_at": "2026-09-25T01:54:26.332Z",
+  "decision_informed": "How RELAY should reduce evidence growth before choosing a v0.1 evidence-storage layout and default compression policy.",
+  "hypothesis": "Exact hash dedupe plus fast Zstd and metadata-plus-file blobs will provide strong savings with simpler bounded maintenance than storing heavyweight evidence directly as SQLite BLOBs; aggregation/downsampling should be policy-tiered, not universal.",
+  "runtime": {
+    "os": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "arch": "x64"
+    },
+    "node": "v24.19.0",
+    "sqlite": "3.53.3",
+    "zstd": "1.5.7",
+    "ffmpeg": "ffmpeg version 8.1.2-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers",
+    "cpu_model": "AMD Ryzen 7 5800X3D 8-Core Processor",
+    "logical_cpu_count": 16,
+    "total_memory_bytes": 51437408256
+  },
+  "fixture_bytes": {
+    "structured_logs": 11517691,
+    "telemetry_jsonl": 9459740,
+    "source_like_text": 11075511,
+    "incompressible_binary": 8388608
+  },
+  "compression": {
+    "structured_logs": {
+      "original_bytes": 11517691,
+      "levels": {
+        "1": {
+          "compressed_bytes": 348923,
+          "reduction_ratio": 0.969705,
+          "saved_bytes": 11168768,
+          "compression": {
+            "n": 3,
+            "min_ms": 7.221,
+            "p50_ms": 7.377,
+            "p95_ms": 9.233,
+            "p99_ms": 9.233,
+            "max_ms": 9.233,
+            "mean_ms": 7.943
+          },
+          "decompression": {
+            "n": 5,
+            "min_ms": 12.108,
+            "p50_ms": 17.707,
+            "p95_ms": 45.753,
+            "p99_ms": 45.753,
+            "max_ms": 45.753,
+            "mean_ms": 21.526
+          },
+          "restore_exact": true
+        },
+        "3": {
+          "compressed_bytes": 272912,
+          "reduction_ratio": 0.976305,
+          "saved_bytes": 11244779,
+          "compression": {
+            "n": 3,
+            "min_ms": 10.339,
+            "p50_ms": 12.042,
+            "p95_ms": 67.213,
+            "p99_ms": 67.213,
+            "max_ms": 67.213,
+            "mean_ms": 29.864
+          },
+          "decompression": {
+            "n": 5,
+            "min_ms": 11.782,
+            "p50_ms": 12.846,
+            "p95_ms": 36.297,
+            "p99_ms": 36.297,
+            "max_ms": 36.297,
+            "mean_ms": 17.766
+          },
+          "restore_exact": true
+        },
+        "9": {
+          "compressed_bytes": 221468,
+          "reduction_ratio": 0.980771,
+          "saved_bytes": 11296223,
+          "compression": {
+            "n": 3,
+            "min_ms": 64.482,
+            "p50_ms": 70.692,
+            "p95_ms": 73.976,
+            "p99_ms": 73.976,
+            "max_ms": 73.976,
+            "mean_ms": 69.717
+          },
+          "decompression": {
+            "n": 5,
+            "min_ms": 11.929,
+            "p50_ms": 15.145,
+            "p95_ms": 79.522,
+            "p99_ms": 79.522,
+            "max_ms": 79.522,
+            "mean_ms": 26.954
+          },
+          "restore_exact": true
+        },
+        "19": {
+          "compressed_bytes": 127371,
+          "reduction_ratio": 0.988941,
+          "saved_bytes": 11390320,
+          "compression": {
+            "n": 1,
+            "min_ms": 9392.176,
+            "p50_ms": 9392.176,
+            "p95_ms": 9392.176,
+            "p99_ms": 9392.176,
+            "max_ms": 9392.176,
+            "mean_ms": 9392.176
+          },
+          "decompression": {
+            "n": 3,
+            "min_ms": 18.559,
+            "p50_ms": 19.048,
+            "p95_ms": 49.704,
+            "p99_ms": 49.704,
+            "max_ms": 49.704,
+            "mean_ms": 29.104
+          },
+          "restore_exact": true
+        }
+      }
+    },
+    "telemetry_jsonl": {
+      "original_bytes": 9459740,
+      "levels": {
+        "1": {
+          "compressed_bytes": 2397393,
+          "reduction_ratio": 0.746569,
+          "saved_bytes": 7062347,
+          "compression": {
+            "n": 3,
+            "min_ms": 23.249,
+            "p50_ms": 25.426,
+            "p95_ms": 44.072,
+            "p99_ms": 44.072,
+            "max_ms": 44.072,
+            "mean_ms": 30.915
+          },
+          "decompression": {
+            "n": 5,
+            "min_ms": 15.501,
+            "p50_ms": 17.656,
+            "p95_ms": 50.23,
+            "p99_ms": 50.23,
+            "max_ms": 50.23,
+            "mean_ms": 23.761
+          },
+          "restore_exact": true
+        },
+        "3": {
+          "compressed_bytes": 2796303,
+          "reduction_ratio": 0.7044,
+          "saved_bytes": 6663437,
+          "compression": {
+            "n": 3,
+            "min_ms": 62.337,
+            "p50_ms": 67.633,
+            "p95_ms": 86.251,
+            "p99_ms": 86.251,
+            "max_ms": 86.251,
+            "mean_ms": 72.073
+          },
+          "decompression": {
+            "n": 5,
+            "min_ms": 19.99,
+            "p50_ms": 20.976,
+            "p95_ms": 54.531,
+            "p99_ms": 54.531,
+            "max_ms": 54.531,
+            "mean_ms": 31.421
+          },
+          "restore_exact": true
+        },
+        "9": {
+          "compressed_bytes": 2631397,
+          "reduction_ratio": 0.721832,
+          "saved_bytes": 6828343,
+          "compression": {
+            "n": 3,
+            "min_ms": 194.165,
+            "p50_ms": 204.314,
+            "p95_ms": 212.503,
+            "p99_ms": 212.503,
+            "max_ms": 212.503,
+            "mean_ms": 203.661
+          },
+          "decompression": {
+            "n": 5,
+            "min_ms": 19.647,
+            "p50_ms": 22.105,
+            "p95_ms": 49.237,
+            "p99_ms": 49.237,
+            "max_ms": 49.237,
+            "mean_ms": 26.736
+          },
+          "restore_exact": true
+        },
+        "19": {
+          "compressed_bytes": 1978121,
+          "reduction_ratio": 0.790891,
+          "saved_bytes": 7481619,
+          "compression": {
+            "n": 1,
+            "min_ms": 6846.569,
+            "p50_ms": 6846.569,
+            "p95_ms": 6846.569,
+            "p99_ms": 6846.569,
+            "max_ms": 6846.569,
+            "mean_ms": 6846.569
+          },
+          "decompression": {
+            "n": 3,
+            "min_ms": 16.885,
+            "p50_ms": 17.592,
+            "p95_ms": 17.685,
+            "p99_ms": 17.685,
+            "max_ms": 17.685,
+            "mean_ms": 17.387
+          },
+          "restore_exact": true
+        }
+      }
+    },
+    "source_like_text": {
+      "original_bytes": 11075511,
+      "levels": {
+        "1": {
+          "compressed_bytes": 623302,
+          "reduction_ratio": 0.943723,
+          "saved_bytes": 10452209,
+          "compression": {
+            "n": 3,
+            "min_ms": 11.878,
+            "p50_ms": 12.325,
+            "p95_ms": 13.943,
+            "p99_ms": 13.943,
+            "max_ms": 13.943,
+            "mean_ms": 12.715
+          },
+          "decompression": {
+            "n": 5,
+            "min_ms": 14.142,
+            "p50_ms": 30.28,
+            "p95_ms": 47.09,
+            "p99_ms": 47.09,
+            "max_ms": 47.09,
+            "mean_ms": 27.897
+          },
+          "restore_exact": true
+        },
+        "3": {
+          "compressed_bytes": 749032,
+          "reduction_ratio": 0.93237,
+          "saved_bytes": 10326479,
+          "compression": {
+            "n": 3,
+            "min_ms": 12.377,
+            "p50_ms": 12.601,
+            "p95_ms": 17.14,
+            "p99_ms": 17.14,
+            "max_ms": 17.14,
+            "mean_ms": 14.039
+          },
+          "decompression": {
+            "n": 5,
+            "min_ms": 15.57,
+            "p50_ms": 32.589,
+            "p95_ms": 37.572,
+            "p99_ms": 37.572,
+            "max_ms": 37.572,
+            "mean_ms": 27.324
+          },
+          "restore_exact": true
+        },
+        "9": {
+          "compressed_bytes": 572520,
+          "reduction_ratio": 0.948308,
+          "saved_bytes": 10502991,
+          "compression": {
+            "n": 3,
+            "min_ms": 79.398,
+            "p50_ms": 86.094,
+            "p95_ms": 93.912,
+            "p99_ms": 93.912,
+            "max_ms": 93.912,
+            "mean_ms": 86.468
+          },
+          "decompression": {
+            "n": 5,
+            "min_ms": 15.545,
+            "p50_ms": 27.807,
+            "p95_ms": 41.246,
+            "p99_ms": 41.246,
+            "max_ms": 41.246,
+            "mean_ms": 27.175
+          },
+          "restore_exact": true
+        },
+        "19": {
+          "compressed_bytes": 269953,
+          "reduction_ratio": 0.975626,
+          "saved_bytes": 10805558,
+          "compression": {
+            "n": 1,
+            "min_ms": 7149.652,
+            "p50_ms": 7149.652,
+            "p95_ms": 7149.652,
+            "p99_ms": 7149.652,
+            "max_ms": 7149.652,
+            "mean_ms": 7149.652
+          },
+          "decompression": {
+            "n": 3,
+            "min_ms": 9.506,
+            "p50_ms": 10.826,
+            "p95_ms": 11.131,
+            "p99_ms": 11.131,
+            "max_ms": 11.131,
+            "mean_ms": 10.488
+          },
+          "restore_exact": true
+        }
+      }
+    },
+    "incompressible_binary": {
+      "original_bytes": 8388608,
+      "levels": {
+        "1": {
+          "compressed_bytes": 8388810,
+          "reduction_ratio": -0.000024,
+          "saved_bytes": -202,
+          "compression": {
+            "n": 3,
+            "min_ms": 10.307,
+            "p50_ms": 10.697,
+            "p95_ms": 105.612,
+            "p99_ms": 105.612,
+            "max_ms": 105.612,
+            "mean_ms": 42.205
+          },
+          "decompression": {
+            "n": 5,
+            "min_ms": 6.465,
+            "p50_ms": 8.122,
+            "p95_ms": 36.546,
+            "p99_ms": 36.546,
+            "max_ms": 36.546,
+            "mean_ms": 17.011
+          },
+          "restore_exact": true
+        },
+        "3": {
+          "compressed_bytes": 8388810,
+          "reduction_ratio": -0.000024,
+          "saved_bytes": -202,
+          "compression": {
+            "n": 3,
+            "min_ms": 7.652,
+            "p50_ms": 7.855,
+            "p95_ms": 8.928,
+            "p99_ms": 8.928,
+            "max_ms": 8.928,
+            "mean_ms": 8.145
+          },
+          "decompression": {
+            "n": 5,
+            "min_ms": 4.764,
+            "p50_ms": 6.388,
+            "p95_ms": 28.435,
+            "p99_ms": 28.435,
+            "max_ms": 28.435,
+            "mean_ms": 11.072
+          },
+          "restore_exact": true
+        },
+        "9": {
+          "compressed_bytes": 8388810,
+          "reduction_ratio": -0.000024,
+          "saved_bytes": -202,
+          "compression": {
+            "n": 3,
+            "min_ms": 16.377,
+            "p50_ms": 20.865,
+            "p95_ms": 48.1,
+            "p99_ms": 48.1,
+            "max_ms": 48.1,
+            "mean_ms": 28.447
+          },
+          "decompression": {
+            "n": 5,
+            "min_ms": 5.806,
+            "p50_ms": 7.912,
+            "p95_ms": 26.435,
+            "p99_ms": 26.435,
+            "max_ms": 26.435,
+            "mean_ms": 11.089
+          },
+          "restore_exact": true
+        },
+        "19": {
+          "compressed_bytes": 8388809,
+          "reduction_ratio": -0.000024,
+          "saved_bytes": -201,
+          "compression": {
+            "n": 1,
+            "min_ms": 1333.268,
+            "p50_ms": 1333.268,
+            "p95_ms": 1333.268,
+            "p99_ms": 1333.268,
+            "max_ms": 1333.268,
+            "mean_ms": 1333.268
+          },
+          "decompression": {
+            "n": 3,
+            "min_ms": 7.737,
+            "p50_ms": 7.952,
+            "p95_ms": 8.83,
+            "p99_ms": 8.83,
+            "max_ms": 8.83,
+            "mean_ms": 8.173
+          },
+          "restore_exact": true
+        }
+      }
+    }
+  },
+  "dedupe": {
+    "project_scope": {
+      "references": 240,
+      "original_bytes": 62917084,
+      "unique_objects": 68,
+      "unique_raw_bytes": 17826510,
+      "raw_saved_bytes": 45090574,
+      "raw_reduction_ratio": 0.716667,
+      "unique_zstd_level3_bytes": 5988746,
+      "combined_dedupe_plus_compression_reduction_ratio": 0.904815
+    },
+    "workspace_scope": {
+      "references": 240,
+      "original_bytes": 62917084,
+      "unique_objects": 48,
+      "unique_raw_bytes": 12583420,
+      "raw_saved_bytes": 50333664,
+      "raw_reduction_ratio": 0.8,
+      "unique_zstd_level3_bytes": 4169286,
+      "combined_dedupe_plus_compression_reduction_ratio": 0.933734
+    }
+  },
+  "log_aggregation": {
+    "original_event_count": 100000,
+    "aggregate_rows": 72,
+    "original_jsonl_bytes": 11517691,
+    "aggregate_json_bytes": 12781,
+    "reduction_ratio": 0.99889,
+    "elapsed_ms": 39.557,
+    "count_preserved": true
+  },
+  "telemetry_downsampling": {
+    "original_sample_count": 200000,
+    "buckets": 2000,
+    "bucket_size": 100,
+    "original_jsonl_bytes": 9459740,
+    "downsample_json_bytes": 378158,
+    "reduction_ratio": 0.960024,
+    "elapsed_ms": 5.326,
+    "count_preserved": true,
+    "global_min_preserved": true,
+    "global_max_preserved": true
+  },
+  "storage_layout": {
+    "corpus_objects": 30,
+    "original_raw_bytes": 7864640,
+    "compressed_level3_bytes": 2629502,
+    "sqlite_blob": {
+      "database_bytes_after_checkpoint": 2670592,
+      "write_latency": {
+        "n": 30,
+        "min_ms": 0.422,
+        "p50_ms": 0.65,
+        "p95_ms": 1.584,
+        "p99_ms": 2.03,
+        "max_ms": 2.03,
+        "mean_ms": 0.825
+      },
+      "read_latency": {
+        "n": 300,
+        "min_ms": 0.015,
+        "p50_ms": 0.077,
+        "p95_ms": 0.481,
+        "p99_ms": 1.21,
+        "max_ms": 2.895,
+        "mean_ms": 0.162
+      },
+      "vacuum_copy_bytes": 2670592,
+      "vacuum_ms": 18.542,
+      "observed_db_plus_vacuum_headroom_bytes": 5341184
+    },
+    "metadata_plus_files": {
+      "metadata_db_bytes_after_checkpoint": 20480,
+      "blob_payload_bytes": 2629502,
+      "total_logical_bytes": 2649982,
+      "write_latency": {
+        "n": 30,
+        "min_ms": 0.914,
+        "p50_ms": 1.094,
+        "p95_ms": 1.983,
+        "p99_ms": 2.688,
+        "max_ms": 2.688,
+        "mean_ms": 1.223
+      },
+      "read_latency": {
+        "n": 300,
+        "min_ms": 0.633,
+        "p50_ms": 0.745,
+        "p95_ms": 1.169,
+        "p99_ms": 1.781,
+        "max_ms": 1.908,
+        "mean_ms": 0.804
+      },
+      "per_blob_atomic_recompression_extra_headroom_bytes": 262173
+    }
+  },
+  "idle_recompression": {
+    "objects": 30,
+    "level1_total_bytes": 2544901,
+    "level9_total_bytes": 2535809,
+    "additional_savings_bytes": 9092,
+    "additional_savings_ratio_vs_level1": 0.003573,
+    "elapsed_ms": 143.138,
+    "restore_exact": true
+  },
+  "image_storage": {
+    "ffmpeg": "ffmpeg version 8.1.2-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers",
+    "formats": {
+      "png": {
+        "bytes": 11375,
+        "exact_pixel_match": true,
+        "role": "lossless_evidence"
+      },
+      "webp_lossless": {
+        "bytes": 1908,
+        "encode_ms": 410.909,
+        "exact_pixel_match": true,
+        "role": "lossless_evidence"
+      },
+      "jpeg_q2": {
+        "bytes": 77920,
+        "encode_ms": 116.6,
+        "exact_pixel_match": false,
+        "role": "lossy_reference"
+      },
+      "avif_crf18": {
+        "bytes": 16222,
+        "encode_ms": 236.279,
+        "exact_pixel_match": false,
+        "role": "lossy_reference"
+      }
+    }
+  },
+  "pipeline_recommendation_subject_to_review": [
+    "classify and retain provenance before compression",
+    "SHA-256 whole-blob hash before write",
+    "default dedupe boundary: project; workspace dedupe only when policy explicitly allows cross-project sharing",
+    "fast/default Zstd for hot/warm exact evidence",
+    "SQLite for metadata and compact results; file/blob storage for heavyweight evidence if layout benchmark remains favorable",
+    "aggregate repetitive logs and downsample telemetry only under declared retention classes that preserve required counts/extrema",
+    "recompress colder unpinned evidence during idle windows only when measured savings justify CPU/I/O",
+    "lossy image formats are reference derivatives, never substitutes for pinned exact evidence"
+  ],
+  "limitations": [
+    "Synthetic fixtures are designed to expose compression extremes; real UEFN evidence distributions still need field traces.",
+    "Filesystem results report logical payload bytes, not NTFS allocation-unit overhead or antivirus/indexer effects.",
+    "No concurrent UEFN/Fortnite foreground workload was active, so compression interference is not yet approved.",
+    "Whole-blob dedupe is tested; content-defined chunking remains intentionally deferred until measured evidence shows a need.",
+    "Telemetry downsampling and log aggregation are intentionally lossy/structural transformations and require retention-class policy before production use.",
+    "AVIF/JPEG are evaluated only as reference derivatives; exact evidentiary fidelity is represented by decoded-pixel equality for lossless formats."
+  ]
+}

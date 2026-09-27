@@ -1,0 +1,215 @@
+{
+  "schema_version": 1,
+  "captured_utc": "2026-09-26T23:22:40.7610950Z",
+  "source_revision": "f3ce18a198506ab25a32f96394c875192fe7bd49",
+  "rust_source_sha256": "f9f886cf6d761e21f48bdd6d37093b2c9fa00c40d0633b8ce681caf3ed605283",
+  "working_tree_dirty": true,
+  "build_profile": "debug",
+  "source_fixture": "benchmark_two_watched_projects_at_fifteen_thousand_files",
+  "run_count": 5,
+  "host_class": {
+    "os": "Microsoft Windows 11 Home",
+    "cpu_model": "AMD Ryzen 7 5800X3D 8-Core Processor",
+    "physical_cores": 8,
+    "logical_processors": 16,
+    "ram_bytes": 51437408256
+  },
+  "caveats": [
+    "Two 7500-file generic small-text projects per run; the fixture creates fresh roots and state.",
+    "The one-file wall clock includes OS notification, batching, command polling, and scheduling.",
+    "Idle CPU is a one-second process sample per run, not a long-run power or wakeup measure.",
+    "No creator application foreground latency or minimum/recommended hardware tier is measured."
+  ],
+  "summary": {
+    "watcher_one_file_stale_wall_ms": {
+      "count": 5,
+      "min": 29.0,
+      "median": 34.0,
+      "p95": 115.0,
+      "max": 115.0
+    },
+    "post_hint_reconcile_ms": {
+      "count": 5,
+      "min": 57.0,
+      "median": 58.0,
+      "p95": 71.0,
+      "max": 71.0
+    },
+    "full_content_verify_ms": {
+      "count": 5,
+      "min": 1258.0,
+      "median": 1377.0,
+      "p95": 1462.0,
+      "max": 1462.0
+    },
+    "idle_rss_bytes": {
+      "count": 5,
+      "min": 15478784.0,
+      "median": 15781888.0,
+      "p95": 15921152.0,
+      "max": 15921152.0
+    },
+    "idle_cpu_delta_ms": {
+      "count": 5,
+      "min": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "max": 0.0
+    },
+    "sqlite_main_wal_shm_bytes": {
+      "count": 5,
+      "min": 7776664.0,
+      "median": 7776664.0,
+      "p95": 7776664.0,
+      "max": 7776664.0
+    },
+    "baseline_ms": {
+      "count": 10,
+      "min": 1267.0,
+      "median": 1319.0,
+      "p95": 1526.0,
+      "max": 1526.0
+    },
+    "attachment_verify_ms": {
+      "count": 10,
+      "min": 1324.0,
+      "median": 1348.0,
+      "p95": 1448.0,
+      "max": 1448.0
+    },
+    "metadata_reconcile_ms": {
+      "count": 10,
+      "min": 54.0,
+      "median": 60.0,
+      "p95": 68.0,
+      "max": 68.0
+    }
+  },
+  "samples": [
+    {
+      "attachment_verify_ms": [
+        1329,
+        1325
+      ],
+      "baseline_ms": [
+        1314,
+        1286
+      ],
+      "full_content_files_hashed": 7500,
+      "full_content_verify_ms": 1462,
+      "idle_cpu_delta_ms": 0,
+      "idle_rss_bytes": 15478784,
+      "idle_sample_ms": 1000,
+      "metadata_reconcile_ms": [
+        59,
+        59
+      ],
+      "post_hint_files_hashed": 0,
+      "post_hint_reconcile_ms": 61,
+      "project_count": 2,
+      "sqlite_main_wal_shm_bytes": 7776664,
+      "total_fixture_files": 15000,
+      "watcher_one_file_stale_wall_ms": 34
+    },
+    {
+      "attachment_verify_ms": [
+        1341,
+        1352
+      ],
+      "baseline_ms": [
+        1526,
+        1326
+      ],
+      "full_content_files_hashed": 7500,
+      "full_content_verify_ms": 1378,
+      "idle_cpu_delta_ms": 0,
+      "idle_rss_bytes": 15921152,
+      "idle_sample_ms": 1000,
+      "metadata_reconcile_ms": [
+        54,
+        62
+      ],
+      "post_hint_files_hashed": 0,
+      "post_hint_reconcile_ms": 57,
+      "project_count": 2,
+      "sqlite_main_wal_shm_bytes": 7776664,
+      "total_fixture_files": 15000,
+      "watcher_one_file_stale_wall_ms": 115
+    },
+    {
+      "attachment_verify_ms": [
+        1324,
+        1423
+      ],
+      "baseline_ms": [
+        1324,
+        1277
+      ],
+      "full_content_files_hashed": 7500,
+      "full_content_verify_ms": 1274,
+      "idle_cpu_delta_ms": 0,
+      "idle_rss_bytes": 15847424,
+      "idle_sample_ms": 1000,
+      "metadata_reconcile_ms": [
+        60,
+        62
+      ],
+      "post_hint_files_hashed": 0,
+      "post_hint_reconcile_ms": 58,
+      "project_count": 2,
+      "sqlite_main_wal_shm_bytes": 7776664,
+      "total_fixture_files": 15000,
+      "watcher_one_file_stale_wall_ms": 30
+    },
+    {
+      "attachment_verify_ms": [
+        1348,
+        1370
+      ],
+      "baseline_ms": [
+        1419,
+        1319
+      ],
+      "full_content_files_hashed": 7500,
+      "full_content_verify_ms": 1377,
+      "idle_cpu_delta_ms": 0,
+      "idle_rss_bytes": 15777792,
+      "idle_sample_ms": 1000,
+      "metadata_reconcile_ms": [
+        68,
+        66
+      ],
+      "post_hint_files_hashed": 0,
+      "post_hint_reconcile_ms": 71,
+      "project_count": 2,
+      "sqlite_main_wal_shm_bytes": 7776664,
+      "total_fixture_files": 15000,
+      "watcher_one_file_stale_wall_ms": 39
+    },
+    {
+      "attachment_verify_ms": [
+        1448,
+        1351
+      ],
+      "baseline_ms": [
+        1346,
+        1267
+      ],
+      "full_content_files_hashed": 7500,
+      "full_content_verify_ms": 1258,
+      "idle_cpu_delta_ms": 0,
+      "idle_rss_bytes": 15781888,
+      "idle_sample_ms": 1000,
+      "metadata_reconcile_ms": [
+        55,
+        67
+      ],
+      "post_hint_files_hashed": 0,
+      "post_hint_reconcile_ms": 58,
+      "project_count": 2,
+      "sqlite_main_wal_shm_bytes": 7776664,
+      "total_fixture_files": 15000,
+      "watcher_one_file_stale_wall_ms": 29
+    }
+  ]
+}

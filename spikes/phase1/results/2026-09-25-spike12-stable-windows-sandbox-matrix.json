@@ -1,0 +1,312 @@
+{
+  "benchmark": "phase1-spike12-stable-windows-sandbox-matrix",
+  "recorded_at": "2026-09-25T11:01:16.814Z",
+  "decision_informed": "Which release-appropriate Windows sandbox backend/tier should enforce D-156 strong adapter isolation without depending on the experimental processmodel export.",
+  "hypothesis": "Documented LPAC AppContainer launch with temporary broker-owned ACL/Low-IL grants plus brokered egress can reproduce Spike 11's security guarantees at comparable cost, while unsupported or unmeasured Windows tiers fail closed.",
+  "runtime": {
+    "os": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "arch": "x64"
+    },
+    "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+    "cargo": "cargo 1.97.0 (c980f4866 2026-06-30)",
+    "cpu_model": "AMD Ryzen 7 5800X3D 8-Core Processor",
+    "logical_cpu_count": 16,
+    "total_memory_bytes": 51437408256
+  },
+  "selected_backend": {
+    "brokered_egress_required": true,
+    "direct_worker_network": false,
+    "experimental_processmodel_api_available": true,
+    "matrix_version": 1,
+    "measured_build": true,
+    "reason": "stable AppContainer/LPAC backend passed the Spike 12 adversarial fixture on this measured Windows build",
+    "selected_backend": "stable_lpac_brokered_egress",
+    "stable_appcontainer_api_available": true,
+    "strong_untrusted_launch_enabled": true,
+    "windows": {
+      "build": 26200,
+      "major": 10,
+      "minor": 0
+    }
+  },
+  "measurements": {
+    "stable_lpac": {
+      "prelaunch": {
+        "max_ms": 29.6862,
+        "mean_ms": 20.87521666666667,
+        "min_ms": 18.1256,
+        "n": 30,
+        "p50_ms": 19.9411,
+        "p95_ms": 25.3277,
+        "p99_ms": 29.6862
+      },
+      "create_process": {
+        "max_ms": 44.0084,
+        "mean_ms": 7.042166666666669,
+        "min_ms": 4.7928,
+        "n": 30,
+        "p50_ms": 5.517099999999999,
+        "p95_ms": 9.187199999999999,
+        "p99_ms": 44.0084
+      },
+      "full_restored_round_trip": {
+        "max_ms": 115.5811,
+        "mean_ms": 66.66948666666669,
+        "min_ms": 59.6718,
+        "n": 30,
+        "p50_ms": 63.2607,
+        "p95_ms": 86.259,
+        "p99_ms": 115.5811
+      },
+      "deny_result": {
+        "allowed_read_ok": true,
+        "allowed_write_ok": true,
+        "blocked_read_ok": false,
+        "blocked_write_ok": false,
+        "capability_count": 0,
+        "child_process_created": false,
+        "child_process_error": 1816,
+        "environment_keys": [
+          "APPDATA",
+          "LOCALAPPDATA",
+          "NUMBER_OF_PROCESSORS",
+          "PATHEXT",
+          "PROCESSOR_ARCHITECTURE",
+          "Path",
+          "ProgramFiles",
+          "RELAY_SANDBOX_MARKER",
+          "SystemDrive",
+          "SystemRoot",
+          "TEMP",
+          "TMP",
+          "USERDOMAIN",
+          "USERNAME",
+          "WINDIR"
+        ],
+        "is_app_container": true,
+        "network_connect_ok": false,
+        "network_error_code": 10107,
+        "parent_secret_visible": false,
+        "pid": 3676,
+        "read_only_write_ok": false,
+        "user_profile_visible": false
+      },
+      "direct_write_grant_count": 1,
+      "temporary_acl_grant_count": 6,
+      "temporary_low_il_label_count": 4,
+      "temporary_security_restored": true,
+      "job_limits": {
+        "active_process_limit": 1,
+        "kill_on_close": true,
+        "process_memory_limit_bytes": 33554432
+      },
+      "brokered_egress": {
+        "allowed_by_policy": true,
+        "connect_ok": true,
+        "elapsed_ms": 36.396100000000004,
+        "error_code": null,
+        "target": "1.1.1.1:443"
+      },
+      "denied_egress_error_code": "STABLE_SANDBOX_EGRESS_DENIED",
+      "direct_capability_error_code": "STABLE_SANDBOX_DIRECT_CAPABILITY_UNSUPPORTED"
+    },
+    "experimental_reference": {
+      "launch": {
+        "max_ms": 63.66239999999999,
+        "mean_ms": 33.741436666666665,
+        "min_ms": 29.7848,
+        "n": 30,
+        "p50_ms": 32.387699999999995,
+        "p95_ms": 37.5282,
+        "p99_ms": 63.66239999999999
+      },
+      "full_round_trip": {
+        "max_ms": 109.85010000000001,
+        "mean_ms": 67.65863666666665,
+        "min_ms": 62.7853,
+        "n": 30,
+        "p50_ms": 65.297,
+        "p95_ms": 84.7332,
+        "p99_ms": 109.85010000000001
+      },
+      "deny_result": {
+        "allowed_read_ok": true,
+        "allowed_write_ok": true,
+        "blocked_read_ok": false,
+        "blocked_write_ok": false,
+        "capability_count": 1,
+        "child_process_created": false,
+        "child_process_error": 1816,
+        "environment_keys": [
+          "APPDATA",
+          "LOCALAPPDATA",
+          "NUMBER_OF_PROCESSORS",
+          "PATHEXT",
+          "PROCESSOR_ARCHITECTURE",
+          "Path",
+          "ProgramFiles",
+          "RELAY_SANDBOX_MARKER",
+          "SystemDrive",
+          "SystemRoot",
+          "TEMP",
+          "TMP",
+          "USERDOMAIN",
+          "USERNAME",
+          "WINDIR"
+        ],
+        "is_app_container": true,
+        "network_connect_ok": false,
+        "network_error_code": 10013,
+        "parent_secret_visible": false,
+        "pid": 12200,
+        "read_only_write_ok": false,
+        "user_profile_visible": false
+      },
+      "job_limits": {
+        "active_process_limit": 1,
+        "kill_on_close": true,
+        "process_memory_limit_bytes": 33554432
+      }
+    },
+    "stable_minus_experimental_p50_ms": -2.036,
+    "stable_vs_experimental_p50_ratio": 0.9688,
+    "host_network_baseline": true
+  },
+  "build_and_complexity": {
+    "spike11_reference": {
+      "clean_release_all_bins_ms": 36074.051,
+      "direct_dependency_count": 6,
+      "resolved_package_count": 37,
+      "core_release_binary_bytes": 2271744,
+      "sandbox_worker_binary_bytes": 256000,
+      "sandbox_probe_binary_bytes": 374272,
+      "source_metrics": {
+        "files": 2,
+        "lines": 653,
+        "bytes": 19439,
+        "unsafe_mentions": 25
+      }
+    },
+    "spike12": {
+      "clean_release_all_bins_ms": 40017.071,
+      "direct_dependency_count": 6,
+      "resolved_package_count": 37,
+      "core_release_binary_bytes": 2271744,
+      "sandbox_worker_binary_bytes": 248832,
+      "stable_probe_binary_bytes": 390144,
+      "experimental_probe_binary_bytes": 374272,
+      "source_metrics": {
+        "files": 3,
+        "lines": 1686,
+        "bytes": 49676,
+        "unsafe_mentions": 66
+      }
+    },
+    "deltas_vs_spike11": {
+      "direct_dependencies": 0,
+      "resolved_packages": 0,
+      "core_release_binary_bytes": 0
+    }
+  },
+  "failure_evidence": {
+    "integration_tests_exit_code": 0,
+    "integration_test_count": 3,
+    "simulated_matrix": {
+      "experimental_only": {
+        "brokered_egress_required": true,
+        "direct_worker_network": false,
+        "experimental_processmodel_api_available": true,
+        "matrix_version": 1,
+        "measured_build": true,
+        "reason": "stable AppContainer APIs are unavailable; experimental sandbox is not a release fallback",
+        "selected_backend": "disabled",
+        "stable_appcontainer_api_available": false,
+        "strong_untrusted_launch_enabled": false,
+        "windows": {
+          "build": 26200,
+          "major": 10,
+          "minor": 0
+        }
+      },
+      "measured_stable_without_experimental": {
+        "brokered_egress_required": true,
+        "direct_worker_network": false,
+        "experimental_processmodel_api_available": false,
+        "matrix_version": 1,
+        "measured_build": true,
+        "reason": "stable AppContainer/LPAC backend passed the Spike 12 adversarial fixture on this measured Windows build",
+        "selected_backend": "stable_lpac_brokered_egress",
+        "stable_appcontainer_api_available": true,
+        "strong_untrusted_launch_enabled": true,
+        "windows": {
+          "build": 26200,
+          "major": 10,
+          "minor": 0
+        }
+      },
+      "unmeasured_stable": {
+        "brokered_egress_required": true,
+        "direct_worker_network": false,
+        "experimental_processmodel_api_available": false,
+        "matrix_version": 1,
+        "measured_build": false,
+        "reason": "stable AppContainer APIs are present but this Windows build has not passed RELAY's adversarial qualification matrix",
+        "selected_backend": "disabled",
+        "stable_appcontainer_api_available": true,
+        "strong_untrusted_launch_enabled": false,
+        "windows": {
+          "build": 19045,
+          "major": 10,
+          "minor": 0
+        }
+      }
+    },
+    "unsupported_direct_capability": "STABLE_SANDBOX_DIRECT_CAPABILITY_UNSUPPORTED",
+    "denied_broker_egress": "STABLE_SANDBOX_EGRESS_DENIED"
+  },
+  "pass_fail": {
+    "integration_tests_pass": true,
+    "stable_backend_selected": true,
+    "measured_build_selected": true,
+    "experimental_not_release_fallback": true,
+    "unmeasured_build_fails_closed": true,
+    "stable_without_experimental_still_selected": true,
+    "appcontainer_verified": true,
+    "allowed_mailbox_read_works": true,
+    "allowed_mailbox_write_works": true,
+    "read_only_worker_write_denied": true,
+    "ungranted_file_read_denied": true,
+    "ungranted_file_write_denied": true,
+    "direct_worker_network_denied": true,
+    "parent_secret_not_inherited": true,
+    "userprofile_not_inherited": true,
+    "child_process_creation_denied": true,
+    "outer_job_active_process_limit": true,
+    "outer_job_memory_limit": true,
+    "outer_job_kill_on_close": true,
+    "temporary_security_restored": true,
+    "mailbox_is_only_direct_write_grant": true,
+    "direct_capability_grant_rejected": true,
+    "brokered_egress_policy_enforced": true,
+    "brokered_egress_works": true,
+    "experimental_reference_still_passes": true,
+    "stable_p50_under_200ms": true,
+    "stable_p95_under_300ms": true,
+    "stable_p50_under_2x_experimental": true,
+    "no_new_direct_dependency_vs_spike11": true,
+    "resolved_package_growth_bounded": true,
+    "core_binary_growth_bounded": true
+  },
+  "limitations": [
+    "The stable AppContainer APIs are documented back to Windows 8 desktop apps, but RELAY only enables strong untrusted launch on Windows builds that have passed the full adversarial fixture; this prototype allowlists build 26200 only.",
+    "The stable backend intentionally gives the untrusted worker exactly one direct read/write grant: a broker-owned ephemeral mailbox. Project/user writes must return through trusted broker commands rather than direct worker filesystem authority.",
+    "The stable backend temporarily grants AppContainer DACL access to the mailbox/worker tree and applies Low Integrity only to the ephemeral mailbox. Tests verify the DACL is restored, the Low-Integrity label is removed after exit, and the worker tree descriptor is restored exactly.",
+    "Direct worker network capabilities are intentionally disabled in the stable backend. Network access is brokered through an explicit target allowlist, so future real adapters may need a higher-level HTTP/RPC egress service rather than raw sockets.",
+    "The positive brokered-egress check uses external TCP reachability to 1.1.1.1:443 and is fixture/network dependent; the benchmark separately requires host baseline reachability.",
+    "The experimental processmodel backend remains in the repository only as a measured reference and is never selected by the release backend matrix.",
+    "Real UEFN, Blender, Krita, and other developer-tool adapter compatibility has not been tested inside the stable LPAC boundary.",
+    "Only one Windows 11 build and one high-end workstation were physically measured; additional Windows builds require the same adversarial fixture before being added to the release allowlist."
+  ]
+}

@@ -81,6 +81,8 @@ Responsibilities:
 
 The daemon must remain useful with no dashboard open and no AI connected.
 
+Phase 1 D-153 selects Rust as the local host/runtime foundation. The per-user Rust host uses the kernel-verified current-user-only Windows named pipe plus a random per-start application token, hosts the embedded static/HTTP dashboard surface, and owns the operational SQLite connection. The selected storage path uses `rusqlite` with default features disabled and bundled SQLite, preserving schema-version-1 database compatibility with the Node reference implementation. Node remains useful as a compatibility/reference implementation during Phase 1, not the intended shipping daemon.
+
 ### relay CLI
 
 Canonical headless public interface.
@@ -113,6 +115,10 @@ A client of RELAY Core, not a separate backend.
 It owns presentation, filtering, live status, approvals, history exploration, diagnostics, and user-friendly configuration.
 
 No RELAY capability may exist only in the dashboard.
+
+Phase 1 Spike 6 currently favors serving the local dashboard's static/HTTP surface from the existing per-user `relayd` process rather than starting another resident dashboard backend. The embedded adapter and CLI/named-pipe path share the same structured command dispatch/envelope semantics. Browser code remains presentation-only and may expose a deliberately scoped command subset appropriate to its current authorization model.
+
+A future desktop wrapper may package or navigate the dashboard, but it must not create a second implementation of RELAY Core merely for UI convenience.
 
 ### Skills
 
@@ -163,6 +169,10 @@ The command registry should be the single metadata source for:
 - affected project/resource boundary
 
 Generated or derived surfaces can include CLI help, dashboard forms, skill references, API schemas, and MCP contracts.
+
+Phase 1 D-154 selects a plain JSON command registry using the JSON Schema 2020-12 dialect with a bounded RELAY validation profile. The selected Rust core embeds and validates the registry, rejects unsupported schema keywords/registry formats, validates arguments before execution and results/errors before return, and resolves an optional per-command contract version. CLI catalog/help/describe metadata, dashboard command visibility, adapter/AI discovery metadata, and command capability IDs derive from this one source.
+
+Compact discovery is two-stage: list concise command metadata first, then describe one command only when its full schema is needed. Reserved and deprecated IDs are retained in the registry and cannot be silently reused. Breaking command-shape changes require a new command contract version; compatible additive optional fields can remain within a version when compatibility checks prove older payloads remain accepted.
 
 The registry is the semantic source of truth, but presentation text may be surface-specific. Tool and command wording can affect model behavior, so CLI, skills, and MCP renderings must be tested rather than assumed equivalent.
 
@@ -333,6 +343,18 @@ The broker is responsible for:
 - adapter quarantine/disable behavior
 
 Adapters communicate through a versioned protocol and receive only the capabilities granted to that adapter instance.
+
+Phase 1 D-155 selects the initial broker/worker foundation: validated adapters launch on demand out of process, bind their declared command/version capabilities to the trusted D-154 command registry, verify the launched artifact/component digest, negotiate adapter protocol/identity/capabilities, validate arguments/results/errors through Core-owned schemas, and attach manifest/artifact provenance to accepted results. Worker crashes, hangs, invalid messages, and repeated failures remain outside Core and feed bounded timeout/backoff/quarantine state.
+
+On Windows, the first containment layer uses Job Objects with kill-on-close, one active process, and a bounded process-memory limit. This is lifecycle/resource containment only.
+
+Phase 1 D-156 adds the selected strong isolation semantics for untrusted workers: AppContainer/process sandbox execution, explicit filesystem grants, default-deny worker network, minimized explicit environment, Win32k disablement for the synthetic worker, and the outer Job Object limits. RELAY Core remains outside that restricted worker boundary.
+
+D-157 selects Microsoft's documented AppContainer/LPAC process-launch path as the intended Windows release backend on qualified builds. The untrusted worker receives exactly one direct read/write path: a broker-owned ephemeral mailbox. Project/user writes remain broker-mediated; read-only paths can be granted as needed. Direct worker network capabilities are disabled and network access is provided through brokered allowlisted egress.
+
+The Spike 11 experimental `Experimental_CreateProcessInSandbox` backend remains a benchmark/reference implementation only. Backend matrix version 1 enables strong untrusted launch only on Windows builds that have passed the adversarial fixture; unsupported or unmeasured builds disable that launch rather than falling back to an unrestricted D-155 worker.
+
+Inactive installed adapters keep only validated manifest metadata; workers are not kept resident until needed.
 
 ### Adapter manifest
 
@@ -601,9 +623,15 @@ Configuration must be inspectable from CLI/dashboard without requiring users to 
 
 ## Diagnostics interface
 
-RELAY Core should expose a normalized diagnostic/health command set that the CLI and dashboard can render consistently.
+RELAY Core exposes one normalized diagnostic/health surface that CLI and dashboard render without duplicating diagnostic logic.
 
-A future relay doctor operation should aggregate subsystem health without implementing separate diagnostic logic in the UI.
+Phase 1 D-159 selects bounded structured JSONL as the normal local diagnostic record. The envelope carries stable event identity/time/severity/component, project/job/result references, correlation/causation, source/trust, completeness/sampling, capture mode, and structured attributes.
+
+Normal capture is bounded and deterministically redacted before persistence. High-detail capture is explicit, temporary, and separately size-limited. Rotation/retention records eviction rather than implying complete history. Partial trailing records are recovered explicitly after restart.
+
+Diagnostic capture has its own health state and contributes to live recovery/doctor truth. A failed logger may not be hidden by otherwise healthy IPC/storage state.
+
+Default support summaries expose health and aggregates, not unrestricted raw history. ETW remains an optional Windows deep-trace hook rather than the portable durable support record.
 
 
 ## License and terms compatibility metadata

@@ -161,6 +161,20 @@ If RELAY adopts Protocol Buffers or another IDL:
 
 A schema change that is safe in one representation may be unsafe in another.
 
+Phase 1 D-154 selects JSON command contracts using a bounded JSON Schema 2020-12 profile. Each command carries its own integer contract version in the registry. Clients may omit the version and receive the latest currently registered contract, or pin a version when reproducibility/skew matters. Unsupported requested versions fail explicitly.
+
+For registry format 1:
+
+- adding an optional property is compatible when existing accepted payloads remain valid
+- adding a required property is breaking
+- changing the schema/type of an existing property is breaking unless a proven compatibility rule says otherwise
+- tightening previously allowed unknown/additional fields is breaking
+- removed command IDs remain deprecated/reserved and are not silently reused
+- registry-format evolution is distinct from individual command-version evolution
+- unsupported JSON Schema keywords fail registry validation rather than being ignored
+
+Mixed-version tests must include version omission, explicit supported/unsupported command versions, stale clients, and derived CLI/dashboard/adapter/AI metadata.
+
 ## Result and evidence longevity
 
 Stored results may outlive the code that produced them.
@@ -202,6 +216,10 @@ Requirements:
 
 See RESILIENCE_AND_RECOVERY.md for rollback/restore rules.
 
+Phase 1 Spike 8 proves schema version 1 is representation-compatible across the Node reference and selected Rust implementation: each runtime can open the other's database and preserve projects, compact result JSON, payload hashes, producer versions, jobs, and checkpoints. Both runtimes reject an intentionally future schema version 999 by starting `Degraded` and blocking storage writes rather than guessing compatibility or downgrading the data. This is a schema-1 interoperability result, not approval for arbitrary mixed-version rolling upgrades or future migrations.
+
+D-158 carries the same compatibility rule into packaging: release manifests declare the maximum supported storage schema, and activation/rollback refuses a binary whose declared schema support is older than the durable store. The active-version record also retains channel/source plus component version, SHA-256, and provenance so binary state is inspectable independently of data migration state.
+
 ## Adapter protocol evolution
 
 Adapter compatibility is declared, not guessed.
@@ -214,6 +232,12 @@ Adapter manifests should declare:
 - external-tool version/capability requirements
 
 The adapter broker negotiates capabilities and quarantines unsupported combinations.
+
+Phase 1 D-155 establishes adapter manifest format 1 and adapter protocol version 1 for the synthetic broker foundation. Before launch, manifest command/version bindings must resolve through the trusted command registry; worker hello identity, protocol, process ID, and exact capability set must match the accepted manifest. Incompatible manifest formats/protocol ranges/command versions fail closed rather than launching optimistically. Repeated runtime failures feed explicit backoff/quarantine state.
+
+Phase 1 D-156 treats sandbox-policy compatibility as another negotiated/fail-closed boundary. The measured experimental SandboxSpec version is `0.1.0`; unsupported spec versions are rejected before process launch and the experimental backend/export is not a public adapter protocol commitment.
+
+D-157 introduces sandbox-backend matrix version 1 for the release path. Strong untrusted launch is enabled only when the current Windows build is explicitly qualified for the stable AppContainer/LPAC backend. An experimental-only host or a stable-API host on an unmeasured build selects `disabled`; there is no automatic downgrade to the unrestricted worker path. Direct worker network capability grants are also rejected by the stable backend because network access is brokered separately.
 
 The protocol should prefer additive changes and optional capabilities over forcing every adapter to release in lockstep.
 
@@ -387,7 +411,6 @@ CI/release tests should include:
 - contract/stability taxonomy names
 - public API version format
 - local IPC serialization
-- schema format/IDL
 - support window lengths
 - preview/experimental policy
 - compatibility alias duration

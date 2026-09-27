@@ -7,6 +7,7 @@
 
 - AGENTS.md files are binding work contracts for their subtrees.
 - Work products, source materials, instructions, records, assets, and durable docs must stay understandable from the nearest applicable AGENTS.md plus every parent AGENTS.md above it.
+- Keep `Cargo.lock` checked out with LF line endings through `.gitattributes`; the release dependency and provenance checks pin its raw SHA-256 across Windows hosts.
 
 ## Read Before Editing
 
@@ -112,4 +113,8 @@ When the user requests a durable behavior change, record it here or in the relev
 
 ## Child DOX Index
 
+- `.github/AGENTS.md` — owns branch-scoped review workflows, validation helpers, and public issue intake templates.
+- `crates/AGENTS.md` — owns production Rust crates promoted from Phase 1 evidence during Phase 2 and later implementation phases.
 - `docs/AGENTS.md` — owns durable product, architecture, research, roadmap, security, UX, and operating documentation under `docs/`.
+- `release/AGENTS.md` — owns local release assembly, preview bundle contents, and package verification under `release/`.
+- `spikes/AGENTS.md` — owns Phase 1 technical spikes, benchmark harnesses/results, and prototype verification under `spikes/`.

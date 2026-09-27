@@ -1,0 +1,90 @@
+{
+  "benchmark": "phase1-spike1-node-windows",
+  "recorded_at": "2026-09-25T01:59:49.579Z",
+  "decision_informed": "Whether the dependency-free Node candidate is viable enough to carry into Phase 1 storage/evidence spikes; this does not lock the final RELAY runtime or IPC.",
+  "hypothesis": "A normal per-user Node process using a Windows named pipe can provide a low-overhead structured RELAY host/CLI round trip with clean restart behavior.",
+  "runtime": {
+    "os": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "arch": "x64"
+    },
+    "node": "v24.19.0",
+    "v8": "13.6.233.17-node.51",
+    "sqlite": "3.53.3",
+    "zstd": "1.5.7",
+    "cpu_model": "AMD Ryzen 7 5800X3D 8-Core Processor           ",
+    "logical_cpu_count": 16,
+    "total_memory_bytes": 51437408256
+  },
+  "protocol": {
+    "transport": "Windows named pipe via node:net",
+    "framing": "newline-delimited JSON",
+    "protocol_version": 1,
+    "schema_version": 1
+  },
+  "workload": {
+    "startup_runs": 10,
+    "direct_round_trips": 200,
+    "cli_round_trips": 50,
+    "direct_warmup_round_trips": 10,
+    "idle_sample_ms": 5005.2
+  },
+  "measurements": {
+    "startup_to_state_ready": {
+      "n": 10,
+      "min_ms": 80.076,
+      "p50_ms": 91.536,
+      "p95_ms": 97.576,
+      "p99_ms": 97.576,
+      "max_ms": 97.576,
+      "mean_ms": 91.034
+    },
+    "direct_authenticated_handshake_plus_status": {
+      "n": 200,
+      "min_ms": 0.901,
+      "p50_ms": 1.058,
+      "p95_ms": 1.502,
+      "p99_ms": 2.018,
+      "max_ms": 2.751,
+      "mean_ms": 1.125
+    },
+    "full_cli_process_status": {
+      "n": 50,
+      "min_ms": 139.035,
+      "p50_ms": 141.929,
+      "p95_ms": 161.012,
+      "p99_ms": 207.869,
+      "max_ms": 207.869,
+      "mean_ms": 145.979
+    },
+    "idle": {
+      "rss_bytes": 118153216,
+      "private_bytes": 157716480,
+      "cpu_ms_over_sample": 0,
+      "cpu_percent_one_logical_core": 0,
+      "cpu_percent_total_machine_capacity": 0
+    },
+    "hard_kill_restart": {
+      "previous_pid": 45128,
+      "replacement_pid": 49064,
+      "stale_state_rewrite_window_ms": 98.431,
+      "post_restart_status_ok": true
+    }
+  },
+  "pass_fail": {
+    "structured_round_trip": true,
+    "clean_graceful_stop": true,
+    "hard_kill_restart": true,
+    "machine_mode_noninteractive": true,
+    "wrong_token_rejected": true,
+    "incompatible_protocol_rejected": true
+  },
+  "limitations": [
+    "Benchmark ran on one high-end Windows workstation; it is not a hardware-tier performance claim.",
+    "Startup runs are process-cold/restart measurements on a warm OS cache, not cold-boot measurements.",
+    "Node named-pipe ACL behavior was not explicitly hardened or cross-user tested in this spike; the random per-start token is necessary but not sufficient evidence to lock IPC security.",
+    "Idle CPU is a five-second sample and should be repeated in longer soak/resource tests.",
+    "No UEFN/Fortnite workload was active; foreground coexistence belongs to a later Phase 1 spike."
+  ]
+}

@@ -1,0 +1,11 @@
+# Phase 4 compact result context first slice
+
+Status: bounded foundation on the active development branch; Phase 4 is not closed.
+
+`result.context` accepts a durable result ID and a requested result-body budget of 512–16,384 serialized JSON bytes. Core applies the same project authority check as `result.get`. It returns the result ID, payload digest and byte count, source trust label, exact selected scalar facts with JSON Pointer locations, an omitted-scalar count, a truncation flag, and the `result.get` command name for full evidence. No fact value is shortened to fit. The response body is measured after JSON serialization and must fit the requested budget; the outer command response envelope is separate.
+
+The current deterministic selection favors short identifier, error-code, and version tokens, then named numeric counts, byte sizes, times, generations, and revisions, then status fields. It rejects path-like and secret-related keys, unsafe object-key segments, path-like identifier values, and narrative strings. This is conservative local presentation filtering, **not** classification or permission to send the result to a remote model. The full source payload remains available through authorized `result.get`.
+
+Verification: `cargo test -p relay-contracts -p relay-core` passed 10 contract and 49 Core tests. The new tests compare a 768-byte compact view with a full payload more than three times larger, verify exact identifier/number values and deterministic repeat output, enforce a 512-byte ceiling without shortening a long identifier, reject out-of-range or missing budgets, omit private paths, token values, token-keyed counts and unsafe object-key paths, and deny cross-project retrieval through the command path.
+
+Limits: this slice parses the full stored payload locally before selecting facts; it reduces returned context bytes, not database read or local parsing cost. It does not yet select results by task, deduplicate across results, rank findings, protect all domain-specific exact fields, measure model tokens, or run the Context Gauntlet. A trusted client must still apply the project's data-egress policy before remote use.

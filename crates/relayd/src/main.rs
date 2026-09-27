@@ -140,9 +140,15 @@ fn run() -> Result<(), String> {
         || !verified.current_user_full_control
         || verified.ace_count != 1
     {
-        return Err(
-            "kernel verification rejected local pipe security".to_string(),
-        );
+        return Err(format!(
+            "kernel verification rejected local pipe security: query_ok={}, protected_dacl={}, owner_is_current_user={}, current_user_only={}, current_user_full_control={}, ace_count={}",
+            verified.query_ok,
+            verified.protected_dacl,
+            verified.owner_is_current_user,
+            verified.current_user_only,
+            verified.current_user_full_control,
+            verified.ace_count,
+        ));
     }
 
     let ipc_security = IpcSecurityState {

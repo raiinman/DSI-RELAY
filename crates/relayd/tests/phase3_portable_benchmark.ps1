@@ -142,8 +142,9 @@ function Wait-Daemon {
                 try {
                     $failure = Get-Content -LiteralPath $StderrPath -Raw | ConvertFrom-Json
                     $message = [string]$failure.error.message
-                    if ($message -eq 'kernel verification rejected local pipe security') {
+                    if ($message -match '^kernel verification rejected local pipe security: query_ok=(true|false), protected_dacl=(true|false), owner_is_current_user=(true|false), current_user_only=(true|false), current_user_full_control=(true|false), ace_count=[0-9]{1,3}$') {
                         $script:benchmarkFailureCode = 'BENCHMARK_DAEMON_PIPE_ACL_REJECTED'
+                        Write-Host $message
                     }
                     elseif ($message -match '^(OpenProcessToken|GetTokenInformation|ConvertSidToStringSidW|ConvertStringSecurityDescriptorToSecurityDescriptorW|CreateNamedPipeW|GetSecurityInfo|ConvertSecurityDescriptorToStringSecurityDescriptorW) failed:') {
                         $script:benchmarkFailureCode = 'BENCHMARK_DAEMON_PIPE_SECURITY_FAILED'

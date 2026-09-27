@@ -19,6 +19,7 @@ Own the canonical RELAY command-line client.
 
 # Verification
 
+- Build/check `relay` as a standalone package so Windows API features are not supplied only by another workspace crate.
 - structured status/doctor/command execution.
 - malformed machine input fails without prompting.
 - incompatible protocol/version errors remain explicit.

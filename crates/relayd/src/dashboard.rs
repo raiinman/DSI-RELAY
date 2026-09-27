@@ -211,6 +211,10 @@ fn allowed_command(command: &str) -> bool {
             | "project.removal.list"
             | "project.removal.decide"
             | "project.capabilities"
+            | "project.check_catalog.get"
+            | "project.check_catalog.put"
+            | "automation.checks.plan"
+            | "automation.checks.execute"
             | "uefn.static.inspect"
             | "uefn.mcp.discover"
             | "uefn.mcp.toolsets"
@@ -299,6 +303,8 @@ fn handle_request(
                         | "project.remove"
                         | "project.removal.plan"
                         | "project.removal.decide"
+                        | "project.check_catalog.put"
+                        | "automation.checks.execute"
                 ) {
                     Some(format!("DASH-{}-{now}", std::process::id()))
                 } else {
@@ -382,6 +388,10 @@ mod tests {
         assert!(allowed_command("assets.krita.inspect"));
         assert!(allowed_command("automation.pause"));
         assert!(allowed_command("automation.resume"));
+        assert!(allowed_command("project.check_catalog.get"));
+        assert!(allowed_command("project.check_catalog.put"));
+        assert!(allowed_command("automation.checks.plan"));
+        assert!(allowed_command("automation.checks.execute"));
         assert!(!allowed_command("system.shutdown"));
         assert!(!allowed_command("project.register"));
         assert!(!allowed_command("project.index.apply_hints"));

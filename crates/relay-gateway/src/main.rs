@@ -1,25 +1,25 @@
-//! Local launcher for the registry-only gateway. No token is accepted through
+//! Local launcher for the read-only gateway. No token is accepted through
 //! arguments or environment variables and no token is printed.
 
 use relay_gateway::{Gateway, GatewayConfig, LocalDaemonTransport};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, TcpStream};
 use std::path::PathBuf;
 use std::ptr::{null, null_mut};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use windows_sys::Win32::Foundation::LocalFree;
 use windows_sys::Win32::Security::Cryptography::{
-    BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom, CRYPT_INTEGER_BLOB,
-    CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData, CryptUnprotectData,
+    BCryptGenRandom, CryptProtectData, CryptUnprotectData, BCRYPT_USE_SYSTEM_PREFERRED_RNG,
+    CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
 };
 use windows_sys::Win32::System::Console::{
-    CTRL_BREAK_EVENT, CTRL_C_EVENT, CTRL_CLOSE_EVENT, SetConsoleCtrlHandler,
+    SetConsoleCtrlHandler, CTRL_BREAK_EVENT, CTRL_CLOSE_EVENT, CTRL_C_EVENT,
 };
 
 const PORT: u16 = 8765;
@@ -201,7 +201,7 @@ fn serve() -> Result<(), &'static str> {
         return Err("Gateway shutdown handler could not be installed");
     }
     let _credential = publish_credential(&token)?;
-    println!("RELAY discovery gateway on 127.0.0.1:{PORT}. Press Ctrl+C to stop.");
+    println!("RELAY read-only gateway on 127.0.0.1:{PORT}. Press Ctrl+C to stop.");
     gateway
         .serve_until(&SHUTDOWN)
         .map_err(|_| "Gateway listener stopped unexpectedly")
@@ -290,13 +290,64 @@ fn discover(command: &str, name: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
+fn read_project_result(
+    command: &str,
+    project_id: &str,
+    result_id: Option<&str>,
+    budget: Option<&str>,
+) -> Result<(), &'static str> {
+    if !valid_name(project_id, 128) || result_id.is_some_and(|id| !valid_name(id, 128)) {
+        return Err("Project and result IDs must be bounded ASCII identifiers");
+    }
+    let (shared_command, arguments) = match command {
+        "results" if result_id.is_none() && budget.is_none() => {
+            ("result.list", json!({"project_id":project_id,"limit":20}))
+        }
+        "result" if result_id.is_some() && budget.is_none() => (
+            "result.describe",
+            json!({"project_id":project_id,"result_id":result_id}),
+        ),
+        "context" if result_id.is_some() => {
+            let max_bytes = budget
+                .and_then(|value| value.parse::<u64>().ok())
+                .filter(|value| (512..=4096).contains(value))
+                .ok_or("Context budget must be 512 to 4096 bytes")?;
+            (
+                "result.context",
+                json!({"project_id":project_id,"result_id":result_id,"max_bytes":max_bytes}),
+            )
+        }
+        _ => return Err("Invalid read-only result request"),
+    };
+    let request = json!({
+        "gateway_protocol": 1,
+        "command": shared_command,
+        "command_version": 1,
+        "arguments": arguments,
+    })
+    .to_string();
+    let body = request_gateway("/v1/execute", &request)?;
+    if body["ok"].as_bool() != Some(true) {
+        return Err("Gateway result read did not succeed");
+    }
+    let result = body.get("result").ok_or("Gateway response is invalid")?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(result).map_err(|_| "Gateway response is invalid")?
+    );
+    Ok(())
+}
+
 fn main() {
     let args: Vec<_> = env::args().skip(1).collect();
     let result = match args.as_slice() {
         [] => serve(),
         [command] if command == "probe" => probe(),
         [command, name] if command == "list" || command == "describe" => discover(command, name),
-        _ => Err("usage: relay-gateway [probe | list PREFIX | describe COMMAND]"),
+        [command, project_id] if command == "results" => read_project_result(command, project_id, None, None),
+        [command, project_id, result_id] if command == "result" => read_project_result(command, project_id, Some(result_id), None),
+        [command, project_id, result_id, budget] if command == "context" => read_project_result(command, project_id, Some(result_id), Some(budget)),
+        _ => Err("usage: relay-gateway [probe | list PREFIX | describe COMMAND | results PROJECT | result PROJECT RESULT | context PROJECT RESULT BYTES]"),
     };
     if let Err(message) = result {
         eprintln!("{message}");

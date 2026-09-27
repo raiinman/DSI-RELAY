@@ -32,8 +32,8 @@ $known = @(
     'uefn.static_inspection', 'uefn.mcp_discovery', 'uefn.spawn_audit', 'verse.imported_analysis', 'verse.project_file_analysis',
     'uefn.live_runtime', 'uefn.live_capture_assertions', 'assets.local_links', 'assets.impact_analysis',
     'krita.declared_formats', 'blender.mesh_validation', 'blender.native_mesh', 'krita.native_export',
-    'gateway.local_discovery_overhead', 'gateway.remote_client', 'skills.local_client', 'remote.chatgpt_client',
-    'onboarding.clean_account', 'onboarding.recovery', 'automation.pause_resume', 'automation.check_plan', 'hardware.minimum_pc',
+    'gateway.local_discovery_overhead', 'gateway.local_result_context', 'gateway.remote_client', 'skills.local_client', 'remote.chatgpt_client',
+    'onboarding.clean_account', 'onboarding.recovery', 'automation.pause_resume', 'automation.check_plan', 'automation.declared_index_checks', 'hardware.minimum_pc',
     'report.evidence_capture', 'privacy.local_only', 'installer.upgrade_rollback', 'release.public_install'
 )
 if ($plan.schema_version -ne 1 -or $plan.workflows.Count -ne $known.Count) { throw 'INVALID_RUN_PLAN' }
@@ -329,7 +329,14 @@ function Invoke-Relay {
         resource_capture = $resourceCapture }
 }
 
-function Invoke-LocalMcpDiscovery {
+function Invoke-LocalMcpRead {
+    param(
+        [ValidateSet('relay_registry_list', 'relay_result_list', 'relay_result_describe', 'relay_result_context')][string]$ToolName = 'relay_registry_list',
+        [hashtable]$Arguments
+    )
+    if (-not $Arguments) {
+        $Arguments = @{ prefix = 'registry.'; limit = 8 }
+    }
     $gateway = $null
     $client = $null
     $credential = $null
@@ -378,7 +385,7 @@ function Invoke-LocalMcpDiscovery {
 
         $body = [ordered]@{
             jsonrpc = '2.0'; id = 1; method = 'tools/call'; params = [ordered]@{
-                name = 'relay_registry_list'; arguments = [ordered]@{ prefix = 'registry.'; limit = 8 }
+                name = $ToolName; arguments = $Arguments
                 _meta = [ordered]@{
                     'io.modelcontextprotocol/protocolVersion' = '2026-07-28'
                     'io.modelcontextprotocol/clientInfo' = [ordered]@{ name = 'relay-validation'; version = '1' }
@@ -388,7 +395,7 @@ function Invoke-LocalMcpDiscovery {
         } | ConvertTo-Json -Depth 12 -Compress
         $requestBytes = [long]$utf8.GetByteCount($body)
         if ($requestBytes -gt 8192) { throw 'MCP_REQUEST_TOO_LARGE' }
-        $request = "POST /mcp HTTP/1.1`r`nHost: 127.0.0.1:8765`r`nAuthorization: Bearer $($credential.token)`r`nContent-Type: application/json`r`nAccept: application/json, text/event-stream`r`nMCP-Protocol-Version: 2026-07-28`r`nMcp-Method: tools/call`r`nMcp-Name: relay_registry_list`r`nContent-Length: $requestBytes`r`nConnection: close`r`n`r`n$body"
+        $request = "POST /mcp HTTP/1.1`r`nHost: 127.0.0.1:8765`r`nAuthorization: Bearer $($credential.token)`r`nContent-Type: application/json`r`nAccept: application/json, text/event-stream`r`nMCP-Protocol-Version: 2026-07-28`r`nMcp-Method: tools/call`r`nMcp-Name: $ToolName`r`nContent-Length: $requestBytes`r`nConnection: close`r`n`r`n$body"
         $requestWire = $utf8.GetBytes($request)
         $client = New-Object System.Net.Sockets.TcpClient
         $client.SendTimeout = 3000
@@ -417,12 +424,27 @@ function Invoke-LocalMcpDiscovery {
         $responseBody = $responseText.Substring($separator + 4)
         $responseBytes = [long]$utf8.GetByteCount($responseBody)
         $result = $responseBody | ConvertFrom-Json
+        $content = $result.result.structuredContent
+        $shapeValid = switch ($ToolName) {
+            'relay_registry_list' { $null -ne $content.commands }
+            'relay_result_list' {
+                $null -ne $content.results -and @($content.results | Where-Object {
+                    $_.project_id -ne $Arguments.project_id
+                }).Count -eq 0
+            }
+            'relay_result_describe' {
+                $content.id -eq $Arguments.result_id -and $content.project_id -eq $Arguments.project_id
+            }
+            'relay_result_context' {
+                $content.result_id -eq $Arguments.result_id -and $null -ne $content.facts
+            }
+        }
         if ($result.jsonrpc -ne '2.0' -or $result.id -ne 1 -or $result.error -or
-            $result.result.isError -eq $true -or $null -eq $result.result.structuredContent.commands) {
+            $result.result.isError -eq $true -or -not $shapeValid) {
             throw 'MCP_RESPONSE_INVALID'
         }
-        $reason = 'LOCAL_DISCOVERY_MEASURED'
-        return [pscustomobject]@{ ok = $true; attempted = $true; reason = $reason; result = $result.result.structuredContent;
+        $reason = if ($ToolName -eq 'relay_registry_list') { 'LOCAL_DISCOVERY_MEASURED' } else { 'LOCAL_RESULT_READ' }
+        return [pscustomobject]@{ ok = $true; attempted = $true; reason = $reason; result = $content;
             transport_metric = [ordered]@{ path_id = 'local_mcp_http'; byte_scope = 'application_json';
                 request_bytes = $requestBytes; response_bytes = $responseBytes; elapsed_ms = $elapsed } }
     } catch {
@@ -440,8 +462,14 @@ function Invoke-LocalMcpDiscovery {
         }
         if ($attempted) {
             $null = $script:activeCommands.Add([ordered]@{
-                command_id = 'registry.list'; ok = ($reason -eq 'LOCAL_DISCOVERY_MEASURED');
-                error_code = if ($reason -eq 'LOCAL_DISCOVERY_MEASURED') { $null } else { $reason };
+                command_id = switch ($ToolName) {
+                    'relay_registry_list' { 'registry.list' }
+                    'relay_result_list' { 'result.list' }
+                    'relay_result_describe' { 'result.describe' }
+                    'relay_result_context' { 'result.context' }
+                };
+                ok = ($reason -in @('LOCAL_DISCOVERY_MEASURED', 'LOCAL_RESULT_READ'));
+                error_code = if ($reason -in @('LOCAL_DISCOVERY_MEASURED', 'LOCAL_RESULT_READ')) { $null } else { $reason };
                 duration_ms = $elapsed; request_bytes = $requestBytes; response_bytes = $responseBytes;
                 peak_rss_bytes = $null; cpu_ms = 0
             })
@@ -1055,6 +1083,55 @@ try {
                             $status = 'untested'; $reason = 'AFFECTED_DELTA_NOT_EXERCISED'
                         }
                     }
+                    'automation.declared_index_checks' {
+                        if (-not $script:projectReady) { $status = 'blocked'; $reason = 'PROJECT_BASELINE_MISSING'; break }
+                        $catalogRead = Invoke-Relay 'project.check_catalog.get' @{ project_id = $ProjectId }
+                        if (-not $catalogRead.ok) {
+                            $status = if ($catalogRead.error_code -eq 'CHECK_CATALOG_MISSING') { 'untested' } else { 'failed' }
+                            $reason = if ($status -eq 'untested') { 'CHECK_CATALOG_NOT_REGISTERED_IN_PRIVATE_HOST' } else { Get-SafeCode $catalogRead.error_code }
+                            $evidenceEligible = ($status -eq 'failed' -and $script:hadValidatedResponse)
+                            break
+                        }
+                        $planned = Invoke-Relay 'automation.checks.plan' @{
+                            project_id = $ProjectId; after_generation = [long]$script:indexMetrics.generation
+                        }
+                        if (-not $planned.ok) {
+                            $status = 'failed'; $reason = Get-SafeCode $planned.error_code
+                            $evidenceEligible = $script:hadValidatedResponse
+                            break
+                        }
+                        $checkPlan = $planned.result
+                        if ($checkPlan.mode -ne 'selective' -or @($checkPlan.checks).Count -eq 0) {
+                            $status = 'untested'; $reason = 'DECLARED_CHECK_DELTA_NOT_AVAILABLE'
+                            break
+                        }
+                        $executed = Invoke-Relay 'automation.checks.execute' @{
+                            project_id = $ProjectId; after_generation = [long]$script:indexMetrics.generation;
+                            plan_id = [string]$checkPlan.plan_id
+                        } $true
+                        if (-not $executed.ok) {
+                            $status = 'failed'; $reason = Get-SafeCode $executed.error_code
+                            $evidenceEligible = $script:hadValidatedResponse
+                            break
+                        }
+                        $checkRun = $executed.result
+                        $hasNativeClaim = @($checkRun.checks | Where-Object { $_.native_workflow_status -eq 'checked' }).Count -gt 0
+                        $hasMissingResult = @($checkRun.checks | Where-Object {
+                            $_.status -in @('passed', 'failed') -and -not $_.result_id
+                        }).Count -gt 0
+                        $countMatches = [int]$checkRun.selected_check_count -eq @($checkRun.checks).Count -and
+                            [int]$checkRun.selected_check_count -eq ([int]$checkRun.passed_count + [int]$checkRun.failed_count + [int]$checkRun.untested_count)
+                        if ($checkRun.project_id -ne $ProjectId -or $checkRun.plan_id -ne $checkPlan.plan_id -or
+                            $checkRun.index_generation -ne $script:indexMetrics.generation -or -not $countMatches -or
+                            $hasNativeClaim -or $hasMissingResult) {
+                            $status = 'failed'; $reason = 'DECLARED_CHECK_RESULT_CONTRACT_INVALID'
+                        } elseif ([int]$checkRun.untested_count -eq [int]$checkRun.selected_check_count) {
+                            $status = 'untested'; $reason = 'NO_EXECUTABLE_INDEX_ASSERTIONS'
+                        } else {
+                            $status = 'passed'; $reason = 'DECLARED_INDEX_ASSERTIONS_RECORDED'
+                        }
+                        $evidenceEligible = ($status -ne 'untested')
+                    }
                     'gateway.local_discovery_overhead' {
                         $cliDiscovery = Invoke-Relay 'registry.list' @{ surface = 'ai'; prefix = 'registry.'; limit = 8 }
                         if (-not $cliDiscovery.ok) {
@@ -1063,7 +1140,7 @@ try {
                             break
                         }
                         $null = $script:transportMetrics.Add($cliDiscovery.transport_metric)
-                        $mcpDiscovery = Invoke-LocalMcpDiscovery
+                        $mcpDiscovery = Invoke-LocalMcpRead
                         if ($mcpDiscovery.transport_metric) {
                             $null = $script:transportMetrics.Add($mcpDiscovery.transport_metric)
                         }
@@ -1079,6 +1156,47 @@ try {
                             (($cliIds -join ',') -ceq ($mcpIds -join ','))
                         $status = if ($same) { 'passed' } else { 'failed' }
                         $reason = if ($same) { 'LOCAL_DISCOVERY_MEASURED' } else { 'LOCAL_DISCOVERY_MISMATCH' }
+                        $evidenceEligible = $true
+                    }
+                    'gateway.local_result_context' {
+                        if (-not $script:firstResultId) {
+                            $status = 'blocked'; $reason = 'RESULT_SOURCE_MISSING'; break
+                        }
+                        $listed = Invoke-LocalMcpRead -ToolName 'relay_result_list' -Arguments @{
+                            project_id = $ProjectId; limit = 20
+                        }
+                        if (-not $listed.ok) {
+                            $status = if ($listed.attempted) { 'failed' } else { 'untested' }
+                            $reason = $listed.reason; $evidenceEligible = $listed.attempted; break
+                        }
+                        $described = Invoke-LocalMcpRead -ToolName 'relay_result_describe' -Arguments @{
+                            project_id = $ProjectId; result_id = $script:firstResultId
+                        }
+                        if (-not $described.ok) {
+                            $status = if ($described.attempted) { 'failed' } else { 'untested' }
+                            $reason = $described.reason; $evidenceEligible = $described.attempted; break
+                        }
+                        $read = Invoke-LocalMcpRead -ToolName 'relay_result_context' -Arguments @{
+                            project_id = $ProjectId; result_id = $script:firstResultId;
+                            max_bytes = 4096; required_pointers = @('/file_count')
+                        }
+                        if (-not $read.ok) {
+                            $status = if ($read.attempted) { 'failed' } else { 'untested' }
+                            $reason = $read.reason; $evidenceEligible = $read.attempted; break
+                        }
+                        $null = $script:transportMetrics.Add([ordered]@{
+                            path_id = 'local_mcp_http'; byte_scope = 'application_json'
+                            request_bytes = [long]$listed.transport_metric.request_bytes + [long]$described.transport_metric.request_bytes + [long]$read.transport_metric.request_bytes
+                            response_bytes = [long]$listed.transport_metric.response_bytes + [long]$described.transport_metric.response_bytes + [long]$read.transport_metric.response_bytes
+                            elapsed_ms = [long]$listed.transport_metric.elapsed_ms + [long]$described.transport_metric.elapsed_ms + [long]$read.transport_metric.elapsed_ms
+                        })
+                        $matched = @($listed.result.results).Count -gt 0 -and
+                            $described.result.id -eq $script:firstResultId -and
+                            @($read.result.facts | Where-Object {
+                            $_.pointer -eq '/file_count' -and $_.value -eq $script:indexMetrics.file_count
+                        }).Count -eq 1
+                        $status = if ($matched) { 'passed' } else { 'failed' }
+                        $reason = if ($matched) { 'LOCAL_RESULT_CONTEXT_READ' } else { 'LOCAL_RESULT_CONTEXT_MISMATCH' }
                         $evidenceEligible = $true
                     }
                     'report.evidence_capture' {

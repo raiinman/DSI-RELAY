@@ -15,6 +15,7 @@ function element() {
     children: [],
     replaceChildren(...children) { this.children = children; },
     append(...children) { this.children.push(...children); },
+    focus() { this.focused = true; },
     setAttribute(name, value) { this.attributes[name] = value; },
     addEventListener(_name, listener) { this.listener = listener; }
   };
@@ -25,6 +26,7 @@ async function loadDashboard(results, hash = "#local-test-token") {
     "#details", "#refresh", "#status-message", "#health-summary", "#health-checks", "#setup-progress", "#setup-guidance", "#setup-next", "#setup-action", "#setup-handoff", "#setup-uefn",
     "#next-action", "#automation-status", "#automation-toggle", "#project-count", "#projects", "#project-add-form", "#project-name", "#project-root", "#project-add", "#project-action", "#selected-project", "#uefn-connect", "#uefn-connection",
     "#uefn-inspection", "#asset-selected", "#asset-manifest", "#asset-changed-path", "#asset-validate", "#krita-validate", "#asset-impact", "#asset-result", "#asset-lineage", "#asset-findings", "#tests-summary", "#tests-list",
+    "#tests-catalog-file", "#tests-catalog-save", "#tests-catalog-status", "#tests-catalog-list", "#tests-plan", "#tests-plan-status", "#tests-plan-list", "#tests-run", "#tests-run-status", "#tests-run-list",
     "#activity-summary", "#activity-list", "#results-summary", "#results-list", "#jobs-summary", "#jobs-list", "#usage-summary", "#usage-detail", "#diagnostic-capture",
     "#diagnostic-detail", "#diagnostic-storage", "#diagnostic-dropped",
     "#diagnostic-events", "#diagnostic-incomplete", "#relay-version",
@@ -83,6 +85,9 @@ test("keyboard landmarks and live status have semantic markup", () => {
   assert.match(html, /href="#main">Skip to dashboard content<\/a>/);
   assert.match(html, /<main id="main" tabindex="-1">/);
   assert.match(html, /id="status-message" role="status" aria-atomic="true"/);
+  assert.match(html, /id="project-action" role="status"[^>]*tabindex="-1"/);
+  assert.match(html, /id="diagnostic-guidance"[^>]*role="status"/);
+  assert.match(html, /id="integrated-summary"[^>]*tabindex="-1"/);
   assert.match(html, /<button id="refresh" type="button">Refresh<\/button>/);
 });
 
@@ -215,10 +220,18 @@ test("archive and remove confirm through shared commands and retain a visible to
   await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Restore").listener();
   assert.match(page.nodes["#project-action"].textContent, /Sample restored/);
   await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
-  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Remove").listener();
+  const selected = page.nodes["#projects"].children[0];
+  await selected.children.find((child) => child.textContent === "Plan removal").listener();
+  const planRegion = selected.children.at(-1);
+  assert.equal(planRegion.focused, true);
+  assert.equal(planRegion.attributes.role, "region");
+  assert.match(planRegion.children[0].children[0].textContent, /High risk:.*Project files and RELAY history stay/);
+  assert.deepEqual(page.calls.map((call) => JSON.parse(call.body).command).filter((name) => name.startsWith("project.removal") || name === "project.remove"), ["project.removal.plan"]);
+  await planRegion.children[0].children[1].children.find((child) => child.textContent === "Approve and remove").listener();
   assert.deepEqual(page.calls.map((call) => JSON.parse(call.body).command).filter((name) => name.startsWith("project.removal") || name === "project.remove"), ["project.removal.plan", "project.removal.decide", "project.remove"]);
   assert.equal(page.nodes["#projects"].children[0].children[1].textContent, "Removed from RELAY");
-  assert.match(page.nodes["#project-action"].textContent, /files and RELAY history were kept/);
+  assert.match(page.nodes["#project-action"].textContent, /Files and RELAY history were kept/);
+  assert.equal(page.nodes["#project-action"].focused, true);
 });
 
 test("an approved removal can be finished from the durable plan list", async () => {
@@ -239,10 +252,56 @@ test("an approved removal can be finished from the durable plan list", async () 
   const row = page.nodes["#projects"].children[0];
   await row.children.find((child) => child.textContent === "Removal plans").listener();
   const region = row.children.at(-1);
-  assert.equal(region.children.find((child) => child.textContent === "Finish approved removal").type, "button");
-  await region.children.find((child) => child.textContent === "Finish approved removal").listener();
+  assert.equal(region.focused, true);
+  const finish = region.children[0].children[1].children.find((child) => child.textContent === "Finish approved removal");
+  assert.equal(finish.type, "button");
+  await finish.listener();
   assert.equal(projects[0].lifecycle_state, "removed");
   assert.match(page.nodes["#project-action"].textContent, /Files and RELAY history were kept/);
+});
+
+test("a removal plan can be rejected without executing removal", async () => {
+  const projects = [{ id: "project-1", name: "Sample", lifecycle_state: "active" }];
+  const page = await loadDashboard((name) => {
+    if (name === "project.list") return { ok: true, json: async () => ({ ok: true, result: { projects } }) };
+    if (name === "project.removal.plan") return { ok: true, json: async () => ({ ok: true, result: {
+      approval_id: "APR-reject", state: "pending", expires_at_ms: Date.now() + 60000
+    } }) };
+    if (name === "project.removal.decide") return { ok: true, json: async () => ({ ok: true, result: { state: "rejected" } }) };
+    if (name === "project.removal.list") return { ok: true, json: async () => ({ ok: true, result: { approvals: [{
+      approval_id: "APR-reject", state: "rejected", expires_at_ms: Date.now() + 60000
+    }] } }) };
+    return success(name);
+  });
+  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
+  const row = page.nodes["#projects"].children[0];
+  await row.children.find((child) => child.textContent === "Plan removal").listener();
+  const region = row.children.at(-1);
+  await region.children[0].children[1].children.find((child) => child.textContent === "Reject plan").listener();
+  assert.equal(region.focused, true);
+  assert.match(page.nodes["#project-action"].textContent, /Removal plan rejected/);
+  assert.equal(projects[0].lifecycle_state, "active");
+  assert.equal(page.calls.some((call) => JSON.parse(call.body).command === "project.remove"), false);
+});
+
+test("an uncertain approval response gives a focused recovery instruction", async () => {
+  const projects = [{ id: "project-1", name: "Sample", lifecycle_state: "active" }];
+  const page = await loadDashboard((name) => {
+    if (name === "project.list") return { ok: true, json: async () => ({ ok: true, result: { projects } }) };
+    if (name === "project.removal.plan") return { ok: true, json: async () => ({ ok: true, result: {
+      approval_id: "APR-uncertain", state: "pending", expires_at_ms: Date.now() + 60000
+    } }) };
+    if (name === "project.removal.decide") return { ok: true, json: async () => ({ ok: false, error: { code: "STORAGE_ERROR" } }) };
+    return success(name);
+  });
+  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
+  const row = page.nodes["#projects"].children[0];
+  await row.children.find((child) => child.textContent === "Plan removal").listener();
+  const region = row.children.at(-1);
+  await region.children[0].children[1].children.find((child) => child.textContent === "Approve and remove").listener();
+  assert.match(page.nodes["#project-action"].textContent, /Approval outcome is uncertain.*Reload removal plans/);
+  assert.equal(page.nodes["#project-action"].focused, true);
+  assert.equal(page.calls.some((call) => JSON.parse(call.body).command === "project.remove"), false);
 });
 
 test("asset manifest checks show bounded findings without revealing paths or contents", async () => {
@@ -345,6 +404,7 @@ test("uncertain pause response requires status refresh before another control ac
     return success(command);
   });
   await page.refresh();
+  assert.equal(page.nodes["#refresh"].focused, true);
   assert.equal(page.nodes["#automation-toggle"].disabled, false);
   assert.equal(page.nodes["#automation-toggle"].textContent, "Resume background checks");
 });
@@ -357,6 +417,7 @@ test("selected integrated report preview never renders arbitrary fields", async 
   }) }];
   await page.nodes["#integrated-report"].listener();
   assert.match(page.nodes["#integrated-summary"].textContent, /1 untested.*not verified/);
+  assert.equal(page.nodes["#integrated-summary"].focused, true);
   assert.equal(page.nodes["#integrated-workflows"].children[0].textContent, "uefn.live_runtime: UNTESTED · NOT_EXECUTED");
   assert.doesNotMatch(page.nodes["#integrated-summary"].textContent + page.nodes["#integrated-workflows"].children[0].textContent, /secret|private output/);
 });
@@ -482,4 +543,140 @@ test("guided setup gives one next action and safe recovery for unavailable depen
   assert.doesNotMatch(unavailable.nodes["#setup-guidance"].textContent, /private-id|<script>/);
   await unavailable.nodes["#uefn-connect"].listener();
   assert.match(unavailable.nodes["#setup-uefn"].textContent, /Open UEFN, enable its MCP connection.*UNTESTED/);
+});
+
+function commandReply(result) {
+  return { ok: true, json: async () => ({ ok: true, result }) };
+}
+
+function commandError(code) {
+  return { ok: true, json: async () => ({ ok: false, error: { code } }) };
+}
+
+const catalog = { format_version: 1, checks: [
+  { id: "map.index", roots: ["Maps/Main.umap"], leaves: [],
+    assertion: { kind: "indexed_file_present", path: "Maps/Main.umap" } },
+  { id: "native.editor", roots: ["Maps/Main.umap"], leaves: [] }
+] };
+
+test("declared checks render a bounded current plan and require explicit run", async () => {
+  const commands = [];
+  const page = await loadDashboard((command, args) => {
+    commands.push([command, args]);
+    if (command === "project.check_catalog.get") return commandReply({
+      project_id: "private-id", revision: 2, index_generation: 4, catalog
+    });
+    if (command === "automation.checks.plan") return commandReply({
+      project_id: "private-id", plan_id: `PLAN-${"a".repeat(32)}`, catalog_revision: 2,
+      index_generation: 5, after_generation: 4, mode: "selective", fallback_reason: null,
+      checks: [{ check_id: "map.index", status: "planned_not_run", result_id: null,
+        planned_check_id: `PCHK-${"b".repeat(32)}` }]
+    });
+    if (command === "automation.checks.execute") return commandReply({
+      project_id: "private-id", plan_id: `PLAN-${"a".repeat(32)}`, job_id: "private-job",
+      index_generation: 5, mode: "selective", evidence_scope: "indexed_snapshot_at_generation", passed_count: 1, failed_count: 0,
+      untested_count: 0, replayed: false, checks: [{ check_id: "map.index", status: "passed", reason_code: "INDEX_ASSERTION_SATISFIED",
+        result_id: `RES-${"c".repeat(32)}` }]
+    });
+    return success(command);
+  });
+  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
+  assert.match(page.nodes["#tests-catalog-status"].textContent, /revision 2.*generation 4/);
+  assert.equal(page.nodes["#tests-catalog-list"].children[0].textContent,
+    "map.index · Indexed file present (path hidden)");
+  assert.equal(page.nodes["#tests-run"].disabled, true);
+  await page.nodes["#tests-plan"].listener();
+  assert.deepEqual(commands.find(([name]) => name === "automation.checks.plan")[1],
+    { project_id: "private-id", after_generation: 4 });
+  assert.match(page.nodes["#tests-plan-status"].textContent, /1 of 2 checks selected.*NOT RUN/);
+  assert.equal(page.nodes["#tests-plan-list"].children[0].textContent,
+    "map.index · Indexed file present (path hidden) · NOT RUN");
+  assert.equal(page.nodes["#tests-run"].disabled, false);
+  await page.nodes["#tests-run"].listener();
+  assert.deepEqual(commands.find(([name]) => name === "automation.checks.execute")[1],
+    { project_id: "private-id", after_generation: 4, plan_id: `PLAN-${"a".repeat(32)}` });
+  assert.match(page.nodes["#tests-run-status"].textContent, /1 passed, 0 failed, 0 untested.*native and live workflows remain UNTESTED/);
+  assert.equal(page.nodes["#tests-run-list"].children[0].textContent,
+    `map.index · PASSED · indexed assertion satisfied · Saved result RES-${"c".repeat(32)}`);
+  assert.equal(page.nodes["#tests-run-status"].focused, true);
+  assert.doesNotMatch(page.nodes["#tests-run-list"].children[0].textContent + page.nodes["#tests-plan-status"].textContent,
+    /Maps\/|private-id|private-job/);
+});
+
+test("catalog registration uses the current revision and hides local path content", async () => {
+  let revision = 3;
+  const calls = [];
+  const page = await loadDashboard((command, args) => {
+    calls.push([command, args]);
+    if (command === "project.check_catalog.get") return commandReply({
+      project_id: "private-id", revision, index_generation: 6, catalog
+    });
+    if (command === "project.check_catalog.put") { revision = 4; return commandReply({ revision: 4 }); }
+    return success(command);
+  });
+  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
+  page.nodes["#tests-catalog-file"].files = [{ size: 500, text: async () => JSON.stringify(catalog) }];
+  await page.nodes["#tests-catalog-save"].listener();
+  const put = calls.find(([name]) => name === "project.check_catalog.put")[1];
+  assert.equal(put.expected_revision, 3);
+  assert.equal(put.catalog.checks[0].roots[0], "Maps/Main.umap");
+  assert.match(page.nodes["#tests-catalog-status"].textContent, /revision 4/);
+  assert.equal(page.nodes["#tests-catalog-status"].focused, true);
+  assert.doesNotMatch(page.nodes["#tests-catalog-status"].textContent, /Maps\/|private-id/);
+});
+
+test("fallback plans stay untested and stale execution requires refresh", async () => {
+  let fallback = true;
+  const page = await loadDashboard((command) => {
+    if (command === "project.check_catalog.get") return commandReply({
+      project_id: "private-id", revision: 1, index_generation: 2, catalog
+    });
+    if (command === "automation.checks.plan") return commandReply({
+      project_id: "private-id", plan_id: `PLAN-${"a".repeat(32)}`, catalog_revision: 1,
+      index_generation: 3, after_generation: 2,
+      mode: fallback ? "full_catalog_fallback" : "selective",
+      fallback_reason: fallback ? "parser_coverage_incomplete" : null,
+      checks: [{ check_id: "map.index", status: "planned_not_run", result_id: null }]
+    });
+    if (command === "automation.checks.execute") return commandError("CHECK_PLAN_CONFLICT");
+    return success(command);
+  });
+  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
+  await page.nodes["#tests-plan"].listener();
+  assert.match(page.nodes["#tests-plan-status"].textContent, /Dependency coverage is incomplete.*NOT RUN/);
+  assert.equal(page.nodes["#tests-run"].disabled, true);
+  fallback = false;
+  await page.nodes["#tests-plan"].listener();
+  assert.equal(page.nodes["#tests-run"].disabled, false);
+  await page.nodes["#tests-run"].listener();
+  assert.match(page.nodes["#tests-run-status"].textContent, /plan is stale.*Refresh/);
+  assert.equal(page.nodes["#tests-run"].disabled, true);
+});
+
+test("refresh restores keyboard focus to the Refresh control", async () => {
+  const page = await loadDashboard(success);
+  await page.refresh();
+  assert.equal(page.nodes["#refresh"].focused, true);
+});
+
+test("uncertain check execution hides outcomes until refresh and replan", async () => {
+  const page = await loadDashboard((command) => {
+    if (command === "project.check_catalog.get") return commandReply({
+      project_id: "private-id", revision: 1, index_generation: 2, catalog
+    });
+    if (command === "automation.checks.plan") return commandReply({
+      project_id: "private-id", plan_id: `PLAN-${"a".repeat(32)}`, catalog_revision: 1,
+      index_generation: 3, after_generation: 2, mode: "selective", fallback_reason: null,
+      checks: [{ check_id: "map.index", status: "planned_not_run", result_id: null }]
+    });
+    if (command === "automation.checks.execute") return commandError("CHECK_EXECUTION_UNCERTAIN");
+    return success(command);
+  });
+  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
+  await page.nodes["#tests-plan"].listener();
+  await page.nodes["#tests-run"].listener();
+  assert.match(page.nodes["#tests-run-status"].textContent, /outcome is uncertain.*Refresh stored results.*may already be saved/);
+  assert.equal(page.nodes["#tests-run-list"].children.length, 0);
+  assert.equal(page.nodes["#tests-run"].disabled, true);
+  assert.equal(page.nodes["#tests-run-status"].focused, true);
 });

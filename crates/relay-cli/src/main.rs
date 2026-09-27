@@ -4,9 +4,9 @@ use relay::parser_install::{self, InstallOptions};
 use relay_contracts::{
     CommandRequest, CommandResponse, LOCAL_HOST_STATE_FORMAT, RequestContext, registry,
 };
+use relay_support::{ComponentVersion, DiagnosticCounts, DiagnosticHealthSummary, SupportInput};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use relay_support::{SupportInput, ComponentVersion, DiagnosticHealthSummary, DiagnosticCounts};
 use std::fs;
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -186,22 +186,27 @@ fn execute_human(request: CommandRequest, json_output: bool, view: &str) -> Resu
 fn run(args: &[String]) -> Result<i32, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Err(
-            "usage: relay <status|doctor|diagnostics|pause|resume|support-bundle|discover|onboard|dashboard-url|commands|project-list|project-register|project-archive|project-restore|project-removal-plan|project-removal-get|project-removal-list|project-removal-approve|project-removal-reject|project-remove|check-catalog-put|check-catalog-get|plan-checks|context-compile|task-context|uefn-inspect|uefn-audit|uefn-discover|uefn-toolsets|uefn-describe|verse-analyze|verse-record|verse-file-analyze|verse-file-record|asset-validate|asset-impact|blender-mesh-check|blender-mesh-record|krita-inspect|krita-export|parser-install|result-list|result-get|job-list|job-get|shutdown|exec>"
+            "usage: relay <status|doctor|diagnostics|pause|resume|support-bundle|discover|onboard|dashboard-url|commands|project-list|project-register|project-archive|project-restore|project-removal-plan|project-removal-get|project-removal-list|project-removal-approve|project-removal-reject|project-remove|check-catalog-put|check-catalog-get|plan-checks|run-checks|context-compile|task-context|uefn-inspect|uefn-audit|uefn-discover|uefn-toolsets|uefn-describe|verse-analyze|verse-record|verse-file-analyze|verse-file-record|asset-validate|asset-impact|blender-mesh-check|blender-mesh-record|krita-inspect|krita-export|parser-install|result-list|result-get|job-list|job-get|shutdown|exec>"
                 .to_string(),
         );
     };
 
     match command {
         "support-bundle" => {
-            if !matches!(args.len(), 2 | 4) || args[1].starts_with("--")
-                || (args.len() == 4 && (args[2] != "--integrated-report" || args[3].starts_with("--"))) {
+            if !matches!(args.len(), 2 | 4)
+                || args[1].starts_with("--")
+                || (args.len() == 4
+                    && (args[2] != "--integrated-report" || args[3].starts_with("--")))
+            {
                 return Err("usage: relay support-bundle <new-output.json> [--integrated-report <report.json>]".to_string());
             }
             let integrated_run = if args.len() == 4 {
                 let metadata = fs::symlink_metadata(&args[3])
                     .map_err(|_| "integrated report is unavailable".to_string())?;
-                if !metadata.is_file() || metadata.file_type().is_symlink()
-                    || metadata.len() > relay_support::MAX_INTEGRATED_REPORT_BYTES as u64 {
+                if !metadata.is_file()
+                    || metadata.file_type().is_symlink()
+                    || metadata.len() > relay_support::MAX_INTEGRATED_REPORT_BYTES as u64
+                {
                     return Err("integrated report is invalid or too large".to_string());
                 }
                 let mut report = Vec::new();
@@ -210,16 +215,24 @@ fn run(args: &[String]) -> Result<i32, String> {
                     .take((relay_support::MAX_INTEGRATED_REPORT_BYTES + 1) as u64)
                     .read_to_end(&mut report)
                     .map_err(|_| "integrated report could not be read".to_string())?;
-                Some(relay_support::summarize_integrated_report(&report)
-                    .map_err(|error| format!("integrated report rejected: {}", error.code))?)
-            } else { None };
+                Some(
+                    relay_support::summarize_integrated_report(&report)
+                        .map_err(|error| format!("integrated report rejected: {}", error.code))?,
+                )
+            } else {
+                None
+            };
             let status = invoke(&make_request("system.status", json!({}), None))?;
             let summary = invoke(&make_request("diagnostics.summary", json!({}), None))?;
             if !status.ok || !summary.ok {
                 return Err("RELAY health summaries are unavailable".to_string());
             }
-            let status = status.result.ok_or_else(|| "RELAY status is empty".to_string())?;
-            let summary = summary.result.ok_or_else(|| "RELAY diagnostic summary is empty".to_string())?;
+            let status = status
+                .result
+                .ok_or_else(|| "RELAY status is empty".to_string())?;
+            let summary = summary
+                .result
+                .ok_or_else(|| "RELAY diagnostic summary is empty".to_string())?;
             let health = &status["diagnostics"];
             let events = &summary["events"];
             let safe_count = |value: &Value| value.as_u64().unwrap_or(0);
@@ -228,7 +241,10 @@ fn run(args: &[String]) -> Result<i32, String> {
                 relay_version: status["version"].as_str().unwrap_or("unknown").to_string(),
                 component_versions: vec![ComponentVersion {
                     component_id: "relay-core".to_string(),
-                    version: summary["relay_version"].as_str().unwrap_or("unknown").to_string(),
+                    version: summary["relay_version"]
+                        .as_str()
+                        .unwrap_or("unknown")
+                        .to_string(),
                 }],
                 diagnostic_health: DiagnosticHealthSummary {
                     healthy: health["ok"].as_bool().unwrap_or(false),
@@ -251,10 +267,16 @@ fn run(args: &[String]) -> Result<i32, String> {
                     by_code: Vec::new(),
                 },
                 integrated_run,
-            }).map_err(|error| format!("support bundle unavailable: {}", error.code))?;
-            let mut output = fs::OpenOptions::new().write(true).create_new(true)
-                .open(&args[1]).map_err(|_| "output file already exists or cannot be created".to_string())?;
-            output.write_all(&bundle).map_err(|_| "support bundle could not be written".to_string())?;
+            })
+            .map_err(|error| format!("support bundle unavailable: {}", error.code))?;
+            let mut output = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&args[1])
+                .map_err(|_| "output file already exists or cannot be created".to_string())?;
+            output
+                .write_all(&bundle)
+                .map_err(|_| "support bundle could not be written".to_string())?;
             println!("Privacy-safe support bundle saved: {} bytes.", bundle.len());
             Ok(0)
         }
@@ -287,18 +309,22 @@ fn run(args: &[String]) -> Result<i32, String> {
             Ok(0)
         }
         "onboard" => {
-            let root = args.get(1)
+            let root = args
+                .get(1)
                 .filter(|value| !value.starts_with("--"))
                 .ok_or_else(|| "usage: relay onboard <project-folder> [--json]".to_string())?;
             if args.iter().skip(2).any(|value| value != "--json") {
                 return Err("usage: relay onboard <project-folder> [--json]".to_string());
             }
-            let root = PathBuf::from(root).canonicalize()
+            let root = PathBuf::from(root)
+                .canonicalize()
                 .map_err(|_| "project folder is unavailable".to_string())?;
             if !root.is_dir() {
                 return Err("project folder is not a directory".to_string());
             }
-            let name = root.file_name().and_then(|value| value.to_str())
+            let name = root
+                .file_name()
+                .and_then(|value| value.to_str())
                 .filter(|value| !value.is_empty())
                 .ok_or_else(|| "project folder needs a readable name".to_string())?;
             let req_id = request_id();
@@ -311,13 +337,21 @@ fn run(args: &[String]) -> Result<i32, String> {
                 context: RequestContext::default(),
             })?;
             if !imported.ok {
-                if has_json_flag(args) { print_machine(&imported); } else { print_human(&imported); }
+                if has_json_flag(args) {
+                    print_machine(&imported);
+                } else {
+                    print_human(&imported);
+                }
                 return Ok(2);
             }
-            let imported_result = imported.result.as_ref()
+            let imported_result = imported
+                .result
+                .as_ref()
                 .ok_or_else(|| "project import returned no result".to_string())?;
-            let project_id = imported_result["id"].as_str()
-                .ok_or_else(|| "project import returned no ID".to_string())?.to_string();
+            let project_id = imported_result["id"]
+                .as_str()
+                .ok_or_else(|| "project import returned no ID".to_string())?
+                .to_string();
             let req_id = request_id();
             let baseline = invoke(&CommandRequest {
                 request_id: req_id.clone(),
@@ -328,15 +362,21 @@ fn run(args: &[String]) -> Result<i32, String> {
                 context: RequestContext::default(),
             })?;
             if has_json_flag(args) {
-                println!("{}", serde_json::to_string_pretty(&json!({
-                    "project_id": project_id,
-                    "import": imported,
-                    "baseline": baseline
-                })).map_err(|error| format!("serialize onboarding: {error}"))?);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "project_id": project_id,
+                        "import": imported,
+                        "baseline": baseline
+                    }))
+                    .map_err(|error| format!("serialize onboarding: {error}"))?
+                );
             } else if baseline.ok {
                 println!("Project {name} connected and indexed. ID: {project_id}");
             } else {
-                println!("Project {name} connected as {project_id}, but its first index needs attention.");
+                println!(
+                    "Project {name} connected as {project_id}, but its first index needs attention."
+                );
                 print_human(&baseline);
             }
             Ok(if baseline.ok { 0 } else { 2 })
@@ -392,28 +432,42 @@ fn run(args: &[String]) -> Result<i32, String> {
             )
         }
         "project-list" => {
-            if args.iter().skip(1).any(|arg| arg != "--json" && arg != "--all") {
+            if args
+                .iter()
+                .skip(1)
+                .any(|arg| arg != "--json" && arg != "--all")
+            {
                 return Err("usage: relay project-list [--all] [--json]".to_string());
             }
             execute_human(
-                make_request("project.list", json!({ "include_inactive": args.iter().any(|arg| arg == "--all") }), None),
+                make_request(
+                    "project.list",
+                    json!({ "include_inactive": args.iter().any(|arg| arg == "--all") }),
+                    None,
+                ),
                 has_json_flag(args),
                 "default",
             )
         }
         "check-catalog-put" => {
-            if !matches!(args.len(), 4 | 5) || args[1..4].iter().any(|arg| arg.starts_with("--"))
-                || (args.len() == 5 && args[4] != "--json") {
+            if !matches!(args.len(), 4 | 5)
+                || args[1..4].iter().any(|arg| arg.starts_with("--"))
+                || (args.len() == 5 && args[4] != "--json")
+            {
                 return Err("usage: relay check-catalog-put <project-id> <expected-revision> <catalog.json> [--json]".to_string());
             }
-            let expected_revision = args[2].parse::<i64>()
+            let expected_revision = args[2]
+                .parse::<i64>()
                 .map_err(|_| "expected revision must be a nonnegative number".to_string())?;
             if expected_revision < 0 {
                 return Err("expected revision must be a nonnegative number".to_string());
             }
             let metadata = fs::symlink_metadata(&args[3])
                 .map_err(|_| "check catalog file is unavailable".to_string())?;
-            if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() > 128 * 1024 {
+            if !metadata.is_file()
+                || metadata.file_type().is_symlink()
+                || metadata.len() > 128 * 1024
+            {
                 return Err("check catalog file is invalid or too large".to_string());
             }
             let mut catalog_bytes = Vec::new();
@@ -428,39 +482,95 @@ fn run(args: &[String]) -> Result<i32, String> {
             let catalog: Value = serde_json::from_slice(&catalog_bytes)
                 .map_err(|_| "check catalog is invalid JSON".to_string())?;
             let req_id = request_id();
-            execute_human(CommandRequest {
-                request_id: req_id.clone(),
-                command: "project.check_catalog.put".to_string(),
-                command_version: Some(1),
-                arguments: json!({"project_id": args[1], "expected_revision": expected_revision, "catalog": catalog}),
-                idempotency_key: Some(format!("CLI-{req_id}")),
-                context: RequestContext::default(),
-            }, has_json_flag(args), "default")
+            execute_human(
+                CommandRequest {
+                    request_id: req_id.clone(),
+                    command: "project.check_catalog.put".to_string(),
+                    command_version: Some(1),
+                    arguments: json!({"project_id": args[1], "expected_revision": expected_revision, "catalog": catalog}),
+                    idempotency_key: Some(format!("CLI-{req_id}")),
+                    context: RequestContext::default(),
+                },
+                has_json_flag(args),
+                "default",
+            )
         }
         "check-catalog-get" => {
-            if !matches!(args.len(), 2 | 3) || args[1].starts_with("--")
-                || (args.len() == 3 && args[2] != "--json") {
+            if !matches!(args.len(), 2 | 3)
+                || args[1].starts_with("--")
+                || (args.len() == 3 && args[2] != "--json")
+            {
                 return Err("usage: relay check-catalog-get <project-id> [--json]".to_string());
             }
-            execute_human(make_request("project.check_catalog.get", json!({"project_id": args[1]}), None),
-                has_json_flag(args), "default")
+            execute_human(
+                make_request(
+                    "project.check_catalog.get",
+                    json!({"project_id": args[1]}),
+                    None,
+                ),
+                has_json_flag(args),
+                "default",
+            )
         }
         "plan-checks" => {
-            if !matches!(args.len(), 3 | 4) || args[1..3].iter().any(|arg| arg.starts_with("--"))
-                || (args.len() == 4 && args[3] != "--json") {
-                return Err("usage: relay plan-checks <project-id> <after-generation> [--json]".to_string());
+            if !matches!(args.len(), 3 | 4)
+                || args[1..3].iter().any(|arg| arg.starts_with("--"))
+                || (args.len() == 4 && args[3] != "--json")
+            {
+                return Err(
+                    "usage: relay plan-checks <project-id> <after-generation> [--json]".to_string(),
+                );
             }
-            let after_generation = args[2].parse::<i64>()
+            let after_generation = args[2]
+                .parse::<i64>()
                 .map_err(|_| "after-generation must be a nonnegative number".to_string())?;
             if after_generation < 0 {
                 return Err("after-generation must be a nonnegative number".to_string());
             }
-            execute_human(make_request("automation.checks.plan",
-                json!({"project_id": args[1], "after_generation": after_generation}), None),
-                has_json_flag(args), "default")
+            execute_human(
+                make_request(
+                    "automation.checks.plan",
+                    json!({"project_id": args[1], "after_generation": after_generation}),
+                    None,
+                ),
+                has_json_flag(args),
+                "default",
+            )
+        }
+        "run-checks" => {
+            if !matches!(args.len(), 4 | 5)
+                || args[1..4].iter().any(|arg| arg.starts_with("--"))
+                || (args.len() == 5 && args[4] != "--json")
+            {
+                return Err(
+                    "usage: relay run-checks <project-id> <after-generation> <plan-id> [--json]"
+                        .to_string(),
+                );
+            }
+            let after_generation = args[2]
+                .parse::<i64>()
+                .map_err(|_| "after-generation must be a nonnegative number".to_string())?;
+            if after_generation < 0 {
+                return Err("after-generation must be a nonnegative number".to_string());
+            }
+            let req_id = request_id();
+            execute_human(
+                CommandRequest {
+                    request_id: req_id.clone(),
+                    command: "automation.checks.execute".to_string(),
+                    command_version: Some(1),
+                    arguments: json!({"project_id": args[1], "after_generation": after_generation, "plan_id": args[3]}),
+                    idempotency_key: Some(format!("CLI-{req_id}")),
+                    context: RequestContext::default(),
+                },
+                has_json_flag(args),
+                "default",
+            )
         }
         "project-archive" | "project-restore" => {
-            let project_id = args.get(1).filter(|arg| !arg.starts_with("--"))
+            let project_id = args
+                .get(1)
+                .filter(|arg| !arg.starts_with("--"))
                 .ok_or_else(|| format!("usage: relay {command} <project-id> [--json]"))?;
             if args.iter().skip(2).any(|arg| arg != "--json") {
                 return Err(format!("usage: relay {command} <project-id> [--json]"));
@@ -468,37 +578,78 @@ fn run(args: &[String]) -> Result<i32, String> {
             let operation = command.strip_prefix("project-").unwrap();
             let arguments = json!({ "project_id": project_id });
             let req_id = request_id();
-            execute_human(CommandRequest {
-                request_id: req_id.clone(),
-                command: format!("project.{operation}"),
-                command_version: Some(1),
-                arguments,
-                idempotency_key: Some(format!("CLI-{req_id}")),
-                context: RequestContext::default(),
-            }, has_json_flag(args), "default")
+            execute_human(
+                CommandRequest {
+                    request_id: req_id.clone(),
+                    command: format!("project.{operation}"),
+                    command_version: Some(1),
+                    arguments,
+                    idempotency_key: Some(format!("CLI-{req_id}")),
+                    context: RequestContext::default(),
+                },
+                has_json_flag(args),
+                "default",
+            )
         }
         "project-removal-plan" | "project-removal-list" => {
-            if !matches!(args.len(), 2 | 3) || args[1].starts_with("--") || (args.len() == 3 && args[2] != "--json") {
+            if !matches!(args.len(), 2 | 3)
+                || args[1].starts_with("--")
+                || (args.len() == 3 && args[2] != "--json")
+            {
                 return Err(format!("usage: relay {command} <project-id> [--json]"));
             }
-            let operation = if command.ends_with("plan") { "plan" } else { "list" };
-            let mut request = make_request(format!("project.removal.{operation}"), json!({"project_id": args[1]}), None);
-            if operation == "plan" { request.idempotency_key = Some(format!("CLI-{}", request.request_id)); }
+            let operation = if command.ends_with("plan") {
+                "plan"
+            } else {
+                "list"
+            };
+            let mut request = make_request(
+                format!("project.removal.{operation}"),
+                json!({"project_id": args[1]}),
+                None,
+            );
+            if operation == "plan" {
+                request.idempotency_key = Some(format!("CLI-{}", request.request_id));
+            }
             execute_human(request, has_json_flag(args), "default")
         }
-        "project-removal-get" | "project-removal-approve" | "project-removal-reject" | "project-remove" => {
-            if !matches!(args.len(), 3 | 4) || args[1..3].iter().any(|arg| arg.starts_with("--")) || (args.len() == 4 && args[3] != "--json") {
-                return Err(format!("usage: relay {command} <project-id> <approval-id> [--json]"));
+        "project-removal-get"
+        | "project-removal-approve"
+        | "project-removal-reject"
+        | "project-remove" => {
+            if !matches!(args.len(), 3 | 4)
+                || args[1..3].iter().any(|arg| arg.starts_with("--"))
+                || (args.len() == 4 && args[3] != "--json")
+            {
+                return Err(format!(
+                    "usage: relay {command} <project-id> <approval-id> [--json]"
+                ));
             }
             let (operation, arguments) = match command {
-                "project-removal-get" => ("project.removal.get", json!({"project_id": args[1], "approval_id": args[2]})),
-                "project-removal-approve" => ("project.removal.decide", json!({"project_id": args[1], "approval_id": args[2], "decision": "approve"})),
-                "project-removal-reject" => ("project.removal.decide", json!({"project_id": args[1], "approval_id": args[2], "decision": "reject"})),
-                _ => ("project.remove", json!({"project_id": args[1], "approval_id": args[2]})),
+                "project-removal-get" => (
+                    "project.removal.get",
+                    json!({"project_id": args[1], "approval_id": args[2]}),
+                ),
+                "project-removal-approve" => (
+                    "project.removal.decide",
+                    json!({"project_id": args[1], "approval_id": args[2], "decision": "approve"}),
+                ),
+                "project-removal-reject" => (
+                    "project.removal.decide",
+                    json!({"project_id": args[1], "approval_id": args[2], "decision": "reject"}),
+                ),
+                _ => (
+                    "project.remove",
+                    json!({"project_id": args[1], "approval_id": args[2]}),
+                ),
             };
             let mut request = make_request(operation, arguments, None);
-            if operation == "project.remove" { request.command_version = Some(2); }
-            if operation != "project.removal.get" { request.idempotency_key = Some(format!("CLI-{}", request.request_id)); }
+            if operation == "project.remove" {
+                request.command_version = Some(2);
+            }
+            if operation != "project.removal.get" {
+                request.idempotency_key = Some(format!("CLI-{}", request.request_id));
+            }
             execute_human(request, has_json_flag(args), "default")
         }
         "uefn-inspect" => {
@@ -516,17 +667,25 @@ fn run(args: &[String]) -> Result<i32, String> {
             )
         }
         "uefn-audit" => {
-            let project_id = args.get(1)
+            let project_id = args
+                .get(1)
                 .filter(|value| !value.starts_with("--"))
                 .ok_or_else(|| "uefn-audit requires a project ID".to_string())?;
             let inspection = invoke(&make_request(
-                "uefn.static.inspect", json!({ "project_id": project_id }), None,
+                "uefn.static.inspect",
+                json!({ "project_id": project_id }),
+                None,
             ))?;
             if !inspection.ok {
-                if has_json_flag(args) { print_machine(&inspection); } else { print_human(&inspection); }
+                if has_json_flag(args) {
+                    print_machine(&inspection);
+                } else {
+                    print_human(&inspection);
+                }
                 return Ok(2);
             }
-            let payload = inspection.result
+            let payload = inspection
+                .result
                 .ok_or_else(|| "UEFN inspection returned no result".to_string())?;
             let req_id = request_id();
             let recorded = invoke(&CommandRequest {
@@ -541,20 +700,39 @@ fn run(args: &[String]) -> Result<i32, String> {
                 idempotency_key: Some(format!("CLI-{req_id}")),
                 context: RequestContext::default(),
             })?;
-            if has_json_flag(args) { print_machine(&recorded); } else { print_human(&recorded); }
+            if has_json_flag(args) {
+                print_machine(&recorded);
+            } else {
+                print_human(&recorded);
+            }
             Ok(if recorded.ok { 0 } else { 2 })
         }
         "uefn-describe" => {
-            let name = args.get(1).filter(|value| !value.starts_with("--"))
-                .ok_or_else(|| "usage: relay uefn-describe <toolset-name> [port] [--json]".to_string())?;
+            let name = args
+                .get(1)
+                .filter(|value| !value.starts_with("--"))
+                .ok_or_else(|| {
+                    "usage: relay uefn-describe <toolset-name> [port] [--json]".to_string()
+                })?;
             let port = match args.get(2) {
-                Some(value) if value != "--json" => value.parse::<u16>().ok().filter(|port| *port > 0)
+                Some(value) if value != "--json" => value
+                    .parse::<u16>()
+                    .ok()
+                    .filter(|port| *port > 0)
                     .ok_or_else(|| "UEFN MCP port must be between 1 and 65535".to_string())?,
                 _ => 8000,
             };
-            execute_human(make_request("uefn.mcp.describe_toolset", json!({
-                "toolset_name": name, "port": port
-            }), None), has_json_flag(args), "default")
+            execute_human(
+                make_request(
+                    "uefn.mcp.describe_toolset",
+                    json!({
+                        "toolset_name": name, "port": port
+                    }),
+                    None,
+                ),
+                has_json_flag(args),
+                "default",
+            )
         }
         "uefn-discover" | "uefn-toolsets" => {
             let port = match args.get(1) {
@@ -566,7 +744,15 @@ fn run(args: &[String]) -> Result<i32, String> {
                 _ => 8000,
             };
             execute_human(
-                make_request(if command == "uefn-toolsets" { "uefn.mcp.toolsets" } else { "uefn.mcp.discover" }, json!({ "port": port }), None),
+                make_request(
+                    if command == "uefn-toolsets" {
+                        "uefn.mcp.toolsets"
+                    } else {
+                        "uefn.mcp.discover"
+                    },
+                    json!({ "port": port }),
+                    None,
+                ),
                 has_json_flag(args),
                 "default",
             )
@@ -592,23 +778,28 @@ fn run(args: &[String]) -> Result<i32, String> {
                 json!([])
             };
             let analysis = invoke(&make_request(
-                    "runtime.capture.analyze",
-                    json!({
-                        "project_id": args[1],
-                        "session_id": args[2],
-                        "source_kind": "imported_log",
-                        "source_version": "unverified",
-                        "capture_ref": format!("CAP-{}", request_id()),
-                        "capture_text": capture_text,
-                        "assertions": assertions
-                    }),
-                    None,
-                ))?;
+                "runtime.capture.analyze",
+                json!({
+                    "project_id": args[1],
+                    "session_id": args[2],
+                    "source_kind": "imported_log",
+                    "source_version": "unverified",
+                    "capture_ref": format!("CAP-{}", request_id()),
+                    "capture_text": capture_text,
+                    "assertions": assertions
+                }),
+                None,
+            ))?;
             if command == "verse-analyze" || !analysis.ok {
-                if has_json_flag(args) { print_machine(&analysis); } else { print_human(&analysis); }
+                if has_json_flag(args) {
+                    print_machine(&analysis);
+                } else {
+                    print_human(&analysis);
+                }
                 return Ok(if analysis.ok { 0 } else { 2 });
             }
-            let payload = analysis.result
+            let payload = analysis
+                .result
                 .ok_or_else(|| "Verse analysis returned no result".to_string())?;
             let req_id = request_id();
             let recorded = invoke(&CommandRequest {
@@ -623,7 +814,11 @@ fn run(args: &[String]) -> Result<i32, String> {
                 idempotency_key: Some(format!("CLI-{req_id}")),
                 context: RequestContext::default(),
             })?;
-            if has_json_flag(args) { print_machine(&recorded); } else { print_human(&recorded); }
+            if has_json_flag(args) {
+                print_machine(&recorded);
+            } else {
+                print_human(&recorded);
+            }
             Ok(if recorded.ok { 0 } else { 2 })
         }
         "verse-file-analyze" | "verse-file-record" => {
@@ -641,15 +836,24 @@ fn run(args: &[String]) -> Result<i32, String> {
             } else {
                 json!([])
             };
-            let analysis = invoke(&make_request("runtime.capture.file.analyze", json!({
-                "project_id": args[1], "session_id": args[2],
-                "relative_path": args[3], "assertions": assertions
-            }), None))?;
+            let analysis = invoke(&make_request(
+                "runtime.capture.file.analyze",
+                json!({
+                    "project_id": args[1], "session_id": args[2],
+                    "relative_path": args[3], "assertions": assertions
+                }),
+                None,
+            ))?;
             if command == "verse-file-analyze" || !analysis.ok {
-                if has_json_flag(args) { print_machine(&analysis); } else { print_human(&analysis); }
+                if has_json_flag(args) {
+                    print_machine(&analysis);
+                } else {
+                    print_human(&analysis);
+                }
                 return Ok(if analysis.ok { 0 } else { 2 });
             }
-            let payload = analysis.result
+            let payload = analysis
+                .result
                 .ok_or_else(|| "Verse file analysis returned no result".to_string())?;
             let req_id = request_id();
             let recorded = invoke(&CommandRequest {
@@ -664,7 +868,11 @@ fn run(args: &[String]) -> Result<i32, String> {
                 idempotency_key: Some(format!("CLI-{req_id}")),
                 context: RequestContext::default(),
             })?;
-            if has_json_flag(args) { print_machine(&recorded); } else { print_human(&recorded); }
+            if has_json_flag(args) {
+                print_machine(&recorded);
+            } else {
+                print_human(&recorded);
+            }
             Ok(if recorded.ok { 0 } else { 2 })
         }
         "asset-validate" | "krita-inspect" => {
@@ -681,7 +889,11 @@ fn run(args: &[String]) -> Result<i32, String> {
             }
             execute_human(
                 make_request(
-                    if command == "krita-inspect" { "assets.krita.inspect" } else { "assets.manifest.validate" },
+                    if command == "krita-inspect" {
+                        "assets.krita.inspect"
+                    } else {
+                        "assets.manifest.validate"
+                    },
                     json!({
                         "project_id": project_id,
                         "manifest_json": manifest_json
@@ -694,15 +906,24 @@ fn run(args: &[String]) -> Result<i32, String> {
         }
         "asset-impact" => {
             let usage = "usage: relay asset-impact <project-id> <manifest-file> <changed-project-relative-path>... [--json]";
-            let project_id = args.get(1).filter(|value| !value.starts_with("--"))
+            let project_id = args
+                .get(1)
+                .filter(|value| !value.starts_with("--"))
                 .ok_or_else(|| usage.to_string())?;
-            let manifest_path = args.get(2).filter(|value| !value.starts_with("--"))
+            let manifest_path = args
+                .get(2)
+                .filter(|value| !value.starts_with("--"))
                 .ok_or_else(|| usage.to_string())?;
-            let changed_paths: Vec<&str> = args.iter().skip(3)
+            let changed_paths: Vec<&str> = args
+                .iter()
+                .skip(3)
                 .filter(|value| value.as_str() != "--json")
-                .map(String::as_str).collect();
-            if changed_paths.is_empty() || changed_paths.len() > 256
-                || changed_paths.iter().any(|value| value.starts_with("--")) {
+                .map(String::as_str)
+                .collect();
+            if changed_paths.is_empty()
+                || changed_paths.len() > 256
+                || changed_paths.iter().any(|value| value.starts_with("--"))
+            {
                 return Err(usage.to_string());
             }
             let manifest_json = fs::read_to_string(manifest_path)
@@ -711,31 +932,49 @@ fn run(args: &[String]) -> Result<i32, String> {
                 return Err("asset manifest exceeds the local command size limit".to_string());
             }
             execute_human(
-                make_request("assets.impact.analyze", json!({
-                    "project_id": project_id,
-                    "manifest_json": manifest_json,
-                    "changed_paths": changed_paths
-                }), None),
-                has_json_flag(args), "default",
+                make_request(
+                    "assets.impact.analyze",
+                    json!({
+                        "project_id": project_id,
+                        "manifest_json": manifest_json,
+                        "changed_paths": changed_paths
+                    }),
+                    None,
+                ),
+                has_json_flag(args),
+                "default",
             )
         }
         "blender-mesh-check" | "blender-mesh-record" => {
             let usage = "usage: relay <blender-mesh-check|blender-mesh-record> <project-id> <project-relative.blend> [--json]";
-            let project_id = args.get(1).filter(|value| !value.starts_with("--"))
+            let project_id = args
+                .get(1)
+                .filter(|value| !value.starts_with("--"))
                 .ok_or_else(|| usage.to_string())?;
-            let blend_path = args.get(2).filter(|value| !value.starts_with("--"))
+            let blend_path = args
+                .get(2)
+                .filter(|value| !value.starts_with("--"))
                 .ok_or_else(|| usage.to_string())?;
             if args.iter().skip(3).any(|value| value != "--json") {
                 return Err(usage.to_string());
             }
-            let validation = invoke(&make_request("assets.blender.mesh.validate", json!({
+            let validation = invoke(&make_request(
+                "assets.blender.mesh.validate",
+                json!({
                     "project_id": project_id, "blend_path": blend_path
-                }), None))?;
+                }),
+                None,
+            ))?;
             if command == "blender-mesh-check" || !validation.ok {
-                if has_json_flag(args) { print_machine(&validation); } else { print_human(&validation); }
+                if has_json_flag(args) {
+                    print_machine(&validation);
+                } else {
+                    print_human(&validation);
+                }
                 return Ok(if validation.ok { 0 } else { 2 });
             }
-            let payload = validation.result
+            let payload = validation
+                .result
                 .ok_or_else(|| "Blender validation returned no result".to_string())?;
             let req_id = request_id();
             let recorded = invoke(&CommandRequest {
@@ -750,27 +989,55 @@ fn run(args: &[String]) -> Result<i32, String> {
                 idempotency_key: Some(format!("CLI-{req_id}")),
                 context: RequestContext::default(),
             })?;
-            if has_json_flag(args) { print_machine(&recorded); } else { print_human(&recorded); }
+            if has_json_flag(args) {
+                print_machine(&recorded);
+            } else {
+                print_human(&recorded);
+            }
             Ok(if recorded.ok { 0 } else { 2 })
         }
         "krita-export" => {
             let usage = "usage: relay krita-export <project-id> <project-relative.kra> <new-project-relative.png> [--json]";
-            let project_id = args.get(1).filter(|value| !value.starts_with("--"))
+            let project_id = args
+                .get(1)
+                .filter(|value| !value.starts_with("--"))
                 .ok_or_else(|| usage.to_string())?;
-            let source_path = args.get(2).filter(|value| !value.starts_with("--"))
+            let source_path = args
+                .get(2)
+                .filter(|value| !value.starts_with("--"))
                 .ok_or_else(|| usage.to_string())?;
-            let export_path = args.get(3).filter(|value| !value.starts_with("--"))
+            let export_path = args
+                .get(3)
+                .filter(|value| !value.starts_with("--"))
                 .ok_or_else(|| usage.to_string())?;
             if args.iter().skip(4).any(|value| value != "--json") {
                 return Err(usage.to_string());
             }
-            let response = invoke(&make_request("assets.krita.export", json!({
+            let response = invoke(&make_request(
+                "assets.krita.export",
+                json!({
                     "project_id": project_id, "source_path": source_path,
                     "export_path": export_path
-                }), Some(format!("CLI-{}", request_id()))))?;
-            if has_json_flag(args) { print_machine(&response); } else { print_human(&response); }
-            Ok(if response.ok && response.result.as_ref()
-                .is_some_and(|value| value["status"] == "exported") { 0 } else { 2 })
+                }),
+                Some(format!("CLI-{}", request_id())),
+            ))?;
+            if has_json_flag(args) {
+                print_machine(&response);
+            } else {
+                print_human(&response);
+            }
+            Ok(
+                if response.ok
+                    && response
+                        .result
+                        .as_ref()
+                        .is_some_and(|value| value["status"] == "exported")
+                {
+                    0
+                } else {
+                    2
+                },
+            )
         }
         "parser-install" => {
             if args.len() != 6 || args[5] != "--allow-source-delivery" {
@@ -810,12 +1077,20 @@ fn run(args: &[String]) -> Result<i32, String> {
         }
         "context-compile" => {
             let usage = "usage: relay context-compile <project-id> <max-bytes> <result-id,...> [--require result-id=/pointer] [--focus term] [--json]";
-            let project_id = args.get(1).filter(|value| !value.starts_with("--"))
+            let project_id = args
+                .get(1)
+                .filter(|value| !value.starts_with("--"))
                 .ok_or_else(|| usage.to_string())?;
-            let max_bytes: u64 = args.get(2).ok_or_else(|| usage.to_string())?
-                .parse().map_err(|_| usage.to_string())?;
-            let result_ids: Vec<&str> = args.get(3).ok_or_else(|| usage.to_string())?
-                .split(',').collect();
+            let max_bytes: u64 = args
+                .get(2)
+                .ok_or_else(|| usage.to_string())?
+                .parse()
+                .map_err(|_| usage.to_string())?;
+            let result_ids: Vec<&str> = args
+                .get(3)
+                .ok_or_else(|| usage.to_string())?
+                .split(',')
+                .collect();
             if result_ids.is_empty() || result_ids.iter().any(|id| id.is_empty()) {
                 return Err(usage.to_string());
             }
@@ -827,25 +1102,40 @@ fn run(args: &[String]) -> Result<i32, String> {
                     "--json" => position += 1,
                     "--require" => {
                         let value = args.get(position + 1).ok_or_else(|| usage.to_string())?;
-                        let (result_id, pointer) = value.split_once('=').ok_or_else(|| usage.to_string())?;
-                        if result_id.is_empty() || pointer.is_empty() { return Err(usage.to_string()); }
+                        let (result_id, pointer) =
+                            value.split_once('=').ok_or_else(|| usage.to_string())?;
+                        if result_id.is_empty() || pointer.is_empty() {
+                            return Err(usage.to_string());
+                        }
                         required.push(json!({ "result_id": result_id, "pointer": pointer }));
                         position += 2;
                     }
                     "--focus" => {
-                        focus_terms.push(args.get(position + 1).ok_or_else(|| usage.to_string())?.as_str());
+                        focus_terms.push(
+                            args.get(position + 1)
+                                .ok_or_else(|| usage.to_string())?
+                                .as_str(),
+                        );
                         position += 2;
                     }
                     _ => return Err(usage.to_string()),
                 }
             }
-            execute_human(make_request("context.compile", json!({
-                "project_id": project_id,
-                "result_ids": result_ids,
-                "max_bytes": max_bytes,
-                "required_pointers": required,
-                "focus_terms": focus_terms
-            }), None), has_json_flag(args), "default")
+            execute_human(
+                make_request(
+                    "context.compile",
+                    json!({
+                        "project_id": project_id,
+                        "result_ids": result_ids,
+                        "max_bytes": max_bytes,
+                        "required_pointers": required,
+                        "focus_terms": focus_terms
+                    }),
+                    None,
+                ),
+                has_json_flag(args),
+                "default",
+            )
         }
         "task-context" => {
             let usage = "usage: relay task-context <project-id> <diagnose|implement|review|project_admin> <max-bytes> [--result <id>] [--approval <id>] [--require <result-id=/pointer>] [--focus <term>] [--json]";
@@ -862,32 +1152,55 @@ fn run(args: &[String]) -> Result<i32, String> {
                 match args[position].as_str() {
                     "--json" => position += 1,
                     "--result" => {
-                        result_ids.push(args.get(position + 1).ok_or_else(|| usage.to_string())?.as_str());
+                        result_ids.push(
+                            args.get(position + 1)
+                                .ok_or_else(|| usage.to_string())?
+                                .as_str(),
+                        );
                         position += 2;
                     }
                     "--approval" => {
-                        approval_ids.push(args.get(position + 1).ok_or_else(|| usage.to_string())?.as_str());
+                        approval_ids.push(
+                            args.get(position + 1)
+                                .ok_or_else(|| usage.to_string())?
+                                .as_str(),
+                        );
                         position += 2;
                     }
                     "--require" => {
                         let value = args.get(position + 1).ok_or_else(|| usage.to_string())?;
-                        let (result_id, pointer) = value.split_once('=').ok_or_else(|| usage.to_string())?;
-                        if result_id.is_empty() || pointer.is_empty() { return Err(usage.to_string()); }
+                        let (result_id, pointer) =
+                            value.split_once('=').ok_or_else(|| usage.to_string())?;
+                        if result_id.is_empty() || pointer.is_empty() {
+                            return Err(usage.to_string());
+                        }
                         required.push(json!({"result_id": result_id, "pointer": pointer}));
                         position += 2;
                     }
                     "--focus" => {
-                        focus_terms.push(args.get(position + 1).ok_or_else(|| usage.to_string())?.as_str());
+                        focus_terms.push(
+                            args.get(position + 1)
+                                .ok_or_else(|| usage.to_string())?
+                                .as_str(),
+                        );
                         position += 2;
                     }
                     _ => return Err(usage.to_string()),
                 }
             }
-            execute_human(make_request("context.task.compile", json!({
-                "project_id": args[1], "task_kind": args[2], "max_bytes": max_bytes,
-                "result_ids": result_ids, "approval_ids": approval_ids,
-                "required_pointers": required, "focus_terms": focus_terms
-            }), None), has_json_flag(args), "default")
+            execute_human(
+                make_request(
+                    "context.task.compile",
+                    json!({
+                        "project_id": args[1], "task_kind": args[2], "max_bytes": max_bytes,
+                        "result_ids": result_ids, "approval_ids": approval_ids,
+                        "required_pointers": required, "focus_terms": focus_terms
+                    }),
+                    None,
+                ),
+                has_json_flag(args),
+                "default",
+            )
         }
         "job-list" => {
             let project_id = args.get(1).filter(|value| !value.starts_with("--"));
@@ -895,7 +1208,11 @@ fn run(args: &[String]) -> Result<i32, String> {
                 Some(project_id) => json!({ "project_id": project_id, "limit": 20 }),
                 None => json!({ "limit": 20 }),
             };
-            execute_human(make_request("job.list", arguments, None), has_json_flag(args), "default")
+            execute_human(
+                make_request("job.list", arguments, None),
+                has_json_flag(args),
+                "default",
+            )
         }
         "job-get" => {
             let id = args

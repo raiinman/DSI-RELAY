@@ -1,14 +1,15 @@
 //! Authenticated loopback discovery gateway. It has no public-network listener or shell path.
 
 use relay::client;
-use relay_contracts::{CommandRequest, CommandResponse, RequestContext, registry};
+use relay_contracts::{registry, CommandRequest, CommandResponse, RequestContext};
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::mpsc;
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -19,7 +20,14 @@ pub const MAX_BODY_BYTES: usize = 8_192;
 pub const MAX_RESPONSE_BYTES: usize = 64 * 1_024;
 const MAX_LIST_ITEMS: u64 = 20;
 const READ_TIMEOUT: Duration = Duration::from_secs(2);
-const EXPOSED: [&str; 2] = ["registry.list@1", "registry.describe@1"];
+const HOST_TIMEOUT: Duration = Duration::from_secs(5);
+const EXPOSED: [&str; 5] = [
+    "registry.list@1",
+    "registry.describe@1",
+    "result.list@1",
+    "result.describe@1",
+    "result.context@1",
+];
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,6 +72,7 @@ pub struct Gateway {
     listener: TcpListener,
     token: Vec<u8>,
     transport: Arc<dyn RelayTransport>,
+    host_inflight: Arc<AtomicBool>,
 }
 
 impl Gateway {
@@ -77,6 +86,7 @@ impl Gateway {
             listener,
             token: config.token,
             transport,
+            host_inflight: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -153,7 +163,7 @@ impl Gateway {
         }
     }
 
-    /// Stateless MCP Streamable HTTP 2026-07-28, limited to registry discovery.
+    /// Stateless MCP Streamable HTTP 2026-07-28, with a fixed metadata allowlist.
     fn mcp(&self, request: &HttpRequest) -> HttpResponse {
         let parsed: Value = match serde_json::from_slice(&request.body) {
             Ok(value) => value,
@@ -261,7 +271,7 @@ impl Gateway {
                         "resultType":"complete", "supportedVersions":[MCP_PROTOCOL_VERSION],
                         "capabilities":capabilities,
                         "_meta":{"io.modelcontextprotocol/serverInfo":{"name":"relay-registry-gateway","version":env!("CARGO_PKG_VERSION")}},
-                        "instructions":"Read-only RELAY command registry discovery on this computer.",
+                        "instructions":"Read-only RELAY registry and project-scoped result metadata/context on this computer.",
                         "ttlMs":0, "cacheScope":"private"
                     }),
                 )
@@ -289,6 +299,34 @@ impl Gateway {
                 {
                     tools.push(json!({"name":"relay_registry_describe","title":"Describe a RELAY command","description":"Describe one AI-exposed RELAY command definition.",
                         "inputSchema":{"type":"object","required":["command"],"properties":{"command":{"type":"string","minLength":1,"maxLength":128},"version":{"type":"integer","minimum":1}},"additionalProperties":false}}));
+                }
+                if status
+                    .capabilities
+                    .iter()
+                    .any(|item| item == "result.list@1")
+                {
+                    tools.push(json!({"name":"relay_result_list","title":"List project result metadata","description":"List at most 20 metadata records for one explicit RELAY project; no payload or provenance.",
+                        "inputSchema":{"type":"object","required":["project_id","limit"],"properties":{"project_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9._-]+$"},"limit":{"type":"integer","minimum":1,"maximum":20}},"additionalProperties":false}}));
+                }
+                if status
+                    .capabilities
+                    .iter()
+                    .any(|item| item == "result.describe@1")
+                {
+                    tools.push(json!({"name":"relay_result_describe","title":"Describe one project result","description":"Return provenance-free metadata only when the result belongs to the named project.",
+                        "inputSchema":{"type":"object","required":["project_id","result_id"],"properties":{"project_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9._-]+$"},"result_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9._-]+$"}},"additionalProperties":false}}));
+                }
+                if status
+                    .capabilities
+                    .iter()
+                    .any(|item| item == "result.context@1")
+                    && status
+                        .capabilities
+                        .iter()
+                        .any(|item| item == "result.describe@1")
+                {
+                    tools.push(json!({"name":"relay_result_context","title":"Read compact project result facts","description":"Read Core-filtered exact facts under a 4096-byte budget after verifying project scope; never returns the full payload.",
+                        "inputSchema":{"type":"object","required":["project_id","result_id","max_bytes"],"properties":{"project_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9._-]+$"},"result_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9._-]+$"},"max_bytes":{"type":"integer","minimum":512,"maximum":4096},"required_pointers":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":256}}},"additionalProperties":false}}));
                 }
                 mcp_result(
                     id,
@@ -322,20 +360,32 @@ impl Gateway {
                         }
                         ("registry.describe", args)
                     }
+                    Some("relay_result_list") => (
+                        "result.list",
+                        params.get("arguments").cloned().unwrap_or(Value::Null),
+                    ),
+                    Some("relay_result_describe") => (
+                        "result.describe",
+                        params.get("arguments").cloned().unwrap_or(Value::Null),
+                    ),
+                    Some("relay_result_context") => (
+                        "result.context",
+                        params.get("arguments").cloned().unwrap_or(Value::Null),
+                    ),
                     _ => return mcp_error(400, id, -32602, "Unknown tool"),
                 };
-                if !self.validate_discovery_arguments(command, &arguments) {
+                if self.prepare_arguments(command, &arguments).is_none() {
                     return mcp_error(400, id, -32602, "Invalid params");
                 }
                 let body = json!({"gateway_protocol":GATEWAY_PROTOCOL,"command":command,"command_version":1,"arguments":arguments});
                 let forwarded = self.execute(body.to_string().as_bytes());
                 if forwarded.status != 200 {
-                    return mcp_error(503, id, -32603, "Discovery unavailable");
+                    return mcp_error(503, id, -32603, "Read unavailable");
                 }
                 if forwarded.body.get("ok").and_then(Value::as_bool) != Some(true) {
                     return mcp_result(
                         id,
-                        json!({"resultType":"complete","content":[{"type":"text","text":"Registry discovery failed"}],"isError":true}),
+                        json!({"resultType":"complete","content":[{"type":"text","text":"RELAY read failed"}],"isError":true}),
                     );
                 }
                 let Some(result) = forwarded.body.get("result") else {
@@ -348,7 +398,7 @@ impl Gateway {
                 }
                 mcp_result(
                     id,
-                    json!({"resultType":"complete","content":[{"type":"text","text":"Registry discovery completed; read structuredContent."}],"structuredContent":result}),
+                    json!({"resultType":"complete","content":[{"type":"text","text":"RELAY read completed; read structuredContent."}],"structuredContent":result}),
                 )
             }
             _ => mcp_error(404, id, -32601, "Method not found"),
@@ -386,7 +436,11 @@ impl Gateway {
         }
         if !matches!(
             input.command.as_str(),
-            "registry.list" | "registry.describe"
+            "registry.list"
+                | "registry.describe"
+                | "result.list"
+                | "result.describe"
+                | "result.context"
         ) || input.command_version != 1
         {
             return HttpResponse::error(403, "COMMAND_NOT_EXPOSED");
@@ -398,9 +452,11 @@ impl Gateway {
         if spec.effect_class != "observe" || spec.permission != "read" {
             return HttpResponse::error(403, "COMMAND_NOT_EXPOSED");
         }
-        if !self.validate_discovery_arguments(&input.command, &input.arguments) {
+        let Some((forwarded_arguments, project_scope)) =
+            self.prepare_arguments(&input.command, &input.arguments)
+        else {
             return HttpResponse::error(400, "INVALID_ARGUMENTS");
-        }
+        };
         let Some(status) = self.host_status() else {
             return HttpResponse::error(503, "HOST_UNAVAILABLE");
         };
@@ -408,17 +464,172 @@ impl Gateway {
         if !status.capabilities.iter().any(|item| item == &capability) {
             return HttpResponse::error(409, "CAPABILITY_UNAVAILABLE");
         }
-        let command_request = make_request(input.command, input.command_version, input.arguments);
-        let Ok(reply) = self.transport.call(&command_request) else {
+        if input.command == "result.context"
+            && (!status
+                .capabilities
+                .iter()
+                .any(|item| item == "result.describe@1")
+                || !self.result_belongs_to_project(
+                    forwarded_arguments["result_id"].as_str().unwrap_or(""),
+                    project_scope.as_deref().unwrap_or(""),
+                ))
+        {
+            return HttpResponse::error(403, "PROJECT_SCOPE_DENIED");
+        }
+        let command_request = make_request(
+            input.command.clone(),
+            input.command_version,
+            forwarded_arguments,
+        );
+        let Ok(reply) = self.call_host(command_request.clone()) else {
             return HttpResponse::error(503, "HOST_UNAVAILABLE");
         };
-        let Ok(value) = serde_json::to_value(reply) else {
+        if reply.message_type != "command_result"
+            || reply.request_id != command_request.request_id
+            || reply.command_version != input.command_version
+        {
+            return HttpResponse::error(502, "HOST_RESPONSE_INVALID");
+        }
+        if !reply.ok {
+            return HttpResponse::ok(json!({"ok":false,"code":"COMMAND_FAILED"}));
+        }
+        let Some(result) = reply.result else {
             return HttpResponse::error(502, "HOST_RESPONSE_INVALID");
         };
-        if serde_json::to_vec(&value).is_ok_and(|bytes| bytes.len() <= MAX_RESPONSE_BYTES) {
-            HttpResponse::ok(value)
+        if registry::validate_value(&spec.result_schema, &result).is_err()
+            || !self.result_matches_scope(
+                &input.command,
+                &result,
+                project_scope.as_deref(),
+                &command_request.arguments,
+            )
+        {
+            return HttpResponse::error(502, "HOST_RESPONSE_INVALID");
+        }
+        let body = json!({"ok":true,"result":result});
+        if serde_json::to_vec(&body).is_ok_and(|bytes| bytes.len() <= MAX_RESPONSE_BYTES) {
+            HttpResponse::ok(body)
         } else {
             HttpResponse::error(502, "HOST_RESPONSE_TOO_LARGE")
+        }
+    }
+
+    fn prepare_arguments(
+        &self,
+        command: &str,
+        arguments: &Value,
+    ) -> Option<(Value, Option<String>)> {
+        if matches!(command, "registry.list" | "registry.describe") {
+            return self
+                .validate_discovery_arguments(command, arguments)
+                .then(|| (arguments.clone(), None));
+        }
+        let object = arguments.as_object()?;
+        let project_id = object.get("project_id")?.as_str()?;
+        if !valid_command_token(project_id, 128) {
+            return None;
+        }
+        let mut forwarded = arguments.clone();
+        if command == "result.list" {
+            let limit = object.get("limit")?.as_u64()?;
+            if !(1..=MAX_LIST_ITEMS).contains(&limit) {
+                return None;
+            }
+        } else {
+            forwarded.as_object_mut()?.remove("project_id");
+            let result_id = forwarded.get("result_id")?.as_str()?;
+            if !valid_command_token(result_id, 128) {
+                return None;
+            }
+            if command == "result.context"
+                && (forwarded.get("focus_terms").is_some()
+                    || !forwarded
+                        .get("max_bytes")
+                        .and_then(Value::as_u64)
+                        .is_some_and(|size| (512..=4096).contains(&size)))
+            {
+                return None;
+            }
+        }
+        let spec = registry::resolve_command(command, Some(1)).ok()?;
+        registry::validate_value(&spec.arguments_schema, &forwarded).ok()?;
+        Some((forwarded, Some(project_id.to_string())))
+    }
+
+    fn result_belongs_to_project(&self, result_id: &str, project_id: &str) -> bool {
+        let request = make_request(
+            "result.describe".to_string(),
+            1,
+            json!({"result_id":result_id}),
+        );
+        let Ok(reply) = self.call_host(request.clone()) else {
+            return false;
+        };
+        if !reply.ok
+            || reply.message_type != "command_result"
+            || reply.request_id != request.request_id
+            || reply.command_version != 1
+        {
+            return false;
+        }
+        let Some(result) = reply.result else {
+            return false;
+        };
+        let Ok(spec) = registry::resolve_command("result.describe", Some(1)) else {
+            return false;
+        };
+        registry::validate_value(&spec.result_schema, &result).is_ok()
+            && result["project_id"].as_str() == Some(project_id)
+            && result["id"].as_str() == Some(result_id)
+    }
+
+    fn result_matches_scope(
+        &self,
+        command: &str,
+        result: &Value,
+        project_id: Option<&str>,
+        arguments: &Value,
+    ) -> bool {
+        match command {
+            "result.list" => result["results"].as_array().is_some_and(|records| {
+                records.len() <= MAX_LIST_ITEMS as usize
+                    && records.iter().all(|record| {
+                        record["project_id"].as_str() == project_id && safe_metadata(record)
+                    })
+            }),
+            "result.describe" => {
+                result["project_id"].as_str() == project_id
+                    && result["id"].as_str() == arguments["result_id"].as_str()
+                    && safe_metadata(result)
+            }
+            "result.context" => {
+                result["result_id"].as_str() == arguments["result_id"].as_str()
+                    && result["result_id"]
+                        .as_str()
+                        .is_some_and(|id| valid_command_token(id, 128))
+                    && result["payload_sha256"].as_str().is_some_and(|hash| {
+                        hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+                    })
+                    && ["source_trust", "source_created_at", "producer_version"]
+                        .iter()
+                        .all(|key| {
+                            result
+                                .get(*key)
+                                .is_none_or(|value| value.as_str().is_some_and(safe_metadata_token))
+                        })
+                    && serde_json::to_vec(result).is_ok_and(|bytes| bytes.len() <= 16_384)
+                    && result["facts"].as_array().is_some_and(|facts| {
+                        facts.iter().all(|fact| {
+                            fact["pointer"].as_str().is_some_and(safe_fact_pointer)
+                                && match &fact["value"] {
+                                    Value::String(value) => safe_metadata_token(value),
+                                    Value::Number(_) | Value::Bool(_) => true,
+                                    _ => false,
+                                }
+                        })
+                    })
+            }
+            _ => true,
         }
     }
 
@@ -466,15 +677,24 @@ impl Gateway {
 
     fn host_status(&self) -> Option<HostStatus> {
         let request = make_request("system.status".to_string(), 1, json!({}));
-        let response = self.transport.call(&request).ok()?;
-        if !response.ok {
+        let response = self.call_host(request.clone()).ok()?;
+        if !response.ok
+            || response.message_type != "command_result"
+            || response.request_id != request.request_id
+            || response.command_version != 1
+        {
             return None;
         }
         let result = response.result?;
         let version = result.get("version")?.as_str()?.to_string();
-        let capabilities = result
-            .get("capabilities")?
-            .as_array()?
+        if !version.starts_with("0.1.") || version.len() > 32 {
+            return None;
+        }
+        let advertised = result.get("capabilities")?.as_array()?;
+        if advertised.len() > 256 {
+            return None;
+        }
+        let capabilities = advertised
             .iter()
             .map(|value| value.as_str().map(str::to_string))
             .collect::<Option<Vec<_>>>()?;
@@ -482,6 +702,35 @@ impl Gateway {
             version,
             capabilities,
         })
+    }
+
+    /// One daemon call may occupy one worker for at most the response wait.
+    /// A stuck pipe leaves the guard held until that worker exits, so repeated
+    /// HTTP requests cannot accumulate blocked daemon threads.
+    fn call_host(&self, request: CommandRequest) -> Result<CommandResponse, ()> {
+        if self
+            .host_inflight
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return Err(());
+        }
+        let transport = Arc::clone(&self.transport);
+        let inflight = Arc::clone(&self.host_inflight);
+        let (sender, receiver) = mpsc::sync_channel(1);
+        if thread::Builder::new()
+            .name("relay-gateway-host".to_string())
+            .spawn(move || {
+                let response = transport.call(&request);
+                let _ = sender.send(response);
+                inflight.store(false, Ordering::Release);
+            })
+            .is_err()
+        {
+            self.host_inflight.store(false, Ordering::Release);
+            return Err(());
+        }
+        receiver.recv_timeout(HOST_TIMEOUT).map_err(|_| ())?
     }
 }
 
@@ -689,6 +938,57 @@ fn valid_command_token(value: &str, max: usize) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
+fn safe_metadata_token(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b':' | b'+')
+        })
+}
+
+fn safe_metadata(record: &Value) -> bool {
+    ["id", "kind", "producer_version", "trust", "created_at"]
+        .iter()
+        .all(|key| record[*key].as_str().is_some_and(safe_metadata_token))
+        && record["project_id"]
+            .as_str()
+            .is_some_and(|id| valid_command_token(id, 128))
+        && record["payload_sha256"].as_str().is_some_and(|hash| {
+            hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+        })
+}
+
+fn safe_fact_pointer(pointer: &str) -> bool {
+    if !pointer.starts_with('/') || pointer.len() > 256 {
+        return false;
+    }
+    pointer[1..].split('/').all(|segment| {
+        let lower = segment.to_ascii_lowercase();
+        valid_command_token(segment, 64)
+            && ![
+                "path",
+                "file",
+                "root",
+                "uri",
+                "url",
+                "directory",
+                "location",
+                "secret",
+                "token",
+                "credential",
+                "password",
+                "private",
+                "auth",
+                "cookie",
+                "session",
+                "bearer",
+                "key",
+            ]
+            .iter()
+            .any(|part| lower.contains(part))
+    })
+}
+
 fn constant_time_equal(supplied: &[u8], expected: &[u8]) -> bool {
     let mut different = supplied.len() ^ expected.len();
     for index in 0..expected.len() {
@@ -748,8 +1048,20 @@ mod tests {
             let result = if request.command == "system.status" {
                 json!({
                     "version": "0.1.0",
-                    "capabilities": ["registry.list@1", "registry.describe@1"]
+                    "capabilities": ["registry.list@1", "registry.describe@1", "result.list@1", "result.describe@1", "result.context@1"]
                 })
+            } else if request.command == "result.list" {
+                json!({"results":[{"id":"RES-alpha","project_id":"PRJ-alpha","kind":"CHECK","schema_version":1,
+                    "producer_version":"0.1.0","payload_sha256":"0".repeat(64),"payload_bytes":32,
+                    "trust":"local","created_at":"2026-09-27T00:00:00Z"}]})
+            } else if request.command == "result.describe" {
+                json!({"id":"RES-alpha","project_id":"PRJ-alpha","kind":"CHECK","schema_version":1,
+                    "producer_version":"0.1.0","payload_sha256":"0".repeat(64),"payload_bytes":32,
+                    "trust":"local","created_at":"2026-09-27T00:00:00Z"})
+            } else if request.command == "result.context" {
+                json!({"result_id":"RES-alpha","payload_sha256":"0".repeat(64),"payload_bytes":32,
+                    "source_trust":"local","full_result_command":"result.get",
+                    "facts":[{"pointer":"/count","value":3}],"omitted_scalar_count":0,"truncated":false})
             } else {
                 json!({"registry_format": 1, "commands": []})
             };
@@ -872,10 +1184,27 @@ mod tests {
         let (reply, calls) = exchange(&write, "/v1/execute", "", Some(TOKEN), None);
         assert!(reply.starts_with("HTTP/1.1 403"));
         assert_eq!(calls, 0);
+        let full_payload = json!({"gateway_protocol":1,"command":"result.get","command_version":1,"arguments":{"result_id":"RES-alpha"}}).to_string();
+        let (reply, calls) = exchange(&full_payload, "/v1/execute", "", Some(TOKEN), None);
+        assert!(reply.starts_with("HTTP/1.1 403"));
+        assert_eq!(calls, 0);
         let list = json!({"gateway_protocol":1,"command":"registry.list","command_version":1,"arguments":{"surface":"ai","limit":200}}).to_string();
         let (reply, calls) = exchange(&list, "/v1/execute", "", Some(TOKEN), None);
         assert!(reply.starts_with("HTTP/1.1 400"));
         assert_eq!(calls, 0);
+    }
+
+    #[test]
+    fn metadata_and_fact_guards_reject_path_shaped_values() {
+        let mut metadata = json!({"id":"RES-alpha","project_id":"PRJ-alpha","kind":"CHECK",
+            "producer_version":"0.1.0","trust":"local","created_at":"2026-09-27T00:00:00Z",
+            "payload_sha256":"0".repeat(64)});
+        assert!(safe_metadata(&metadata));
+        metadata["kind"] = json!("C:/private/project");
+        assert!(!safe_metadata(&metadata));
+        assert!(safe_fact_pointer("/status"));
+        assert!(!safe_fact_pointer("/project_path"));
+        assert!(!safe_metadata_token("C:\\private\\project"));
     }
 
     #[test]
@@ -1010,6 +1339,112 @@ mod tests {
         assert!(reply.starts_with("HTTP/1.1 400"));
         assert!(reply.contains("-32022"));
         assert_eq!(calls, 0);
+    }
+
+    #[test]
+    fn mcp_lists_and_reads_only_scoped_result_metadata_and_context() {
+        let list = mcp_body(7, "tools/list", json!({}));
+        let (reply, calls) = exchange(
+            &list,
+            "/mcp",
+            &mcp_headers("tools/list", None),
+            Some(TOKEN),
+            None,
+        );
+        assert!(reply.contains("relay_result_list"));
+        assert!(reply.contains("relay_result_describe"));
+        assert!(reply.contains("relay_result_context"));
+        assert!(!reply.contains("relay_result_get"));
+        assert_eq!(calls, 1);
+
+        let list = mcp_body(
+            8,
+            "tools/call",
+            json!({"name":"relay_result_list",
+            "arguments":{"project_id":"PRJ-alpha","limit":2}}),
+        );
+        let (reply, calls) = exchange(
+            &list,
+            "/mcp",
+            &mcp_headers("tools/call", Some("relay_result_list")),
+            Some(TOKEN),
+            None,
+        );
+        assert!(reply.starts_with("HTTP/1.1 200"));
+        assert!(reply.contains("RES-alpha"));
+        assert!(!reply.contains("payload_json"));
+        assert_eq!(calls, 2);
+
+        let context = mcp_body(
+            9,
+            "tools/call",
+            json!({"name":"relay_result_context",
+            "arguments":{"project_id":"PRJ-alpha","result_id":"RES-alpha","max_bytes":1024,
+                "required_pointers":["/count"]}}),
+        );
+        let (reply, calls) = exchange(
+            &context,
+            "/mcp",
+            &mcp_headers("tools/call", Some("relay_result_context")),
+            Some(TOKEN),
+            None,
+        );
+        assert!(reply.starts_with("HTTP/1.1 200"));
+        assert!(reply.contains("structuredContent"));
+        assert!(reply.contains("/count"));
+        assert!(!reply.contains("payload_json"));
+        assert_eq!(calls, 3);
+    }
+
+    #[test]
+    fn scoped_result_reads_fail_closed_before_cross_project_context() {
+        let context = mcp_body(
+            10,
+            "tools/call",
+            json!({"name":"relay_result_context",
+            "arguments":{"project_id":"PRJ-other","result_id":"RES-alpha","max_bytes":1024}}),
+        );
+        let (reply, calls) = exchange(
+            &context,
+            "/mcp",
+            &mcp_headers("tools/call", Some("relay_result_context")),
+            Some(TOKEN),
+            None,
+        );
+        assert!(reply.starts_with("HTTP/1.1 503"));
+        assert!(!reply.contains("/count"));
+        assert_eq!(calls, 2);
+
+        let oversize = mcp_body(
+            11,
+            "tools/call",
+            json!({"name":"relay_result_context",
+            "arguments":{"project_id":"PRJ-alpha","result_id":"RES-alpha","max_bytes":16384}}),
+        );
+        let (reply, calls) = exchange(
+            &oversize,
+            "/mcp",
+            &mcp_headers("tools/call", Some("relay_result_context")),
+            Some(TOKEN),
+            None,
+        );
+        assert!(reply.starts_with("HTTP/1.1 400"));
+        assert_eq!(calls, 0);
+
+        let unscoped = json!({"gateway_protocol":1,"command":"result.list","command_version":1,
+            "arguments":{"limit":2}})
+        .to_string();
+        let (reply, calls) = exchange(&unscoped, "/v1/execute", "", Some(TOKEN), None);
+        assert!(reply.starts_with("HTTP/1.1 400"));
+        assert_eq!(calls, 0);
+
+        let mismatch = json!({"gateway_protocol":1,"command":"result.list","command_version":1,
+            "arguments":{"project_id":"PRJ-other","limit":2}})
+        .to_string();
+        let (reply, calls) = exchange(&mismatch, "/v1/execute", "", Some(TOKEN), None);
+        assert!(reply.starts_with("HTTP/1.1 502"));
+        assert!(!reply.contains("RES-alpha"));
+        assert_eq!(calls, 2);
     }
 
     #[test]

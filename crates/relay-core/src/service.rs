@@ -220,7 +220,10 @@ impl RelayCore {
         project_id: &str,
     ) -> Result<ReadyIndexSnapshot, ExtensionError> {
         self.with_storage(|storage| {
-            if !storage.get_project(project_id)?.is_some_and(|project| project.lifecycle_state == "active") {
+            if !storage
+                .get_project(project_id)?
+                .is_some_and(|project| project.lifecycle_state == "active")
+            {
                 return Ok(None);
             }
             let state = storage.get_project_index_state(project_id)?;
@@ -259,7 +262,10 @@ impl RelayCore {
             })?
             .ok_or_else(|| ExtensionError::new("PROJECT_NOT_FOUND", "project not found"))?;
         if project.lifecycle_state != "active" {
-            return Err(ExtensionError::new("PROJECT_NOT_FOUND", "project is not active"));
+            return Err(ExtensionError::new(
+                "PROJECT_NOT_FOUND",
+                "project is not active",
+            ));
         }
         indexing::canonical_project_root(&project.root_uri).map_err(|_| {
             ExtensionError::new("PROJECT_ROOT_UNAVAILABLE", "project root is unavailable")
@@ -267,13 +273,17 @@ impl RelayCore {
     }
 
     pub fn require_registered_project(&self, project_id: &str) -> Result<(), ExtensionError> {
-        let project = self.with_storage(|storage| storage.get_project(project_id))
+        let project = self
+            .with_storage(|storage| storage.get_project(project_id))
             .map_err(|_| {
                 ExtensionError::new("STORAGE_UNAVAILABLE", "project registry is unavailable")
             })?
             .ok_or_else(|| ExtensionError::new("PROJECT_NOT_FOUND", "project not found"))?;
         if project.lifecycle_state != "active" {
-            return Err(ExtensionError::new("PROJECT_NOT_FOUND", "project is not active"));
+            return Err(ExtensionError::new(
+                "PROJECT_NOT_FOUND",
+                "project is not active",
+            ));
         }
         Ok(())
     }
@@ -476,7 +486,7 @@ impl RelayCore {
             storage.get_active_project(project_id)?;
             storage.get_project_index_state(project_id)
         })
-            .map_err(|error| error.message)
+        .map_err(|error| error.message)
     }
 
     /// Trusted local watcher recovery uses the same reconciliation path with cooperative deferral.
@@ -1211,9 +1221,16 @@ impl RelayCore {
             "project.list" => self.project_list(&request.arguments, authority),
             "project.archive" => self.project_lifecycle(&request.arguments, "archived"),
             "project.restore" => self.project_lifecycle(&request.arguments, "active"),
-            "project.remove" => if command_version == 1 {
-                Err(CoreCommandError::new("APPROVAL_REQUIRED", "project.remove@1 is disabled; plan, approve, and execute project.remove@2"))
-            } else { self.project_removal_execute(&request.arguments, authority) },
+            "project.remove" => {
+                if command_version == 1 {
+                    Err(CoreCommandError::new(
+                        "APPROVAL_REQUIRED",
+                        "project.remove@1 is disabled; plan, approve, and execute project.remove@2",
+                    ))
+                } else {
+                    self.project_removal_execute(&request.arguments, authority)
+                }
+            }
             "project.removal.plan" => self.project_removal_plan(&request.arguments, authority),
             "project.removal.get" => self.project_removal_get(&request.arguments),
             "project.removal.list" => self.project_removal_list(&request.arguments),
@@ -1230,6 +1247,7 @@ impl RelayCore {
             "project.check_catalog.put" => self.project_check_catalog_put(&request.arguments),
             "project.check_catalog.get" => self.project_check_catalog_get(&request.arguments),
             "automation.checks.plan" => self.automation_checks_plan(&request.arguments),
+            "automation.checks.execute" => self.automation_checks_execute(request),
             "result.put" => self.result_put(request),
             "result.get" => self.result_get(&request.arguments, authority),
             "result.list" => self.result_list(&request.arguments, authority),
@@ -1488,9 +1506,17 @@ impl RelayCore {
         }))
     }
 
-    fn project_list(&self, arguments: &Value, authority: &ExecutionAuthority) -> Result<Value, CoreCommandError> {
-        let include_inactive = arguments.get("include_inactive").and_then(Value::as_bool).unwrap_or(false);
-        let mut projects = self.with_storage(|storage| storage.list_projects_with_inactive(include_inactive))?;
+    fn project_list(
+        &self,
+        arguments: &Value,
+        authority: &ExecutionAuthority,
+    ) -> Result<Value, CoreCommandError> {
+        let include_inactive = arguments
+            .get("include_inactive")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let mut projects =
+            self.with_storage(|storage| storage.list_projects_with_inactive(include_inactive))?;
         if let Some(allowed) = &authority.project_ids {
             projects.retain(|project| allowed.contains(&project.id));
         }
@@ -1502,9 +1528,16 @@ impl RelayCore {
         Ok(json!({ "projects": projects }))
     }
 
-    fn project_lifecycle(&self, arguments: &Value, target: &str) -> Result<Value, CoreCommandError> {
-        let project_id = arguments["project_id"].as_str().expect("registry validation requires project_id");
-        let (project, changed) = self.with_storage(|storage| storage.set_project_lifecycle(project_id, target))?;
+    fn project_lifecycle(
+        &self,
+        arguments: &Value,
+        target: &str,
+    ) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"]
+            .as_str()
+            .expect("registry validation requires project_id");
+        let (project, changed) =
+            self.with_storage(|storage| storage.set_project_lifecycle(project_id, target))?;
         Ok(json!({
             "project_id": project.id,
             "lifecycle_state": project.lifecycle_state,
@@ -1512,46 +1545,75 @@ impl RelayCore {
         }))
     }
 
-    fn project_removal_plan(&self, arguments: &Value, authority: &ExecutionAuthority) -> Result<Value, CoreCommandError> {
+    fn project_removal_plan(
+        &self,
+        arguments: &Value,
+        authority: &ExecutionAuthority,
+    ) -> Result<Value, CoreCommandError> {
         let project_id = arguments["project_id"].as_str().unwrap();
         let actor = safe_approval_ref(&authority.actor_id);
         let client = safe_approval_ref(&authority.client_id);
         let delegator = authority.delegator_id.as_deref().map(safe_approval_ref);
-        let approval = self.with_storage(|storage| storage.plan_project_removal(project_id, &actor, &client, delegator.as_deref()))?;
+        let approval = self.with_storage(|storage| {
+            storage.plan_project_removal(project_id, &actor, &client, delegator.as_deref())
+        })?;
         Ok(removal_approval_json(&approval))
     }
 
     fn project_removal_get(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
         let project_id = arguments["project_id"].as_str().unwrap();
         let approval_id = arguments["approval_id"].as_str().unwrap();
-        let approval = self.with_storage(|storage| storage.get_project_removal_approval(project_id, approval_id))?;
+        let approval = self.with_storage(|storage| {
+            storage.get_project_removal_approval(project_id, approval_id)
+        })?;
         Ok(removal_approval_json(&approval))
     }
 
     fn project_removal_list(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
         let project_id = arguments["project_id"].as_str().unwrap();
-        let limit = arguments.get("limit").and_then(Value::as_u64).unwrap_or(20).min(100) as usize;
-        let approvals = self.with_storage(|storage| storage.list_project_removal_approvals(project_id, limit))?;
-        Ok(json!({ "project_id": safe_approval_ref(project_id), "approvals": approvals.iter().map(removal_approval_json).collect::<Vec<_>>() }))
+        let limit = arguments
+            .get("limit")
+            .and_then(Value::as_u64)
+            .unwrap_or(20)
+            .min(100) as usize;
+        let approvals =
+            self.with_storage(|storage| storage.list_project_removal_approvals(project_id, limit))?;
+        Ok(
+            json!({ "project_id": safe_approval_ref(project_id), "approvals": approvals.iter().map(removal_approval_json).collect::<Vec<_>>() }),
+        )
     }
 
-    fn project_removal_decide(&self, arguments: &Value, authority: &ExecutionAuthority) -> Result<Value, CoreCommandError> {
+    fn project_removal_decide(
+        &self,
+        arguments: &Value,
+        authority: &ExecutionAuthority,
+    ) -> Result<Value, CoreCommandError> {
         let project_id = arguments["project_id"].as_str().unwrap();
         let approval_id = arguments["approval_id"].as_str().unwrap();
         let approve = arguments["decision"].as_str() == Some("approve");
         let actor = safe_approval_ref(&authority.actor_id);
         let client = safe_approval_ref(&authority.client_id);
-        let approval = self.with_storage(|storage| storage.decide_project_removal(project_id, approval_id, approve, &actor, &client))?;
+        let approval = self.with_storage(|storage| {
+            storage.decide_project_removal(project_id, approval_id, approve, &actor, &client)
+        })?;
         Ok(removal_approval_json(&approval))
     }
 
-    fn project_removal_execute(&self, arguments: &Value, authority: &ExecutionAuthority) -> Result<Value, CoreCommandError> {
+    fn project_removal_execute(
+        &self,
+        arguments: &Value,
+        authority: &ExecutionAuthority,
+    ) -> Result<Value, CoreCommandError> {
         let project_id = arguments["project_id"].as_str().unwrap();
         let approval_id = arguments["approval_id"].as_str().unwrap();
         let actor = safe_approval_ref(&authority.actor_id);
         let client = safe_approval_ref(&authority.client_id);
-        let (approval, executed) = self.with_storage(|storage| storage.execute_project_removal(project_id, approval_id, &actor, &client))?;
-        Ok(json!({ "project_id": safe_approval_ref(project_id), "approval_id": approval.id, "state": approval.state, "executed": executed }))
+        let (approval, executed) = self.with_storage(|storage| {
+            storage.execute_project_removal(project_id, approval_id, &actor, &client)
+        })?;
+        Ok(
+            json!({ "project_id": safe_approval_ref(project_id), "approval_id": approval.id, "state": approval.state, "executed": executed }),
+        )
     }
 
     fn project_configuration_put(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
@@ -1634,8 +1696,7 @@ impl RelayCore {
         let project_id = arguments["project_id"]
             .as_str()
             .expect("registry validation requires project_id");
-        let project = self
-            .with_storage(|storage| storage.get_active_project(project_id))?;
+        let project = self.with_storage(|storage| storage.get_active_project(project_id))?;
         let root = indexing::canonical_project_root(&project.root_uri)
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
         let plan = indexing::build_baseline(&root)
@@ -1928,9 +1989,11 @@ impl RelayCore {
     }
 
     fn project_check_catalog_put(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
-        let project_id = arguments["project_id"].as_str()
+        let project_id = arguments["project_id"]
+            .as_str()
             .expect("registry validation requires project_id");
-        let expected_revision = arguments["expected_revision"].as_i64()
+        let expected_revision = arguments["expected_revision"]
+            .as_i64()
             .expect("registry validation requires expected_revision");
         let canonical = planner::canonical_catalog(&arguments["catalog"])
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
@@ -1948,12 +2011,16 @@ impl RelayCore {
     }
 
     fn project_check_catalog_get(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
-        let project_id = arguments["project_id"].as_str()
+        let project_id = arguments["project_id"]
+            .as_str()
             .expect("registry validation requires project_id");
         let record = self.with_storage(|storage| {
             storage.get_active_project(project_id)?;
-            storage.get_project_check_catalog(project_id)?
-                .ok_or_else(|| StorageError::new("CHECK_CATALOG_MISSING", "project check catalog is missing"))
+            storage
+                .get_project_check_catalog(project_id)?
+                .ok_or_else(|| {
+                    StorageError::new("CHECK_CATALOG_MISSING", "project check catalog is missing")
+                })
         })?;
         Ok(json!({
             "project_id": record.project_id,
@@ -1966,15 +2033,67 @@ impl RelayCore {
     }
 
     fn automation_checks_plan(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
-        let project_id = arguments["project_id"].as_str()
+        let project_id = arguments["project_id"]
+            .as_str()
             .expect("registry validation requires project_id");
-        let after_generation = arguments["after_generation"].as_i64()
+        let after_generation = arguments["after_generation"]
+            .as_i64()
             .expect("registry validation requires after_generation");
         let snapshot = self.with_storage(|storage| {
             storage.project_plan_snapshot(project_id, after_generation, 4096)
         })?;
         planner::plan(snapshot, after_generation)
             .map_err(|error| CoreCommandError::new(error.code, error.message))
+    }
+
+    fn automation_checks_execute(
+        &self,
+        request: &CommandRequest,
+    ) -> Result<Value, CoreCommandError> {
+        let arguments = &request.arguments;
+        let project_id = arguments["project_id"]
+            .as_str()
+            .expect("registry validation requires project_id");
+        let after_generation = arguments["after_generation"]
+            .as_i64()
+            .expect("registry validation requires after_generation");
+        let expected_plan_id = arguments["plan_id"]
+            .as_str()
+            .expect("registry validation requires plan_id");
+        let provenance = self.provenance(request);
+        let trust = self.trust_label(request);
+        self.with_storage(|storage| {
+            let snapshot = storage.project_plan_snapshot(project_id, after_generation, 4096)?;
+            let planned = planner::plan(snapshot.clone(), after_generation)
+                .map_err(|error| StorageError::new(error.code, error.message))?;
+            if planned["plan_id"] != expected_plan_id {
+                return Err(StorageError::new(
+                    "CHECK_PLAN_CONFLICT",
+                    "check plan identity changed",
+                ));
+            }
+            if snapshot.bounds_exceeded
+                || snapshot.state.status != "ready"
+                || snapshot.state.content_verification_required
+                || planned["mode"] != "selective"
+            {
+                return Err(StorageError::new(
+                    "CHECK_EXECUTION_UNCERTAIN",
+                    "check plan does not have a complete current index basis",
+                ));
+            }
+            let prepared = planner::evaluate_declared_checks(&snapshot, &planned)
+                .map_err(|error| StorageError::new(error.code, error.message))?;
+            storage.commit_check_execution(
+                &snapshot,
+                &planned,
+                after_generation,
+                &prepared,
+                &self.producer.version,
+                &provenance,
+                trust,
+            )
+        })
     }
 
     fn project_changes(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
@@ -2362,7 +2481,9 @@ impl RelayCore {
                 "a required context fact is unavailable",
             )),
             Err(context::CompileError::SourceTooLarge) => Err(CoreCommandError::new(
-                "CONTEXT_SOURCE_TOO_LARGE", "stored source exceeds the bounded context compiler input")),
+                "CONTEXT_SOURCE_TOO_LARGE",
+                "stored source exceeds the bounded context compiler input",
+            )),
         }
     }
     fn context_compile(
@@ -2370,42 +2491,96 @@ impl RelayCore {
         arguments: &Value,
         authority: &ExecutionAuthority,
     ) -> Result<Value, CoreCommandError> {
-        let project_id = arguments["project_id"].as_str().expect("registry validates project_id");
-        authority.require_project(Some(project_id))
+        let project_id = arguments["project_id"]
+            .as_str()
+            .expect("registry validates project_id");
+        authority
+            .require_project(Some(project_id))
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
-        let result_ids: Vec<&str> = arguments["result_ids"].as_array().expect("registry validates result_ids")
-            .iter().map(|value| value.as_str().expect("registry validates result ID strings")).collect();
-        if result_ids.is_empty() || result_ids.len() > 8
+        let result_ids: Vec<&str> = arguments["result_ids"]
+            .as_array()
+            .expect("registry validates result_ids")
+            .iter()
+            .map(|value| {
+                value
+                    .as_str()
+                    .expect("registry validates result ID strings")
+            })
+            .collect();
+        if result_ids.is_empty()
+            || result_ids.len() > 8
             || result_ids.iter().collect::<BTreeSet<_>>().len() != result_ids.len()
         {
-            return Err(CoreCommandError::new("VALIDATION_FAILED", "result_ids must contain 1-8 unique IDs"));
+            return Err(CoreCommandError::new(
+                "VALIDATION_FAILED",
+                "result_ids must contain 1-8 unique IDs",
+            ));
         }
-        let required: Vec<(&str, &str)> = arguments.get("required_pointers")
-            .and_then(Value::as_array).map(|items| items.iter().map(|item| {
-                (item["result_id"].as_str().expect("registry validates result ID"),
-                 item["pointer"].as_str().expect("registry validates pointer"))
-            }).collect()).unwrap_or_default();
-        if required.len() > 16 || required.iter().collect::<BTreeSet<_>>().len() != required.len()
-            || required.iter().any(|(id, pointer)| !result_ids.contains(id) || !context::valid_required_pointer(pointer))
-        {
-            return Err(CoreCommandError::new("VALIDATION_FAILED", "required_pointers must name unique eligible source pointers"));
-        }
-        let focus_terms: Vec<&str> = arguments.get("focus_terms")
-            .and_then(Value::as_array).map(|items| items.iter().map(|item| item.as_str().expect("registry validates focus terms")).collect())
+        let required: Vec<(&str, &str)> = arguments
+            .get("required_pointers")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .map(|item| {
+                        (
+                            item["result_id"]
+                                .as_str()
+                                .expect("registry validates result ID"),
+                            item["pointer"]
+                                .as_str()
+                                .expect("registry validates pointer"),
+                        )
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
-        if focus_terms.len() > 8 || focus_terms.iter().collect::<BTreeSet<_>>().len() != focus_terms.len()
-            || focus_terms.iter().any(|term| !context::valid_focus_term(term))
+        if required.len() > 16
+            || required.iter().collect::<BTreeSet<_>>().len() != required.len()
+            || required.iter().any(|(id, pointer)| {
+                !result_ids.contains(id) || !context::valid_required_pointer(pointer)
+            })
         {
-            return Err(CoreCommandError::new("VALIDATION_FAILED", "focus_terms must contain at most 8 unique bounded terms"));
+            return Err(CoreCommandError::new(
+                "VALIDATION_FAILED",
+                "required_pointers must name unique eligible source pointers",
+            ));
         }
-        let max_bytes = arguments["max_bytes"].as_u64().expect("registry validates max_bytes") as usize;
+        let focus_terms: Vec<&str> = arguments
+            .get("focus_terms")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .map(|item| item.as_str().expect("registry validates focus terms"))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if focus_terms.len() > 8
+            || focus_terms.iter().collect::<BTreeSet<_>>().len() != focus_terms.len()
+            || focus_terms
+                .iter()
+                .any(|term| !context::valid_focus_term(term))
+        {
+            return Err(CoreCommandError::new(
+                "VALIDATION_FAILED",
+                "focus_terms must contain at most 8 unique bounded terms",
+            ));
+        }
+        let max_bytes = arguments["max_bytes"]
+            .as_u64()
+            .expect("registry validates max_bytes") as usize;
         let mut records = self.with_storage(|storage| {
             let mut records = Vec::with_capacity(result_ids.len());
             for id in &result_ids {
-                let record = storage.get_result(id)?
-                    .ok_or_else(|| StorageError::new("RESULT_NOT_FOUND", "result not found in project"))?;
+                let record = storage.get_result(id)?.ok_or_else(|| {
+                    StorageError::new("RESULT_NOT_FOUND", "result not found in project")
+                })?;
                 if record.project_id.as_deref() != Some(project_id) {
-                    return Err(StorageError::new("RESULT_NOT_FOUND", "result not found in project"));
+                    return Err(StorageError::new(
+                        "RESULT_NOT_FOUND",
+                        "result not found in project",
+                    ));
                 }
                 records.push(record);
             }
@@ -2437,17 +2612,29 @@ impl RelayCore {
         if let Some(cached) = self.context_cache_lookup(&cache_key) {
             return Ok(cached);
         }
-        match context::compile_project_results(project_id, &records, max_bytes, &required, &focus_terms) {
+        match context::compile_project_results(
+            project_id,
+            &records,
+            max_bytes,
+            &required,
+            &focus_terms,
+        ) {
             Ok(view) => {
                 self.context_cache_insert(cache_key, view.clone());
                 Ok(view)
-            },
+            }
             Err(context::CompileError::BudgetTooSmall) => Err(CoreCommandError::new(
-                "CONTEXT_BUDGET_TOO_SMALL", "byte budget cannot hold source metadata, conflicts, and required facts")),
+                "CONTEXT_BUDGET_TOO_SMALL",
+                "byte budget cannot hold source metadata, conflicts, and required facts",
+            )),
             Err(context::CompileError::RequiredFactUnavailable) => Err(CoreCommandError::new(
-                "CONTEXT_FACT_UNAVAILABLE", "a required exact source fact is unavailable")),
+                "CONTEXT_FACT_UNAVAILABLE",
+                "a required exact source fact is unavailable",
+            )),
             Err(context::CompileError::SourceTooLarge) => Err(CoreCommandError::new(
-                "CONTEXT_SOURCE_TOO_LARGE", "selected stored results exceed the bounded compiler input")),
+                "CONTEXT_SOURCE_TOO_LARGE",
+                "selected stored results exceed the bounded compiler input",
+            )),
         }
     }
     fn context_task_compile(
@@ -2455,49 +2642,123 @@ impl RelayCore {
         arguments: &Value,
         authority: &ExecutionAuthority,
     ) -> Result<Value, CoreCommandError> {
-        let project_id = arguments["project_id"].as_str().expect("registry validates project_id");
-        authority.require_project(Some(project_id))
+        let project_id = arguments["project_id"]
+            .as_str()
+            .expect("registry validates project_id");
+        authority
+            .require_project(Some(project_id))
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
-        let task_kind = arguments["task_kind"].as_str().expect("registry validates task_kind");
-        let result_ids: Vec<&str> = arguments.get("result_ids").and_then(Value::as_array)
-            .map(|values| values.iter().map(|value| value.as_str().expect("registry validates result ID")).collect())
+        let task_kind = arguments["task_kind"]
+            .as_str()
+            .expect("registry validates task_kind");
+        let result_ids: Vec<&str> = arguments
+            .get("result_ids")
+            .and_then(Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .map(|value| value.as_str().expect("registry validates result ID"))
+                    .collect()
+            })
             .unwrap_or_default();
-        let approval_ids: Vec<&str> = arguments.get("approval_ids").and_then(Value::as_array)
-            .map(|values| values.iter().map(|value| value.as_str().expect("registry validates approval ID")).collect())
+        let approval_ids: Vec<&str> = arguments
+            .get("approval_ids")
+            .and_then(Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .map(|value| value.as_str().expect("registry validates approval ID"))
+                    .collect()
+            })
             .unwrap_or_default();
-        if result_ids.len() > 8 || approval_ids.len() > 4
+        if result_ids.len() > 8
+            || approval_ids.len() > 4
             || result_ids.iter().collect::<BTreeSet<_>>().len() != result_ids.len()
-            || approval_ids.iter().collect::<BTreeSet<_>>().len() != approval_ids.len() {
-            return Err(CoreCommandError::new("VALIDATION_FAILED", "task context source IDs must be unique and bounded"));
+            || approval_ids.iter().collect::<BTreeSet<_>>().len() != approval_ids.len()
+        {
+            return Err(CoreCommandError::new(
+                "VALIDATION_FAILED",
+                "task context source IDs must be unique and bounded",
+            ));
         }
-        let required: Vec<(&str, &str)> = arguments.get("required_pointers").and_then(Value::as_array)
-            .map(|items| items.iter().map(|item| (
-                item["result_id"].as_str().expect("registry validates result ID"),
-                item["pointer"].as_str().expect("registry validates pointer"),
-            )).collect()).unwrap_or_default();
-        if required.len() > 16 || required.iter().collect::<BTreeSet<_>>().len() != required.len()
-            || required.iter().any(|(id, pointer)| !result_ids.contains(id) || !context::valid_required_pointer(pointer)) {
-            return Err(CoreCommandError::new("VALIDATION_FAILED", "required pointers must name unique eligible result facts"));
-        }
-        let focus_terms: Vec<&str> = arguments.get("focus_terms").and_then(Value::as_array)
-            .map(|items| items.iter().map(|item| item.as_str().expect("registry validates focus term")).collect())
+        let required: Vec<(&str, &str)> = arguments
+            .get("required_pointers")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .map(|item| {
+                        (
+                            item["result_id"]
+                                .as_str()
+                                .expect("registry validates result ID"),
+                            item["pointer"]
+                                .as_str()
+                                .expect("registry validates pointer"),
+                        )
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
-        if focus_terms.len() > 8 || focus_terms.iter().collect::<BTreeSet<_>>().len() != focus_terms.len()
-            || focus_terms.iter().any(|term| !context::valid_focus_term(term)) {
-            return Err(CoreCommandError::new("VALIDATION_FAILED", "focus terms must be unique bounded literals"));
+        if required.len() > 16
+            || required.iter().collect::<BTreeSet<_>>().len() != required.len()
+            || required.iter().any(|(id, pointer)| {
+                !result_ids.contains(id) || !context::valid_required_pointer(pointer)
+            })
+        {
+            return Err(CoreCommandError::new(
+                "VALIDATION_FAILED",
+                "required pointers must name unique eligible result facts",
+            ));
         }
-        let max_bytes = arguments["max_bytes"].as_u64().expect("registry validates max_bytes") as usize;
-        let snapshot = self.with_storage(|storage| storage.task_context_snapshot(project_id, &result_ids, &approval_ids))?;
+        let focus_terms: Vec<&str> = arguments
+            .get("focus_terms")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .map(|item| item.as_str().expect("registry validates focus term"))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if focus_terms.len() > 8
+            || focus_terms.iter().collect::<BTreeSet<_>>().len() != focus_terms.len()
+            || focus_terms
+                .iter()
+                .any(|term| !context::valid_focus_term(term))
+        {
+            return Err(CoreCommandError::new(
+                "VALIDATION_FAILED",
+                "focus terms must be unique bounded literals",
+            ));
+        }
+        let max_bytes = arguments["max_bytes"]
+            .as_u64()
+            .expect("registry validates max_bytes") as usize;
+        let snapshot = self.with_storage(|storage| {
+            storage.task_context_snapshot(project_id, &result_ids, &approval_ids)
+        })?;
         match context::compile_task_project_view(
-            &safe_approval_ref(project_id), &snapshot, task_kind, max_bytes, &required, &focus_terms,
+            &safe_approval_ref(project_id),
+            &snapshot,
+            task_kind,
+            max_bytes,
+            &required,
+            &focus_terms,
         ) {
             Ok(view) => Ok(view),
             Err(context::CompileError::BudgetTooSmall) => Err(CoreCommandError::new(
-                "CONTEXT_BUDGET_TOO_SMALL", "byte budget cannot hold current state, selected decision evidence, conflicts, and required facts")),
+                "CONTEXT_BUDGET_TOO_SMALL",
+                "byte budget cannot hold current state, selected decision evidence, conflicts, and required facts",
+            )),
             Err(context::CompileError::RequiredFactUnavailable) => Err(CoreCommandError::new(
-                "CONTEXT_FACT_UNAVAILABLE", "a required exact source fact is unavailable")),
+                "CONTEXT_FACT_UNAVAILABLE",
+                "a required exact source fact is unavailable",
+            )),
             Err(context::CompileError::SourceTooLarge) => Err(CoreCommandError::new(
-                "CONTEXT_SOURCE_TOO_LARGE", "selected stored results exceed bounded compiler input")),
+                "CONTEXT_SOURCE_TOO_LARGE",
+                "selected stored results exceed bounded compiler input",
+            )),
         }
     }
     fn job_checkpoint(&self, request: &CommandRequest) -> Result<Value, CoreCommandError> {
@@ -2563,20 +2824,21 @@ impl RelayCore {
     ) -> Result<Value, CoreCommandError> {
         let project_id = arguments.get("project_id").and_then(Value::as_str);
         if let Some(project_id) = project_id {
-            authority.require_project(Some(project_id)).map_err(|error| {
-                CoreCommandError::new(error.code, error.message)
-            })?;
+            authority
+                .require_project(Some(project_id))
+                .map_err(|error| CoreCommandError::new(error.code, error.message))?;
         } else if authority.project_ids.is_some() {
             return Err(CoreCommandError::new(
                 "PROJECT_SCOPE_REQUIRED",
                 "a project ID is required for scoped job listing",
             ));
         }
-        let limit = arguments.get("limit").and_then(Value::as_u64)
-            .unwrap_or(20).clamp(1, 100) as usize;
-        let jobs = self.with_storage(|storage| {
-            storage.list_job_descriptions(project_id, limit)
-        })?;
+        let limit = arguments
+            .get("limit")
+            .and_then(Value::as_u64)
+            .unwrap_or(20)
+            .clamp(1, 100) as usize;
+        let jobs = self.with_storage(|storage| storage.list_job_descriptions(project_id, limit))?;
         Ok(json!({ "jobs": jobs }))
     }
 
@@ -2811,6 +3073,11 @@ impl RelayCore {
                 response.request_id = request.request_id.clone();
                 response.producer = self.producer.clone();
                 response.replayed = true;
+                if request.command == "automation.checks.execute" && response.ok {
+                    if let Some(result) = response.result.as_mut() {
+                        result["replayed"] = json!(true);
+                    }
+                }
                 Some(response)
             }
             Err(error) => Some(self.failure(
@@ -2915,12 +3182,20 @@ impl RelayCore {
     }
 }
 fn safe_approval_ref(value: &str) -> String {
-    if !value.is_empty() && value.len() <= 96 && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')) {
+    if !value.is_empty()
+        && value.len() <= 96
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    {
         value.to_string()
     } else {
         let digest = Sha256::digest(value.as_bytes());
         let mut out = String::from("ref-sha256-");
-        for byte in digest { use std::fmt::Write as _; write!(&mut out, "{byte:02x}").expect("String write"); }
+        for byte in digest {
+            use std::fmt::Write as _;
+            write!(&mut out, "{byte:02x}").expect("String write");
+        }
         out
     }
 }
@@ -2987,6 +3262,8 @@ fn canonical_json(value: &Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::indexing::{IndexChange, IndexedFileSnapshot};
+    use crate::storage::{DependencyReplacement, IndexCommitMode, ProjectIndexCommit};
     use relay_contracts::RequestContext;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -3030,28 +3307,195 @@ mod tests {
             storage.register_project(Some("PRJ-plan"), "Plan", "file:///fixture")?;
             storage.replace_project_baseline("PRJ-plan", &[], 0)?;
             Ok(())
-        }).unwrap();
-        let mut put = request("catalog-put", "project.check_catalog.put", json!({
-            "project_id": "PRJ-plan", "expected_revision": 0,
-            "catalog": {"format_version": 1, "checks": [
-                {"id": "check.a", "roots": ["source.txt"], "leaves": []}
-            ]}
-        }));
+        })
+        .unwrap();
+        let mut put = request(
+            "catalog-put",
+            "project.check_catalog.put",
+            json!({
+                "project_id": "PRJ-plan", "expected_revision": 0,
+                "catalog": {"format_version": 1, "checks": [
+                    {"id": "check.a", "roots": ["source.txt"], "leaves": []}
+                ]}
+            }),
+        );
         put.idempotency_key = Some("catalog-put-key".into());
         let saved = core.execute(put, &runtime());
         assert!(saved.ok, "{:?}", saved.error);
         assert_eq!(saved.result.unwrap()["revision"], 1);
-        let fetched = core.execute(request("catalog-get", "project.check_catalog.get",
-            json!({"project_id":"PRJ-plan"})), &runtime());
+        let fetched = core.execute(
+            request(
+                "catalog-get",
+                "project.check_catalog.get",
+                json!({"project_id":"PRJ-plan"}),
+            ),
+            &runtime(),
+        );
         assert!(fetched.ok, "{:?}", fetched.error);
-        let planned = core.execute(request("check-plan", "automation.checks.plan",
-            json!({"project_id":"PRJ-plan", "after_generation": 1})), &runtime());
+        let planned = core.execute(
+            request(
+                "check-plan",
+                "automation.checks.plan",
+                json!({"project_id":"PRJ-plan", "after_generation": 1}),
+            ),
+            &runtime(),
+        );
         assert!(planned.ok, "{:?}", planned.error);
         let result = planned.result.unwrap();
         assert_eq!(result["mode"], "full_catalog_fallback");
         assert_eq!(result["checks"][0]["status"], "planned_not_run");
         assert!(result["checks"][0]["result_id"].is_null());
+        let mut attempt = request(
+            "fallback-run",
+            "automation.checks.execute",
+            json!({
+                "project_id":"PRJ-plan", "after_generation":1, "plan_id":result["plan_id"]
+            }),
+        );
+        attempt.idempotency_key = Some("fallback-run-key".into());
+        let denied = core.execute(attempt, &runtime());
+        assert_eq!(denied.error.unwrap().code, "CHECK_EXECUTION_UNCERTAIN");
         drop(core);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn declared_index_checks_commit_atomically_replay_and_reject_changed_plan() {
+        let dir = temp_dir("check-execute-restart");
+        fs::create_dir_all(&dir).unwrap();
+        let core = RelayCore::open(CoreConfig::new(&dir));
+        core.with_storage(|storage| {
+            storage.register_project(Some("PRJ-check-run"), "Checks", "file:///fixture")?;
+            let first = IndexedFileSnapshot { relative_path: "source.txt".into(),
+                size_bytes: 1, modified_unix_ns: 1, content_sha256: "a".repeat(64) };
+            storage.replace_project_baseline("PRJ-check-run", &[first], 1)?;
+            storage.put_project_configuration("PRJ-check-run", 0, "generic", Some("fixture"), Some("1"))?;
+            let catalog = planner::canonical_catalog(&json!({
+                "format_version": 1, "checks": [
+                    {"id":"check.digest", "roots":["source.txt"], "leaves":[],
+                     "assertion":{"kind":"indexed_file_digest", "path":"source.txt", "sha256":"b".repeat(64)}},
+                    {"id":"check.native", "roots":["source.txt"], "leaves":[]}
+                ]
+            })).unwrap();
+            storage.put_project_check_catalog("PRJ-check-run", 0, &catalog)?;
+            let next = IndexedFileSnapshot { relative_path: "source.txt".into(),
+                size_bytes: 2, modified_unix_ns: 2, content_sha256: "b".repeat(64) };
+            let change = IndexChange { change_kind: "modified".into(), relative_path: "source.txt".into(),
+                previous_path: None, before_sha256: Some("a".repeat(64)),
+                after_sha256: Some("b".repeat(64)) };
+            storage.apply_project_reconciliation(ProjectIndexCommit {
+                project_id: "PRJ-check-run", expected_generation: 1,
+                touched_files: &[next], changes: &[change], file_count: 1, total_bytes: 2,
+                mode: IndexCommitMode::Authoritative, content_verified: false,
+            })?;
+            storage.replace_project_dependencies(DependencyReplacement {
+                project_id: "PRJ-check-run", expected_generation: 2,
+                source_path: "source.txt", expected_source_sha256: &"b".repeat(64),
+                producer_id: "fixture", producer_version: "1",
+                configuration_guard: Some((1, "fixture", "1")), targets: &[],
+            })?;
+            Ok(())
+        }).unwrap();
+        let planned = core.execute(
+            request(
+                "plan-run",
+                "automation.checks.plan",
+                json!({
+                    "project_id":"PRJ-check-run", "after_generation":1
+                }),
+            ),
+            &runtime(),
+        );
+        assert!(planned.ok, "{:?}", planned.error);
+        let plan = planned.result.unwrap();
+        assert_eq!(plan["mode"], "selective");
+        assert_eq!(plan["checks"].as_array().unwrap().len(), 2);
+        let args = json!({"project_id":"PRJ-check-run", "after_generation":1,
+            "plan_id":plan["plan_id"]});
+        let mut execute = request("run-first", "automation.checks.execute", args.clone());
+        execute.idempotency_key = Some("run-first-key".into());
+        let response = core.execute(execute, &runtime());
+        assert!(response.ok, "{:?}", response.error);
+        let first = response.result.unwrap();
+        assert_eq!(first["replayed"], false);
+        assert_eq!(first["passed_count"], 1);
+        assert_eq!(first["untested_count"], 1);
+        let result_id = first["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|check| check["check_id"] == "check.digest")
+            .unwrap()["result_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(
+            first["checks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|check| check["check_id"] == "check.native")
+                .unwrap()["result_id"]
+                .is_null()
+        );
+        core.with_storage(|storage| {
+            let stored = storage.get_result(&result_id)?.unwrap();
+            let payload = serde_json::to_string(&stored.payload).unwrap();
+            assert!(!payload.contains("source.txt"));
+            assert_eq!(stored.payload["native_workflow_status"], "untested");
+            assert_eq!(
+                storage
+                    .list_result_descriptions(Some("PRJ-check-run"), 10)?
+                    .len(),
+                1
+            );
+            Ok(())
+        })
+        .unwrap();
+        drop(core);
+
+        let reopened = RelayCore::open(CoreConfig::new(&dir));
+        let mut replay = request("run-replay", "automation.checks.execute", args.clone());
+        replay.idempotency_key = Some("run-replay-key".into());
+        let replayed = reopened.execute(replay, &runtime());
+        assert!(replayed.ok, "{:?}", replayed.error);
+        let replayed = replayed.result.unwrap();
+        assert_eq!(replayed["replayed"], true);
+        assert_eq!(
+            replayed["checks"][0]["result_id"],
+            first["checks"][0]["result_id"]
+        );
+        reopened
+            .with_storage(|storage| {
+                assert_eq!(
+                    storage
+                        .list_result_descriptions(Some("PRJ-check-run"), 10)?
+                        .len(),
+                    1
+                );
+                Ok(())
+            })
+            .unwrap();
+        let mut replace = request(
+            "replace-catalog",
+            "project.check_catalog.put",
+            json!({
+                "project_id":"PRJ-check-run", "expected_revision":1,
+                "catalog":{"format_version":1,"checks":[{"id":"check.changed","roots":["source.txt"],"leaves":[]}]}
+            }),
+        );
+        replace.idempotency_key = Some("replace-catalog-key".into());
+        assert!(reopened.execute(replace, &runtime()).ok);
+        let mut same_logical_retry = request("run-first-retry", "automation.checks.execute", args.clone());
+        same_logical_retry.idempotency_key = Some("run-first-key".into());
+        let prior = reopened.execute(same_logical_retry, &runtime());
+        assert!(prior.ok);
+        assert_eq!(prior.result.unwrap()["replayed"], true);
+        let mut stale = request("run-stale", "automation.checks.execute", args);
+        stale.idempotency_key = Some("run-stale-key".into());
+        let denied = reopened.execute(stale, &runtime());
+        assert_eq!(denied.error.unwrap().code, "CHECK_PLAN_CONFLICT");
+        drop(reopened);
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -3657,15 +4101,26 @@ mod tests {
         let dir = temp_dir("job-list-scope");
         let core = RelayCore::open(CoreConfig::new(&dir));
         let project_id = register_project(&core);
-        let mut checkpoint = request("REQ-list-job-put", "job.checkpoint", json!({
-            "project_id": project_id, "command": "fixture.work", "state": "CHECKPOINTED",
-            "checkpoint": { "secret": "PRIVATE-JOB-CHECKPOINT" }
-        }));
+        let mut checkpoint = request(
+            "REQ-list-job-put",
+            "job.checkpoint",
+            json!({
+                "project_id": project_id, "command": "fixture.work", "state": "CHECKPOINTED",
+                "checkpoint": { "secret": "PRIVATE-JOB-CHECKPOINT" }
+            }),
+        );
         checkpoint.idempotency_key = Some("IDEMP-list-job-put".to_string());
         assert!(core.execute(checkpoint, &runtime()).ok);
-        let listed = core.execute(request("REQ-list-jobs", "job.list", json!({
-            "project_id": project_id
-        })), &runtime());
+        let listed = core.execute(
+            request(
+                "REQ-list-jobs",
+                "job.list",
+                json!({
+                    "project_id": project_id
+                }),
+            ),
+            &runtime(),
+        );
         assert!(listed.ok, "{listed:?}");
         let body = listed.result.unwrap();
         assert_eq!(body["jobs"].as_array().unwrap().len(), 1);
@@ -3674,12 +4129,23 @@ mod tests {
         assert!(!serialized.contains("provenance"));
         let mut scoped = ExecutionAuthority::local_user("CLIENT-scoped");
         scoped.project_ids = Some(["PRJ-other".to_string()].into_iter().collect());
-        let denied = core.execute_authorized(request("REQ-job-list-denied", "job.list", json!({
-            "project_id": project_id
-        })), &runtime(), &scoped);
+        let denied = core.execute_authorized(
+            request(
+                "REQ-job-list-denied",
+                "job.list",
+                json!({
+                    "project_id": project_id
+                }),
+            ),
+            &runtime(),
+            &scoped,
+        );
         assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
-        let required = core.execute_authorized(request("REQ-job-list-required", "job.list", json!({})),
-            &runtime(), &scoped);
+        let required = core.execute_authorized(
+            request("REQ-job-list-required", "job.list", json!({})),
+            &runtime(),
+            &scoped,
+        );
         assert_eq!(required.error.unwrap().code, "PROJECT_SCOPE_REQUIRED");
         drop(core);
         fs::remove_dir_all(dir).unwrap();
@@ -3723,16 +4189,34 @@ mod tests {
         );
         assert_eq!(unavailable.error.unwrap().code, "AUTOMATION_UNAVAILABLE");
         core.set_automation_available(true);
-        let paused = core.execute(request("REQ-pause", "automation.pause", json!({})), &runtime());
+        let paused = core.execute(
+            request("REQ-pause", "automation.pause", json!({})),
+            &runtime(),
+        );
         assert!(paused.ok, "{:?}", paused.error);
         assert_eq!(paused.result.unwrap()["mode"], "paused");
         assert!(core.automation_paused());
-        let status = core.execute(request("REQ-paused-status", "system.status", json!({})), &runtime());
+        let status = core.execute(
+            request("REQ-paused-status", "system.status", json!({})),
+            &runtime(),
+        );
         assert_eq!(status.result.unwrap()["automation_mode"], "paused");
-        let diagnostics = core.execute(request("REQ-paused-diag", "diagnostics.summary", json!({})), &runtime());
+        let diagnostics = core.execute(
+            request("REQ-paused-diag", "diagnostics.summary", json!({})),
+            &runtime(),
+        );
         assert_eq!(diagnostics.result.unwrap()["automation_mode"], "paused");
-        assert!(core.execute(request("REQ-paused-echo", "system.echo", json!({ "ok": true })), &runtime()).ok);
-        let resumed = core.execute(request("REQ-resume", "automation.resume", json!({})), &runtime());
+        assert!(
+            core.execute(
+                request("REQ-paused-echo", "system.echo", json!({ "ok": true })),
+                &runtime()
+            )
+            .ok
+        );
+        let resumed = core.execute(
+            request("REQ-resume", "automation.resume", json!({})),
+            &runtime(),
+        );
         assert!(resumed.ok, "{:?}", resumed.error);
         assert_eq!(resumed.result.unwrap()["mode"], "running");
         assert!(!core.automation_paused());
@@ -4448,25 +4932,47 @@ mod tests {
         let core = RelayCore::open(CoreConfig::new(&dir));
         let runtime = runtime();
         for project_id in ["PRJ-task-a", "PRJ-task-b"] {
-            let mut register = request(&format!("REQ-{project_id}"), "project.register", json!({
-                "id": project_id, "name": "Fixture", "root_uri": "file:///private/project"
-            }));
+            let mut register = request(
+                &format!("REQ-{project_id}"),
+                "project.register",
+                json!({
+                    "id": project_id, "name": "Fixture", "root_uri": "file:///private/project"
+                }),
+            );
             register.idempotency_key = Some(format!("IDEMP-{project_id}"));
             assert!(core.execute(register, &runtime).ok);
         }
-        let mut put = request("REQ-task-result", "result.put", json!({
-            "project_id": "PRJ-task-a", "kind": "TEST", "payload": {
-                "failure_count": 3, "status": "FAILED", "api_token": "SECRET", "project_path": "C:/private/project"
-            }
-        }));
+        let mut put = request(
+            "REQ-task-result",
+            "result.put",
+            json!({
+                "project_id": "PRJ-task-a", "kind": "TEST", "payload": {
+                    "failure_count": 3, "status": "FAILED", "api_token": "SECRET", "project_path": "C:/private/project"
+                }
+            }),
+        );
         put.idempotency_key = Some("IDEMP-task-result".to_string());
-        let result_id = core.execute(put, &runtime).result.unwrap()["id"].as_str().unwrap().to_string();
-        let mut plan = request("REQ-task-plan", "project.removal.plan", json!({"project_id":"PRJ-task-a"}));
+        let result_id = core.execute(put, &runtime).result.unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let mut plan = request(
+            "REQ-task-plan",
+            "project.removal.plan",
+            json!({"project_id":"PRJ-task-a"}),
+        );
         plan.idempotency_key = Some("IDEMP-task-plan".to_string());
-        let approval_id = core.execute(plan, &runtime).result.unwrap()["approval_id"].as_str().unwrap().to_string();
-        let mut decide = request("REQ-task-decide", "project.removal.decide", json!({
-            "project_id":"PRJ-task-a", "approval_id":approval_id, "decision":"approve"
-        }));
+        let approval_id = core.execute(plan, &runtime).result.unwrap()["approval_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let mut decide = request(
+            "REQ-task-decide",
+            "project.removal.decide",
+            json!({
+                "project_id":"PRJ-task-a", "approval_id":approval_id, "decision":"approve"
+            }),
+        );
         decide.idempotency_key = Some("IDEMP-task-decide".to_string());
         assert!(core.execute(decide, &runtime).ok);
         let args = json!({
@@ -4475,15 +4981,30 @@ mod tests {
             "required_pointers":[{"result_id":result_id,"pointer":"/failure_count"}],
             "focus_terms":["failure"]
         });
-        let view = core.execute(request("REQ-task-context", "context.task.compile", args.clone()), &runtime);
+        let view = core.execute(
+            request("REQ-task-context", "context.task.compile", args.clone()),
+            &runtime,
+        );
         assert!(view.ok, "{view:?}");
         let view = view.result.unwrap();
         assert_eq!(view["project_state"]["index_state"], "unknown");
-        assert_eq!(view["result_currentness"], "unknown_without_project_generation_link");
+        assert_eq!(
+            view["result_currentness"],
+            "unknown_without_project_generation_link"
+        );
         assert_eq!(view["decision_evidence"][0]["recorded_decision"], "approve");
         assert_eq!(view["decision_evidence"][0]["human_presence"], "unverified");
-        assert_eq!(view["decision_evidence"][0]["source_trust"], "durable_local_record");
-        assert!(view["result_context"]["facts"].as_array().unwrap().iter().any(|fact| fact["pointer"] == "/failure_count" && fact["value"] == 3));
+        assert_eq!(
+            view["decision_evidence"][0]["source_trust"],
+            "durable_local_record"
+        );
+        assert!(
+            view["result_context"]["facts"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|fact| fact["pointer"] == "/failure_count" && fact["value"] == 3)
+        );
         let serialized = serde_json::to_string(&view).unwrap();
         assert!(serialized.len() <= 8192);
         assert!(!serialized.contains("SECRET"));
@@ -4491,34 +5012,99 @@ mod tests {
         assert!(!serialized.contains("local-user"));
         let mut too_small = args.clone();
         too_small["max_bytes"] = json!(1024);
-        assert_eq!(core.execute(request("REQ-task-small", "context.task.compile", too_small), &runtime).error.unwrap().code, "CONTEXT_BUDGET_TOO_SMALL");
+        assert_eq!(
+            core.execute(
+                request("REQ-task-small", "context.task.compile", too_small),
+                &runtime
+            )
+            .error
+            .unwrap()
+            .code,
+            "CONTEXT_BUDGET_TOO_SMALL"
+        );
         let mut unsafe_required = args.clone();
-        unsafe_required["required_pointers"] = json!([{"result_id":result_id,"pointer":"/api_token"}]);
-        assert_eq!(core.execute(request("REQ-task-private", "context.task.compile", unsafe_required), &runtime).error.unwrap().code, "CONTEXT_FACT_UNAVAILABLE");
-        core.with_storage(|storage| storage.replace_project_baseline("PRJ-task-a", &[], 0)).unwrap();
-        let ready = core.execute(request("REQ-task-ready", "context.task.compile", args.clone()), &runtime);
+        unsafe_required["required_pointers"] =
+            json!([{"result_id":result_id,"pointer":"/api_token"}]);
+        assert_eq!(
+            core.execute(
+                request("REQ-task-private", "context.task.compile", unsafe_required),
+                &runtime
+            )
+            .error
+            .unwrap()
+            .code,
+            "CONTEXT_FACT_UNAVAILABLE"
+        );
+        core.with_storage(|storage| storage.replace_project_baseline("PRJ-task-a", &[], 0))
+            .unwrap();
+        let ready = core.execute(
+            request("REQ-task-ready", "context.task.compile", args.clone()),
+            &runtime,
+        );
         let ready = ready.result.unwrap();
         assert_eq!(ready["project_state"]["index_state"], "ready");
         assert!(ready["project_state"]["last_reconciled_at"].is_string());
-        core.with_storage(|storage| storage.mark_project_index_stale("PRJ-task-a")).unwrap();
-        let stale_index = core.execute(request("REQ-task-stale-index", "context.task.compile", args.clone()), &runtime);
-        assert_eq!(stale_index.result.unwrap()["project_state"]["index_state"], "stale");
-        let mut foreign_plan = request("REQ-task-foreign-plan", "project.removal.plan", json!({"project_id":"PRJ-task-b"}));
+        core.with_storage(|storage| storage.mark_project_index_stale("PRJ-task-a"))
+            .unwrap();
+        let stale_index = core.execute(
+            request("REQ-task-stale-index", "context.task.compile", args.clone()),
+            &runtime,
+        );
+        assert_eq!(
+            stale_index.result.unwrap()["project_state"]["index_state"],
+            "stale"
+        );
+        let mut foreign_plan = request(
+            "REQ-task-foreign-plan",
+            "project.removal.plan",
+            json!({"project_id":"PRJ-task-b"}),
+        );
         foreign_plan.idempotency_key = Some("IDEMP-task-foreign-plan".to_string());
-        let foreign_approval_id = core.execute(foreign_plan, &runtime).result.unwrap()["approval_id"].as_str().unwrap().to_string();
+        let foreign_approval_id =
+            core.execute(foreign_plan, &runtime).result.unwrap()["approval_id"]
+                .as_str()
+                .unwrap()
+                .to_string();
         let mut foreign = args.clone();
         foreign["approval_ids"] = json!([foreign_approval_id]);
-        assert_eq!(core.execute(request("REQ-task-foreign", "context.task.compile", foreign), &runtime).error.unwrap().code, "APPROVAL_NOT_FOUND");
-        let mut change = request("REQ-task-change", "project.register", json!({
-            "id":"PRJ-task-a", "name":"New", "root_uri":"file:///different"
-        }));
+        assert_eq!(
+            core.execute(
+                request("REQ-task-foreign", "context.task.compile", foreign),
+                &runtime
+            )
+            .error
+            .unwrap()
+            .code,
+            "APPROVAL_NOT_FOUND"
+        );
+        let mut change = request(
+            "REQ-task-change",
+            "project.register",
+            json!({
+                "id":"PRJ-task-a", "name":"New", "root_uri":"file:///different"
+            }),
+        );
         change.idempotency_key = Some("IDEMP-task-change".to_string());
         assert!(core.execute(change, &runtime).ok);
-        let stale = core.execute(request("REQ-task-context-stale", "context.task.compile", args.clone()), &runtime);
-        assert_eq!(stale.result.unwrap()["decision_evidence"][0]["state"], "stale");
+        let stale = core.execute(
+            request(
+                "REQ-task-context-stale",
+                "context.task.compile",
+                args.clone(),
+            ),
+            &runtime,
+        );
+        assert_eq!(
+            stale.result.unwrap()["decision_evidence"][0]["state"],
+            "stale"
+        );
         let mut scoped = ExecutionAuthority::local_user("CLIENT-scoped");
         scoped.project_ids = Some(["PRJ-task-b".to_string()].into_iter().collect());
-        let denied = core.execute_authorized(request("REQ-task-context-denied", "context.task.compile", args), &runtime, &scoped);
+        let denied = core.execute_authorized(
+            request("REQ-task-context-denied", "context.task.compile", args),
+            &runtime,
+            &scoped,
+        );
         assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
         drop(core);
         fs::remove_dir_all(dir).unwrap();
@@ -4530,15 +5116,25 @@ mod tests {
         let core = RelayCore::open(CoreConfig::new(&dir));
         let runtime = runtime();
         for project_id in ["PRJ-a", "PRJ-b"] {
-            let mut register = request(&format!("REQ-register-{project_id}"), "project.register",
-                json!({ "id": project_id, "name": project_id, "root_uri": format!("file:///{project_id}") }));
+            let mut register = request(
+                &format!("REQ-register-{project_id}"),
+                "project.register",
+                json!({ "id": project_id, "name": project_id, "root_uri": format!("file:///{project_id}") }),
+            );
             register.idempotency_key = Some(format!("IDEMP-register-{project_id}"));
             assert!(core.execute(register, &runtime).ok);
         }
         let mut ids = Vec::new();
-        for (index, project_id, status) in [(0, "PRJ-a", "OLD"), (1, "PRJ-a", "NEW"), (2, "PRJ-b", "OTHER")] {
-            let mut put = request(&format!("REQ-context-source-{index}"), "result.put",
-                json!({ "project_id": project_id, "kind": "TEST", "payload": { "status": status, "failure_count": index } }));
+        for (index, project_id, status) in [
+            (0, "PRJ-a", "OLD"),
+            (1, "PRJ-a", "NEW"),
+            (2, "PRJ-b", "OTHER"),
+        ] {
+            let mut put = request(
+                &format!("REQ-context-source-{index}"),
+                "result.put",
+                json!({ "project_id": project_id, "kind": "TEST", "payload": { "status": status, "failure_count": index } }),
+            );
             put.idempotency_key = Some(format!("IDEMP-context-source-{index}"));
             let response = core.execute(put, &runtime);
             assert!(response.ok);
@@ -4546,40 +5142,71 @@ mod tests {
         }
         let args = json!({ "project_id": "PRJ-a", "result_ids": [&ids[0], &ids[1]],
             "max_bytes": 4096, "required_pointers": [{ "result_id": ids[0], "pointer": "/status" }] });
-        let view = core.execute(request("REQ-compile", "context.compile", args.clone()), &runtime);
+        let view = core.execute(
+            request("REQ-compile", "context.compile", args.clone()),
+            &runtime,
+        );
         assert!(view.ok, "{view:?}");
         let output = view.result.unwrap();
         assert_eq!(output["conflict_count"], 2);
         assert_eq!(output["sources"].as_array().unwrap().len(), 2);
         assert_eq!(output["freshness_basis"], "stored_source_timestamps_only");
         assert!(serde_json::to_vec(&output).unwrap().len() <= 4096);
-        let first_usage = core.execute(request("REQ-cache-first", "usage.summary", json!({})), &runtime);
+        let first_usage = core.execute(
+            request("REQ-cache-first", "usage.summary", json!({})),
+            &runtime,
+        );
         let first_cache = &first_usage.result.as_ref().unwrap()["context_cache"];
         assert_eq!(first_cache["misses"], 1);
         assert_eq!(first_cache["hits"], 0);
-        let repeated = core.execute(request("REQ-compile-repeat", "context.compile", args.clone()), &runtime);
+        let repeated = core.execute(
+            request("REQ-compile-repeat", "context.compile", args.clone()),
+            &runtime,
+        );
         assert!(repeated.ok, "{repeated:?}");
         assert_eq!(repeated.result.unwrap(), output);
-        let reused = core.execute(request("REQ-cache-reused", "usage.summary", json!({})), &runtime);
+        let reused = core.execute(
+            request("REQ-cache-reused", "usage.summary", json!({})),
+            &runtime,
+        );
         let reused_cache = &reused.result.as_ref().unwrap()["context_cache"];
         assert_eq!(reused_cache["hits"], 1);
         assert_eq!(reused_cache["source_fact_collections_avoided"], 2);
         assert_eq!(reused_cache["entries"], 1);
         let mut focused = args.clone();
         focused["focus_terms"] = json!(["status"]);
-        assert!(core.execute(request("REQ-compile-focused", "context.compile", focused), &runtime).ok);
-        let distinct = core.execute(request("REQ-cache-distinct", "usage.summary", json!({})), &runtime);
+        assert!(
+            core.execute(
+                request("REQ-compile-focused", "context.compile", focused),
+                &runtime
+            )
+            .ok
+        );
+        let distinct = core.execute(
+            request("REQ-cache-distinct", "usage.summary", json!({})),
+            &runtime,
+        );
         assert_eq!(distinct.result.unwrap()["context_cache"]["misses"], 2);
 
         let mut foreign = args.clone();
         foreign["result_ids"] = json!([ids[0], ids[2]]);
-        let denial = core.execute(request("REQ-compile-foreign", "context.compile", foreign), &runtime);
+        let denial = core.execute(
+            request("REQ-compile-foreign", "context.compile", foreign),
+            &runtime,
+        );
         assert_eq!(denial.error.unwrap().code, "RESULT_NOT_FOUND");
         let mut scoped = ExecutionAuthority::local_user("CLIENT-b");
         scoped.project_ids = Some(["PRJ-b".to_string()].into_iter().collect());
-        let denial = core.execute_authorized(request("REQ-compile-denied", "context.compile", args), &runtime, &scoped);
+        let denial = core.execute_authorized(
+            request("REQ-compile-denied", "context.compile", args),
+            &runtime,
+            &scoped,
+        );
         assert_eq!(denial.error.unwrap().code, "PROJECT_SCOPE_DENIED");
-        let after_denial = core.execute(request("REQ-cache-after-denial", "usage.summary", json!({})), &runtime);
+        let after_denial = core.execute(
+            request("REQ-cache-after-denial", "usage.summary", json!({})),
+            &runtime,
+        );
         assert_eq!(after_denial.result.unwrap()["context_cache"]["hits"], 1);
         drop(core);
         fs::remove_dir_all(dir).unwrap();
@@ -4591,14 +5218,16 @@ mod tests {
         let core = RelayCore::open(CoreConfig::new(&dir));
         let runtime = runtime();
         let mut register = request(
-            "REQ-lifecycle-register", "project.register",
+            "REQ-lifecycle-register",
+            "project.register",
             json!({ "id": "PRJ-life", "name": "Fixture", "root_uri": "file:///fixture" }),
         );
         register.idempotency_key = Some("IDEMP-lifecycle-register".to_string());
         assert!(core.execute(register, &runtime).ok);
 
         let mut put = request(
-            "REQ-lifecycle-result", "result.put",
+            "REQ-lifecycle-result",
+            "result.put",
             json!({ "project_id": "PRJ-life", "kind": "TEST", "payload": { "value": 7 } }),
         );
         put.idempotency_key = Some("IDEMP-lifecycle-result".to_string());
@@ -4609,64 +5238,175 @@ mod tests {
         let mut scoped = ExecutionAuthority::local_user("CLIENT-other");
         scoped.project_ids = Some(["PRJ-other".to_string()].into_iter().collect());
         let denied = core.execute_authorized(
-            request("REQ-life-denied", "project.archive", json!({ "project_id": "PRJ-life" })),
-            &runtime, &scoped,
+            request(
+                "REQ-life-denied",
+                "project.archive",
+                json!({ "project_id": "PRJ-life" }),
+            ),
+            &runtime,
+            &scoped,
         );
         assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
 
         let mut archive = request(
-            "REQ-lifecycle-archive", "project.archive", json!({ "project_id": "PRJ-life" }),
+            "REQ-lifecycle-archive",
+            "project.archive",
+            json!({ "project_id": "PRJ-life" }),
         );
         archive.idempotency_key = Some("IDEMP-lifecycle-archive".to_string());
         let archived = core.execute(archive, &runtime);
         assert!(archived.ok, "{archived:?}");
         assert_eq!(archived.result.unwrap()["lifecycle_state"], "archived");
-        assert!(core.execute(request("REQ-life-list", "project.list", json!({})), &runtime)
-            .result.unwrap()["projects"].as_array().unwrap().is_empty());
-        let all = core.execute(request("REQ-life-all", "project.list", json!({ "include_inactive": true })), &runtime);
-        assert_eq!(all.result.unwrap()["projects"][0]["lifecycle_state"], "archived");
-        assert!(core.execute(request("REQ-life-read", "result.get", json!({ "result_id": result_id })), &runtime).ok);
+        assert!(
+            core.execute(
+                request("REQ-life-list", "project.list", json!({})),
+                &runtime
+            )
+            .result
+            .unwrap()["projects"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        let all = core.execute(
+            request(
+                "REQ-life-all",
+                "project.list",
+                json!({ "include_inactive": true }),
+            ),
+            &runtime,
+        );
+        assert_eq!(
+            all.result.unwrap()["projects"][0]["lifecycle_state"],
+            "archived"
+        );
+        assert!(
+            core.execute(
+                request(
+                    "REQ-life-read",
+                    "result.get",
+                    json!({ "result_id": result_id })
+                ),
+                &runtime
+            )
+            .ok
+        );
 
-        let mut restore = request("REQ-life-restore", "project.restore", json!({ "project_id": "PRJ-life" }));
+        let mut restore = request(
+            "REQ-life-restore",
+            "project.restore",
+            json!({ "project_id": "PRJ-life" }),
+        );
         restore.idempotency_key = Some("IDEMP-lifecycle-restore".to_string());
-        assert_eq!(core.execute(restore, &runtime).result.unwrap()["lifecycle_state"], "active");
+        assert_eq!(
+            core.execute(restore, &runtime).result.unwrap()["lifecycle_state"],
+            "active"
+        );
 
-        let mismatch = core.execute(request(
-            "REQ-life-mismatch", "project.remove",
-            json!({ "project_id": "PRJ-life", "confirm_project_id": "PRJ-other" }),
-        ), &runtime);
+        let mismatch = core.execute(
+            request(
+                "REQ-life-mismatch",
+                "project.remove",
+                json!({ "project_id": "PRJ-life", "confirm_project_id": "PRJ-other" }),
+            ),
+            &runtime,
+        );
         assert_eq!(mismatch.error.unwrap().code, "APPROVAL_REQUIRED");
         let mut remove = request(
-            "REQ-life-remove", "project.remove",
+            "REQ-life-remove",
+            "project.remove",
             json!({ "project_id": "PRJ-life", "confirm_project_id": "PRJ-life" }),
         );
         remove.idempotency_key = Some("IDEMP-lifecycle-remove".to_string());
-        assert_eq!(core.execute(remove, &runtime).error.unwrap().code, "APPROVAL_REQUIRED");
-        let mut plan = request("REQ-life-plan", "project.removal.plan", json!({"project_id":"PRJ-life"}));
+        assert_eq!(
+            core.execute(remove, &runtime).error.unwrap().code,
+            "APPROVAL_REQUIRED"
+        );
+        let mut plan = request(
+            "REQ-life-plan",
+            "project.removal.plan",
+            json!({"project_id":"PRJ-life"}),
+        );
         plan.idempotency_key = Some("IDEMP-life-plan".to_string());
         let planned = core.execute(plan, &runtime);
         assert!(planned.ok, "{planned:?}");
-        assert!(!serde_json::to_string(planned.result.as_ref().unwrap()).unwrap().contains("file:///fixture"));
-        let approval_id = planned.result.unwrap()["approval_id"].as_str().unwrap().to_string();
+        assert!(
+            !serde_json::to_string(planned.result.as_ref().unwrap())
+                .unwrap()
+                .contains("file:///fixture")
+        );
+        let approval_id = planned.result.unwrap()["approval_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
         let mut nonlocal = ExecutionAuthority::local_user("CLIENT-agent");
         nonlocal.permissions.remove("approve_destructive");
-        let denied_decision = core.execute_authorized(request("REQ-life-agent-decide", "project.removal.decide", json!({"project_id":"PRJ-life","approval_id":approval_id,"decision":"approve"})), &runtime, &nonlocal);
+        let denied_decision = core.execute_authorized(
+            request(
+                "REQ-life-agent-decide",
+                "project.removal.decide",
+                json!({"project_id":"PRJ-life","approval_id":approval_id,"decision":"approve"}),
+            ),
+            &runtime,
+            &nonlocal,
+        );
         assert_eq!(denied_decision.error.unwrap().code, "PERMISSION_DENIED");
-        let mut decide = request("REQ-life-decide", "project.removal.decide", json!({"project_id":"PRJ-life","approval_id":approval_id,"decision":"approve"}));
+        let mut decide = request(
+            "REQ-life-decide",
+            "project.removal.decide",
+            json!({"project_id":"PRJ-life","approval_id":approval_id,"decision":"approve"}),
+        );
         decide.idempotency_key = Some("IDEMP-life-decide".to_string());
-        assert_eq!(core.execute(decide, &runtime).result.unwrap()["state"], "approved_pending_execution");
-        let mut execute = request("REQ-life-execute", "project.remove", json!({"project_id":"PRJ-life","approval_id":approval_id}));
+        assert_eq!(
+            core.execute(decide, &runtime).result.unwrap()["state"],
+            "approved_pending_execution"
+        );
+        let mut execute = request(
+            "REQ-life-execute",
+            "project.remove",
+            json!({"project_id":"PRJ-life","approval_id":approval_id}),
+        );
         execute.command_version = Some(2);
         execute.idempotency_key = Some("IDEMP-life-execute".to_string());
-        assert_eq!(core.execute(execute, &runtime).result.unwrap()["state"], "executed");
-        assert!(core.execute(request("REQ-life-history", "result.get", json!({ "result_id": result_id })), &runtime).ok);
+        assert_eq!(
+            core.execute(execute, &runtime).result.unwrap()["state"],
+            "executed"
+        );
+        assert!(
+            core.execute(
+                request(
+                    "REQ-life-history",
+                    "result.get",
+                    json!({ "result_id": result_id })
+                ),
+                &runtime
+            )
+            .ok
+        );
         let mut reuse = request(
-            "REQ-life-reuse", "project.register",
+            "REQ-life-reuse",
+            "project.register",
             json!({ "id": "PRJ-life", "name": "Different", "root_uri": "file:///different" }),
         );
         reuse.idempotency_key = Some("IDEMP-lifecycle-reuse".to_string());
-        assert_eq!(core.execute(reuse, &runtime).error.unwrap().code, "PROJECT_INACTIVE");
-        assert_eq!(core.execute(request("REQ-life-restore-removed", "project.restore", json!({ "project_id": "PRJ-life" })), &runtime).error.unwrap().code, "PROJECT_REMOVED");
+        assert_eq!(
+            core.execute(reuse, &runtime).error.unwrap().code,
+            "PROJECT_INACTIVE"
+        );
+        assert_eq!(
+            core.execute(
+                request(
+                    "REQ-life-restore-removed",
+                    "project.restore",
+                    json!({ "project_id": "PRJ-life" })
+                ),
+                &runtime
+            )
+            .error
+            .unwrap()
+            .code,
+            "PROJECT_REMOVED"
+        );
         drop(core);
         fs::remove_dir_all(dir).unwrap();
     }

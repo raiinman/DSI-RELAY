@@ -13,6 +13,12 @@ let automationMode = "unknown";
 let currentProjects = [];
 let uefnAvailability = "not_checked";
 let setupEpoch = 0;
+let checkCatalog = null;
+let checkCatalogMissingConfirmed = false;
+let checkPlan = null;
+let checkWorkflowBusy = false;
+let checkWorkflowEpoch = 0;
+let checkDisplayedProjectId = null;
 
 async function command(name, argumentsValue = {}) {
   const body = JSON.stringify({ command: name, arguments: argumentsValue });
@@ -90,6 +96,7 @@ function renderProjects(projects) {
       const state = document.createElement("span");
       state.textContent = "Removed from RELAY";
       item.append(state);
+      appendRemovalPlanList(project, item);
       list.append(item);
       continue;
     }
@@ -172,18 +179,27 @@ function renderProjects(projects) {
     }
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.textContent = "Remove";
-    remove.addEventListener("click", () => planProjectRemoval(project, remove));
+    remove.textContent = "Plan removal";
     item.append(remove);
+    const plansRegion = appendRemovalPlanList(project, item);
+    remove.addEventListener("click", () => planProjectRemoval(project, remove, plansRegion));
+    list.append(item);
+  }
+}
+
+function appendRemovalPlanList(project, item) {
     const plans = document.createElement("button");
     plans.type = "button";
     plans.textContent = "Removal plans";
     const plansRegion = document.createElement("div");
+    plansRegion.className = "removal-plans";
+    plansRegion.tabIndex = -1;
+    plansRegion.setAttribute("role", "region");
+    plansRegion.setAttribute("aria-label", "Removal plans for this project");
     plans.addEventListener("click", () => showRemovalPlans(project, plansRegion));
     item.append(plans);
     item.append(plansRegion);
-    list.append(item);
-  }
+    return plansRegion;
 }
 
 function showSetup(progress, guidance, next, actionLabel, target, ready = false) {
@@ -358,6 +374,7 @@ async function loadTestsForSelection() {
   const projectId = selectedProjectId;
   const list = $("#tests-list");
   list.replaceChildren();
+  await loadCheckCatalog(projectId);
   if (!projectId) {
     $("#tests-summary").textContent = "Select a project to see imported Verse capture analyses.";
     return;
@@ -380,6 +397,262 @@ async function loadTestsForSelection() {
     }
   } catch (_problem) {
     if (selectedProjectId === projectId) $("#tests-summary").textContent = "Stored test summaries are unavailable. Live UEFN test status: UNTESTED.";
+  }
+}
+
+function selectedActiveProject(projectId) {
+  return currentProjects.some((project) => project.id === projectId &&
+    (!project.lifecycle_state || project.lifecycle_state === "active"));
+}
+
+function safeCheckId(value) {
+  return typeof value === "string" && /^[A-Za-z0-9._-]{1,64}$/.test(value) ? value : null;
+}
+
+function safeResultId(value) {
+  return typeof value === "string" && /^RES-[a-f0-9]{32}$/.test(value) ? value : null;
+}
+
+function assertionLabel(assertion) {
+  if (assertion?.kind === "indexed_file_present") return "Indexed file present (path hidden)";
+  if (assertion?.kind === "indexed_file_digest") return "Indexed file digest matches (path hidden)";
+  return "No index assertion declared · native workflow UNTESTED";
+}
+
+function resetCheckPlan() {
+  checkPlan = null;
+  $("#tests-plan").disabled = !checkCatalog || !selectedActiveProject(selectedProjectId) || checkWorkflowBusy;
+  $("#tests-run").disabled = true;
+  $("#tests-plan-status").textContent = "No current plan. Plan again after the index or catalog changes.";
+  $("#tests-plan-list").replaceChildren();
+  $("#tests-run-status").textContent = "No check run started.";
+  $("#tests-run-list").replaceChildren();
+}
+
+async function loadCheckCatalog(projectId) {
+  const epoch = ++checkWorkflowEpoch;
+  if (checkDisplayedProjectId !== projectId) {
+    $("#tests-catalog-file").value = "";
+    checkDisplayedProjectId = projectId;
+  }
+  checkCatalog = null;
+  checkCatalogMissingConfirmed = false;
+  resetCheckPlan();
+  $("#tests-catalog-list").replaceChildren();
+  $("#tests-catalog-save").disabled = true;
+  if (!projectId || !selectedActiveProject(projectId)) {
+    $("#tests-catalog-status").textContent = projectId
+      ? "Select an active project to register and plan checks."
+      : "Select an active project to inspect its declared checks.";
+    return;
+  }
+  $("#tests-catalog-status").textContent = "Loading declared checks…";
+  try {
+    const record = await command("project.check_catalog.get", { project_id: projectId });
+    if (epoch !== checkWorkflowEpoch || selectedProjectId !== projectId) return;
+    if (record.project_id !== projectId || !Number.isSafeInteger(record.revision) || record.revision < 1 ||
+        !Number.isSafeInteger(record.index_generation) || record.index_generation < 1 ||
+        record.catalog?.format_version !== 1 || !Array.isArray(record.catalog.checks) ||
+        record.catalog.checks.length < 1 || record.catalog.checks.length > 128 ||
+        record.catalog.checks.some((check) => !safeCheckId(check.id))) {
+      throw new Error("CHECK_CATALOG_INVALID");
+    }
+    checkCatalog = record;
+    $("#tests-catalog-save").disabled = !$("#tests-catalog-file").files?.[0];
+    $("#tests-catalog-status").textContent = `${record.catalog.checks.length} declared checks · revision ${record.revision} · registered at index generation ${record.index_generation}. Paths stay hidden. Select a new local JSON file to replace this catalog.`;
+    for (const check of record.catalog.checks) {
+      const item = document.createElement("li");
+      item.textContent = `${check.id} · ${assertionLabel(check.assertion)}`;
+      $("#tests-catalog-list").append(item);
+    }
+    $("#tests-plan").disabled = false;
+  } catch (problem) {
+    if (epoch !== checkWorkflowEpoch || selectedProjectId !== projectId) return;
+    checkCatalogMissingConfirmed = problem.message === "CHECK_CATALOG_MISSING";
+    $("#tests-catalog-save").disabled = !checkCatalogMissingConfirmed || !$("#tests-catalog-file").files?.[0];
+    $("#tests-catalog-status").textContent = problem.message === "CHECK_CATALOG_MISSING"
+      ? "No checks registered for this project. Select a local check catalog JSON file and register it."
+      : "Could not inspect current checks. Refresh this page, then try again.";
+  }
+}
+
+function validLocalCatalog(catalog) {
+  return catalog?.format_version === 1 && Array.isArray(catalog.checks) &&
+    catalog.checks.length >= 1 && catalog.checks.length <= 128 &&
+    catalog.checks.every((check) => safeCheckId(check?.id) &&
+      Array.isArray(check.roots) && check.roots.length >= 1 && check.roots.length <= 64 &&
+      Array.isArray(check.leaves) && check.leaves.length <= 64 &&
+      [...check.roots, ...check.leaves].every((path) => typeof path === "string" && path.length > 0 && path.length <= 4096) &&
+      (!check.assertion || ["indexed_file_present", "indexed_file_digest"].includes(check.assertion.kind)));
+}
+
+async function registerCheckCatalog() {
+  const projectId = selectedProjectId;
+  const file = $("#tests-catalog-file").files?.[0];
+  const status = $("#tests-catalog-status");
+  if (checkWorkflowBusy || !selectedActiveProject(projectId) || !file ||
+      (!checkCatalog && !checkCatalogMissingConfirmed)) return;
+  if (file.size > 24 * 1024) {
+    status.textContent = "This catalog is too large for the dashboard. Use the RELAY CLI for larger catalogs.";
+    status.focus();
+    return;
+  }
+  checkWorkflowBusy = true;
+  $("#tests-catalog-save").disabled = true;
+  $("#tests-plan").disabled = true;
+  $("#tests-run").disabled = true;
+  status.textContent = "Registering the selected catalog…";
+  try {
+    const catalog = JSON.parse(await file.text());
+    if (!validLocalCatalog(catalog)) throw new Error("CHECK_CATALOG_INVALID");
+    await command("project.check_catalog.put", {
+      project_id: projectId, expected_revision: checkCatalog?.revision ?? 0, catalog
+    });
+    if (selectedProjectId !== projectId) return;
+    await loadCheckCatalog(projectId);
+    $("#tests-catalog-file").value = "";
+    $("#tests-catalog-save").disabled = true;
+    status.textContent = checkCatalog
+      ? `Catalog registered at revision ${checkCatalog.revision}. Plan current checks before running.`
+      : "Catalog registration may have succeeded, but its current state is unavailable. Refresh before planning.";
+  } catch (problem) {
+    if (selectedProjectId !== projectId) return;
+    checkCatalog = null;
+    checkCatalogMissingConfirmed = false;
+    resetCheckPlan();
+    status.textContent = problem.message === "CHECK_CATALOG_CONFLICT"
+      ? "The catalog changed since it was loaded. Refresh and review its current revision before replacing it."
+      : problem.message === "CHECK_CATALOG_INVALID" || problem instanceof SyntaxError
+        ? "The selected JSON is not a supported check catalog. Review its format and choose it again."
+        : problem.message === "DASHBOARD_REQUEST_TOO_LARGE"
+          ? "This catalog is too large for the dashboard. Use the RELAY CLI for larger catalogs."
+        : "Catalog registration outcome is uncertain. Refresh and inspect the current revision before retrying.";
+  } finally {
+    checkWorkflowBusy = false;
+    if (selectedProjectId === projectId) $("#tests-catalog-save").disabled =
+      !$("#tests-catalog-file").files?.[0] || (!checkCatalog && !checkCatalogMissingConfirmed);
+    status.focus();
+  }
+}
+
+const fallbackLabels = {
+  index_not_ready: "The file index is not ready.",
+  continuity_gap: "The change history is incomplete.",
+  catalog_newer_than_delta: "The catalog is newer than the selected change baseline.",
+  planning_bound_exceeded: "The change or dependency set exceeds the planning limit.",
+  parser_configuration_unavailable: "A compatible dependency parser is unavailable.",
+  parser_coverage_incomplete: "Dependency coverage is incomplete."
+};
+
+async function planDeclaredChecks() {
+  const projectId = selectedProjectId;
+  const catalog = checkCatalog;
+  const status = $("#tests-plan-status");
+  if (checkWorkflowBusy || !catalog || !selectedActiveProject(projectId)) return;
+  checkWorkflowBusy = true;
+  resetCheckPlan();
+  $("#tests-plan").disabled = true;
+  status.textContent = "Planning from the current file index…";
+  try {
+    const plan = await command("automation.checks.plan", {
+      project_id: projectId, after_generation: catalog.index_generation
+    });
+    if (selectedProjectId !== projectId || checkCatalog !== catalog) return;
+    const declaredIds = new Set(catalog.catalog.checks.map((check) => check.id));
+    if (plan.project_id !== projectId || !/^PLAN-[a-f0-9]{32}$/.test(plan.plan_id ?? "") ||
+        plan.catalog_revision !== catalog.revision || plan.after_generation !== catalog.index_generation ||
+        !Number.isSafeInteger(plan.index_generation) || plan.index_generation < catalog.index_generation ||
+        !["selective", "full_catalog_fallback"].includes(plan.mode) || !Array.isArray(plan.checks) ||
+        plan.checks.length > 128 || new Set(plan.checks.map((entry) => entry.check_id)).size !== plan.checks.length ||
+        plan.checks.some((entry) => !safeCheckId(entry.check_id) ||
+          !declaredIds.has(entry.check_id) || entry.status !== "planned_not_run" || entry.result_id !== null)) {
+      throw new Error("CHECK_PLAN_INVALID");
+    }
+    checkPlan = plan;
+    const fallback = plan.mode === "full_catalog_fallback";
+    status.textContent = fallback
+      ? `Full catalog planned at current index generation ${plan.index_generation}; ${fallbackLabels[plan.fallback_reason] ?? "Planning evidence is incomplete."} All entries remain NOT RUN. Repair and plan again before execution.`
+      : `${plan.checks.length} of ${catalog.catalog.checks.length} checks selected at current index generation ${plan.index_generation}. Planning only; checks are NOT RUN.`;
+    const definitions = new Map(catalog.catalog.checks.map((check) => [check.id, check]));
+    for (const entry of plan.checks) {
+      const item = document.createElement("li");
+      item.textContent = `${entry.check_id} · ${assertionLabel(definitions.get(entry.check_id)?.assertion)} · NOT RUN`;
+      $("#tests-plan-list").append(item);
+    }
+    $("#tests-run").disabled = fallback || plan.checks.length === 0;
+  } catch (problem) {
+    if (selectedProjectId !== projectId) return;
+    resetCheckPlan();
+    status.textContent = ["INDEX_GENERATION_CONFLICT", "CHECK_CATALOG_MISSING", "CHECK_CATALOG_INVALID"].includes(problem.message)
+      ? "The index or catalog changed. Refresh current checks, then plan again."
+      : "Could not confirm a current plan. Refresh and plan again.";
+  } finally {
+    checkWorkflowBusy = false;
+    if (selectedProjectId === projectId && checkCatalog) $("#tests-plan").disabled = false;
+    status.focus();
+  }
+}
+
+async function runDeclaredChecks() {
+  const projectId = selectedProjectId;
+  const plan = checkPlan;
+  const status = $("#tests-run-status");
+  if (checkWorkflowBusy || !plan || plan.mode !== "selective" || plan.checks.length === 0 ||
+      !selectedActiveProject(projectId)) return;
+  checkWorkflowBusy = true;
+  $("#tests-run").disabled = true;
+  $("#tests-plan").disabled = true;
+  status.textContent = "Running selected indexed-file assertions…";
+  try {
+    const run = await command("automation.checks.execute", {
+      project_id: projectId, after_generation: plan.after_generation, plan_id: plan.plan_id
+    });
+    if (selectedProjectId !== projectId || checkPlan !== plan) return;
+    const plannedIds = new Set(plan.checks.map((entry) => entry.check_id));
+    const runCounts = [run.passed_count, run.failed_count, run.untested_count];
+    const actualCounts = ["passed", "failed", "untested"].map((statusValue) =>
+      Array.isArray(run.checks) ? run.checks.filter((entry) => entry.status === statusValue).length : -1);
+    if (run.project_id !== projectId || run.plan_id !== plan.plan_id ||
+        run.index_generation !== plan.index_generation || run.mode !== "selective" ||
+        run.evidence_scope !== "indexed_snapshot_at_generation" ||
+        run.replayed !== true && run.replayed !== false ||
+        !runCounts.every((value) => Number.isSafeInteger(value) && value >= 0 && value <= 128) ||
+        runCounts.reduce((sum, value) => sum + value, 0) !== plan.checks.length ||
+        actualCounts.some((value, index) => value !== runCounts[index]) ||
+        !Array.isArray(run.checks) || run.checks.length !== plan.checks.length ||
+        new Set(run.checks.map((entry) => entry.check_id)).size !== run.checks.length ||
+        run.checks.some((entry) => !plannedIds.has(entry.check_id) ||
+          !["passed", "failed", "untested"].includes(entry.status) ||
+          (entry.status !== "untested" && !safeResultId(entry.result_id)))) {
+      throw new Error("CHECK_EXECUTION_UNCERTAIN");
+    }
+    status.textContent = `${run.replayed ? "Prior run returned" : "Run recorded"}: ${run.passed_count} passed, ${run.failed_count} failed, ${run.untested_count} untested from the indexed snapshot at generation ${run.index_generation}. Refresh and plan again to assess later changes. PASS covers indexed-file assertions only; native and live workflows remain UNTESTED.`;
+    $("#tests-run-list").replaceChildren();
+    const reasonLabels = {
+      INDEX_ASSERTION_SATISFIED: "indexed assertion satisfied",
+      INDEXED_FILE_MISSING: "indexed file missing",
+      INDEXED_DIGEST_MISMATCH: "indexed digest differs",
+      ASSERTION_NOT_DECLARED: "no indexed assertion declared"
+    };
+    for (const check of run.checks) {
+      const item = document.createElement("li");
+      const outcome = ["passed", "failed", "untested"].includes(check.status) ? check.status.toUpperCase() : "UNKNOWN";
+      const resultId = safeResultId(check.result_id);
+      item.textContent = `${safeCheckId(check.check_id) ?? "Check"} · ${outcome} · ${reasonLabels[check.reason_code] ?? "reason unavailable"}${resultId ? ` · Saved result ${resultId}` : " · No indexed assertion result"}`;
+      $("#tests-run-list").append(item);
+    }
+    checkPlan = null;
+  } catch (problem) {
+    if (selectedProjectId !== projectId) return;
+    checkPlan = null;
+    $("#tests-run-list").replaceChildren();
+    status.textContent = problem.message === "CHECK_PLAN_CONFLICT" || problem.message === "INDEX_GENERATION_CONFLICT"
+      ? "The plan is stale. Refresh current checks and make a new plan before running."
+      : "The run outcome is uncertain. Refresh stored results and make a new plan before retrying; a previous run may already be saved.";
+  } finally {
+    checkWorkflowBusy = false;
+    if (selectedProjectId === projectId && checkCatalog) $("#tests-plan").disabled = false;
+    status.focus();
   }
 }
 
@@ -423,52 +696,90 @@ function removalSummary(plan) {
   return `Project removal plan · ${state}. Requested for this project through ${requester}. Expires ${expiry}. High risk: the project registration will be removed from active use. Project files and RELAY history stay on this computer. The project registration must still match this plan. RELAY cannot reverse removal.`;
 }
 
+function setProjectStatus(message, focus = true) {
+  const status = $("#project-action");
+  status.textContent = message;
+  if (focus) status.focus();
+}
+
+function renderRemovalPlans(project, region, plans) {
+  region.replaceChildren();
+  region.textContent = "";
+  if (!plans.length) region.textContent = "No removal plans for this project.";
+  for (const plan of plans) {
+    const group = document.createElement("div");
+    group.className = "removal-plan";
+    group.setAttribute("role", "group");
+    group.setAttribute("aria-label", "Project removal plan");
+    const detail = document.createElement("p");
+    detail.textContent = removalSummary(plan);
+    group.append(detail);
+    if (plan.state === "pending" || plan.state === "approved_pending_execution") {
+      const actions = document.createElement("div");
+      actions.className = "removal-plan-actions";
+      const finish = document.createElement("button");
+      finish.type = "button";
+      finish.textContent = plan.state === "pending" ? "Approve and remove" : "Finish approved removal";
+      finish.addEventListener("click", () => continueRemovalPlan(project, plan, finish));
+      actions.append(finish);
+      const reject = document.createElement("button");
+      reject.type = "button";
+      reject.textContent = "Reject plan";
+      reject.addEventListener("click", () => rejectRemovalPlan(project, plan, reject, region));
+      actions.append(reject);
+      group.append(actions);
+    }
+    region.append(group);
+  }
+  region.focus();
+}
+
 async function showRemovalPlans(project, region) {
+  $("#project-action").textContent = "Loading removal plans…";
   try {
     const result = await command("project.removal.list", { project_id: project.id, limit: 10 });
     const plans = Array.isArray(result.approvals) ? result.approvals : [];
-    region.replaceChildren();
-    $("#project-action").textContent = plans.length ? "Recent removal plans are shown under the project." : "No removal plans for this project.";
-    for (const plan of plans) {
-      const detail = document.createElement("p");
-      detail.textContent = removalSummary(plan);
-      region.append(detail);
-      if (plan.state === "pending" || plan.state === "approved_pending_execution") {
-        const finish = document.createElement("button");
-        finish.type = "button";
-        finish.textContent = plan.state === "pending" ? "Approve and remove" : "Finish approved removal";
-        finish.addEventListener("click", () => continueRemovalPlan(project, plan, finish));
-        region.append(finish);
-      }
-      if (plan.state === "pending" || plan.state === "approved_pending_execution") {
-        const reject = document.createElement("button");
-        reject.type = "button";
-        reject.textContent = "Reject plan";
-        reject.addEventListener("click", () => rejectRemovalPlan(project, plan, reject, region));
-        region.append(reject);
-      }
-    }
-  } catch (problem) {
-    $("#project-action").textContent = projectError(problem);
+    renderRemovalPlans(project, region, plans);
+    $("#project-action").textContent = plans.length
+      ? "Recent removal plans are shown under the project."
+      : "No removal plans for this project.";
+    return true;
+  } catch (_problem) {
+    setProjectStatus("Could not load current removal plans. Refresh RELAY, then try again.");
+    return false;
   }
 }
 
 async function continueRemovalPlan(project, plan, button) {
-  if (projectActionBusy || !window.confirm(`${removalSummary(plan)}\n\nRemove this project from RELAY?`)) return;
+  if (projectActionBusy) return;
+  if (!window.confirm(`${removalSummary(plan)}\n\nRemove this project from RELAY?`)) {
+    button.focus();
+    return;
+  }
   projectActionBusy = true;
   button.disabled = true;
+  let step = plan.state === "pending" ? "approval" : "execution";
   try {
     if (plan.state === "pending") {
-      await command("project.removal.decide", { project_id: project.id, approval_id: plan.approval_id, decision: "approve" });
+      const decision = await command("project.removal.decide", { project_id: project.id, approval_id: plan.approval_id, decision: "approve" });
+      if (decision.state !== "approved_pending_execution") {
+        setProjectStatus("This plan can no longer be approved. Reload removal plans to inspect its current state.");
+        return;
+      }
     }
+    step = "execution";
+    $("#project-action").textContent = "Approval recorded. Removing the project registration…";
     const removed = await command("project.remove", { project_id: project.id, approval_id: plan.approval_id });
     selectedProjectId = null;
-    await refresh();
-    $("#project-action").textContent = removed.state === "executed"
-      ? "Project removed from RELAY. Files and RELAY history were kept."
-      : "Removal outcome needs review. Refresh the approval list.";
-  } catch (problem) {
-    $("#project-action").textContent = projectError(problem);
+    const updated = await refresh();
+    setProjectStatus(removed.state === "executed"
+      ? updated ? "Project removed from RELAY. Files and RELAY history were kept."
+        : "Removal was recorded, but current projects could not be refreshed. Refresh RELAY to inspect its state."
+      : "Removal outcome is uncertain. Refresh RELAY and inspect the removal plans.");
+  } catch (_problem) {
+    setProjectStatus(step === "approval"
+      ? "Approval outcome is uncertain. Reload removal plans before another decision."
+      : "Removal outcome is uncertain. Refresh RELAY and inspect the removal plans before trying again.");
   } finally {
     projectActionBusy = false;
     button.disabled = false;
@@ -480,43 +791,31 @@ async function rejectRemovalPlan(project, plan, button, region) {
   projectActionBusy = true;
   button.disabled = true;
   try {
-    await command("project.removal.decide", { project_id: project.id, approval_id: plan.approval_id, decision: "reject" });
-    await showRemovalPlans(project, region);
-    $("#project-action").textContent = "Removal plan rejected. Project remains available.";
-  } catch (problem) {
-    $("#project-action").textContent = projectError(problem);
+    const decision = await command("project.removal.decide", { project_id: project.id, approval_id: plan.approval_id, decision: "reject" });
+    const refreshed = await showRemovalPlans(project, region);
+    setProjectStatus(decision.state === "rejected"
+      ? refreshed ? "Removal plan rejected. Project remains available."
+        : "Removal plan rejected, but current plans could not be loaded. Refresh RELAY."
+      : "The plan state changed before rejection. Review the current removal plans.", !refreshed);
+  } catch (_problem) {
+    setProjectStatus("Rejection outcome is uncertain. Reload removal plans before another decision.");
   } finally {
     projectActionBusy = false;
     button.disabled = false;
   }
 }
 
-async function planProjectRemoval(project, button) {
+async function planProjectRemoval(project, button, region) {
   if (projectActionBusy) return;
   projectActionBusy = true;
   button.disabled = true;
   $("#project-action").textContent = "Preparing a removal plan…";
   try {
     const plan = await command("project.removal.plan", { project_id: project.id });
-    $("#project-action").textContent = removalSummary(plan);
-    const approved = window.confirm(`${removalSummary(plan)}\n\nApprove and remove this project from RELAY?`);
-    const decision = await command("project.removal.decide", {
-      project_id: project.id, approval_id: plan.approval_id,
-      decision: approved ? "approve" : "reject"
-    });
-    if (!approved) {
-      $("#project-action").textContent = "Removal plan rejected. Project remains available.";
-      return;
-    }
-    $("#project-action").textContent = "Approval recorded. Removing the project registration…";
-    const result = await command("project.remove", { project_id: project.id, approval_id: plan.approval_id });
-    selectedProjectId = null;
-    const updated = await refresh();
-    $("#project-action").textContent = updated
-      ? `${project.name || "Project"} removed from RELAY. Project files and RELAY history were kept.`
-      : "Removal was recorded, but the project list could not be refreshed. Try Refresh.";
-  } catch (problem) {
-    $("#project-action").textContent = projectError(problem);
+    renderRemovalPlans(project, region, [plan]);
+    $("#project-action").textContent = "Removal plan ready. Review its scope, then choose Approve and remove or Reject plan.";
+  } catch (_problem) {
+    setProjectStatus("Could not confirm whether a removal plan was created. Review removal plans before trying again.");
   } finally {
     projectActionBusy = false;
     button.disabled = false;
@@ -888,6 +1187,13 @@ async function refresh() {
     $("#asset-findings").replaceChildren();
     $("#tests-summary").textContent = "Stored test summaries are unavailable. Live UEFN test status: UNTESTED.";
     $("#tests-list").replaceChildren();
+    ++checkWorkflowEpoch;
+    checkCatalog = null;
+    checkCatalogMissingConfirmed = false;
+    resetCheckPlan();
+    $("#tests-catalog-save").disabled = true;
+    $("#tests-catalog-list").replaceChildren();
+    $("#tests-catalog-status").textContent = "Current declared checks are unavailable. Refresh after RELAY is running.";
     $("#uefn-connection").textContent = "UEFN editor connection has not been checked.";
     if (!token || problem.message === "DASHBOARD_UNAUTHORIZED") {
       showSetup("Connection needed",
@@ -912,7 +1218,20 @@ async function refresh() {
   }
 }
 
-$("#refresh").addEventListener("click", refresh);
+$("#refresh").addEventListener("click", async () => {
+  await refresh();
+  button.focus();
+});
+$("#tests-catalog-file").addEventListener("change", () => {
+  $("#tests-catalog-save").disabled = !$("#tests-catalog-file").files?.[0] ||
+    (!checkCatalog && !checkCatalogMissingConfirmed) || !selectedActiveProject(selectedProjectId);
+  $("#tests-catalog-status").textContent = $("#tests-catalog-file").files?.[0]
+    ? "Local catalog selected. Register it for the active project."
+    : "No local catalog selected.";
+});
+$("#tests-catalog-save").addEventListener("click", registerCheckCatalog);
+$("#tests-plan").addEventListener("click", planDeclaredChecks);
+$("#tests-run").addEventListener("click", runDeclaredChecks);
 $("#asset-manifest").addEventListener("change", () => {
   $("#asset-result").textContent = $("#asset-manifest").files?.[0]
     ? "Manifest selected. Choose a local check below." : "No manifest checked yet.";
@@ -921,7 +1240,10 @@ $("#asset-validate").addEventListener("click", () => validateAssets("assets.mani
 $("#krita-validate").addEventListener("click", () => validateAssets("assets.krita.inspect"));
 $("#asset-impact").addEventListener("click", () => validateAssets("assets.impact.analyze"));
 $("#automation-toggle").addEventListener("click", toggleAutomation);
-$("#integrated-report").addEventListener("change", previewIntegratedReport);
+$("#integrated-report").addEventListener("change", async () => {
+  await previewIntegratedReport();
+  $("#integrated-summary").focus();
+});
 $("#project-add-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (projectActionBusy) return;

@@ -3,7 +3,7 @@
   "relay_version_family": "0.1",
   "registry_format": 1,
   "registry_id": "dsi.relay.commands",
-  "registry_sha256": "6a48b0a4c418f1fec7fdcfe57e6f6e14c2774a8b7f4e2236212aac0869767647",
+  "registry_sha256": "d896cf47e9aea778a50e3fbfd7fed554e8b0c723aa162d42120b7ba8f2c795c3",
   "required_capabilities": [
     "system.status@1",
     "system.doctor@1",
@@ -44,6 +44,14 @@
       "effect_class": "analyze",
       "permission": "read",
       "idempotency": "safe"
+    },
+    {
+      "id": "automation.checks.execute",
+      "version": 1,
+      "summary": "Execute a reviewed selective plan using only deterministic assertions over the guarded indexed snapshot; native checks remain untested.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed"
     },
     {
       "id": "automation.checks.plan",

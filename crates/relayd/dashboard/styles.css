@@ -36,6 +36,12 @@ li { border-top: 1px solid #e3ece7; padding: .7rem 0; }
 #projects li { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
 #projects li strong { margin-right: auto; }
 #projects button { flex: none; font-size: .8rem; }
+#projects .removal-plans { flex: 0 0 100%; min-width: 0; border-left: 3px solid #146b53; padding: .25rem 0 .25rem .9rem; }
+#projects .removal-plans:empty { display: none; }
+#projects .removal-plan { border-top: 1px solid #d6e2dc; padding: .8rem 0; }
+#projects .removal-plan p { margin: 0 0 .7rem; overflow-wrap: anywhere; }
+#projects .removal-plan-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+#projects .removal-plan-actions button { min-height: 2.75rem; font-size: .9rem; }
 #project-add-form { display: grid; gap: .5rem; margin: 1rem 0; }
 #project-add-form label { font-weight: 700; }
 #project-add-form input { width: 100%; border: 1px solid #879e93; border-radius: .5rem; padding: .65rem; font: inherit; }
@@ -47,8 +53,17 @@ li { border-top: 1px solid #e3ece7; padding: .7rem 0; }
 .asset-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .85rem 0; }
 #asset-manifest { display: block; max-width: 100%; margin: .5rem 0; }
 #asset-result, #asset-lineage, #asset-native-status, #tests-live-status { color: #53645e; }
+.test-workflow { border-top: 1px solid #e3ece7; padding: 1rem 0; }
+.test-workflow h3 { margin: 0 0 .7rem; font-size: 1rem; }
+.test-workflow label { display: block; font-weight: 700; }
+.test-workflow input[type="file"] { display: block; max-width: 100%; margin: .5rem 0 .8rem; }
+.test-workflow button { margin: .2rem 0 .6rem; min-height: 2.75rem; }
+.test-workflow li { overflow-wrap: anywhere; }
+.test-workflow p { color: #53645e; margin: .4rem 0; }
+.test-workflow p:focus-visible { outline: 3px solid #efb03c; outline-offset: 3px; }
 button { background: #d7f3e5; color: #143d39; border: 0; border-radius: .5rem; padding: .65rem 1rem; font-weight: 700; cursor: pointer; }
 button:focus-visible, summary:focus-visible { outline: 3px solid #efb03c; outline-offset: 3px; }
+#project-action:focus-visible, #integrated-summary:focus-visible, .removal-plans:focus-visible { outline: 3px solid #efb03c; outline-offset: 3px; }
 a:focus-visible { outline: 3px solid #efb03c; outline-offset: 3px; }
 button[aria-disabled="true"] { opacity: .55; cursor: wait; }
 button:disabled { opacity: .55; cursor: wait; }
@@ -61,4 +76,14 @@ details { margin-top: 1rem; }
 summary { cursor: pointer; font-weight: 700; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; }
 footer { padding: 1.5rem; text-align: center; color: #53645e; font-size: .85rem; }
-@media (max-width: 650px) { .grid, .diagnostic-grid { grid-template-columns: 1fr; } header { padding: 1rem 1.25rem; } }
+@media (max-width: 650px) {
+  .grid, .diagnostic-grid { grid-template-columns: 1fr; }
+  header { padding: 1rem 1.25rem; gap: .75rem; }
+  .status, .card, details { padding: 1rem; }
+  #projects li { align-items: stretch; }
+  #projects li > strong { flex: 0 0 100%; }
+  #projects li > button { flex: 1 1 8rem; min-height: 2.75rem; }
+  #projects .removal-plan-actions button { flex: 1 1 100%; }
+  #integrated-report { max-width: 100%; }
+  .test-workflow button { width: 100%; }
+}

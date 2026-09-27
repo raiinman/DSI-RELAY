@@ -50,7 +50,7 @@
           <p id="project-path-help">Enter the full folder path on this computer.</p>
           <button id="project-add" type="submit">Add project</button>
         </form>
-        <p id="project-action" role="status" aria-live="polite">Add a project, then select it to work with its indexed files.</p>
+        <p id="project-action" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">Add a project, then select it to work with its indexed files.</p>
         <p id="selected-project">No project selected.</p>
         <ul id="projects"></ul>
         <p id="project-limits">Archive hides a project from active work; Restore brings it back. Remove marks its RELAY record as removed. Project files and RELAY history are kept.</p>
@@ -79,6 +79,26 @@
       </section>
       <section class="card" aria-labelledby="tests-title">
         <h2 id="tests-title">Tests</h2>
+        <p class="section-intro">Declare local file checks, review the current plan, then run it explicitly. These checks inspect RELAY's file index; creator-app behavior needs a separate live test.</p>
+        <div class="test-workflow" role="group" aria-labelledby="tests-catalog-title">
+          <h3 id="tests-catalog-title">Declared checks</h3>
+          <p>Choose a version 1 JSON catalog with check IDs, project-relative inputs, and optional indexed-file assertions. Up to 128 checks fit here; larger catalogs can use the RELAY CLI.</p>
+          <label for="tests-catalog-file">Check catalog (JSON)</label>
+          <input id="tests-catalog-file" type="file" accept=".json,application/json">
+          <button id="tests-catalog-save" type="button" disabled>Register selected catalog</button>
+          <p id="tests-catalog-status" role="status" aria-live="polite" tabindex="-1">Select an active project to inspect its declared checks.</p>
+          <ul id="tests-catalog-list"></ul>
+        </div>
+        <div class="test-workflow" role="group" aria-labelledby="tests-plan-title">
+          <h3 id="tests-plan-title">Plan and run</h3>
+          <button id="tests-plan" type="button" disabled>Plan current checks</button>
+          <p id="tests-plan-status" role="status" aria-live="polite" tabindex="-1">No current plan.</p>
+          <ul id="tests-plan-list"></ul>
+          <button id="tests-run" type="button" disabled>Run selected checks</button>
+          <p id="tests-run-status" role="status" aria-live="polite" tabindex="-1">No check run started.</p>
+          <ul id="tests-run-list"></ul>
+        </div>
+        <h3>Imported capture analyses</h3>
         <p id="tests-summary">Select a project to see imported Verse capture analyses.</p>
         <ul id="tests-list"></ul>
         <p id="tests-live-status">Live UEFN gameplay tests: UNTESTED.</p>
@@ -118,12 +138,12 @@
         <div><dt>RELAY version</dt><dd id="relay-version">Checking…</dd></div>
         <div><dt>Running for</dt><dd id="relay-uptime">Checking…</dd></div>
       </dl>
-      <p id="diagnostic-guidance" class="diagnostic-guidance"></p>
+      <p id="diagnostic-guidance" class="diagnostic-guidance" role="status" aria-live="polite"></p>
       <h3>Integrated test report</h3>
       <p>Choose the privacy-safe report JSON from a completed local run. This preview stays in this browser tab.</p>
       <label for="integrated-report">Integrated report (JSON)</label>
       <input id="integrated-report" type="file" accept=".json,application/json">
-      <p id="integrated-summary" role="status" aria-live="polite">No integrated report selected. Workflow tests have not been verified here.</p>
+      <p id="integrated-summary" role="status" aria-live="polite" tabindex="-1">No integrated report selected. Workflow tests have not been verified here.</p>
       <ul id="integrated-workflows"></ul>
     </section>
     <details>

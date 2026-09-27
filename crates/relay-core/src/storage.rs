@@ -1,7 +1,7 @@
 use crate::indexing::{IndexChange, IndexedFileSnapshot};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -180,6 +180,7 @@ pub struct ProjectCheckCatalogRecord {
     pub catalog_sha256: String,
 }
 
+#[derive(Clone)]
 pub struct ProjectPlanSnapshot {
     pub state: ProjectIndexState,
     pub configuration: Option<ProjectConfiguration>,
@@ -190,6 +191,14 @@ pub struct ProjectPlanSnapshot {
     pub invalidations: Vec<InvalidatedDependencyEdgeRecord>,
     pub coverage: Vec<DependencyCoverageRecord>,
     pub bounds_exceeded: bool,
+}
+
+pub struct PreparedCheckExecution {
+    pub check_id: String,
+    pub planned_check_id: String,
+    pub status: &'static str,
+    pub reason_code: &'static str,
+    pub result_payload: Option<Value>,
 }
 
 pub struct DependencyReplacement<'a> {
@@ -467,7 +476,9 @@ fn current_unix_ms() -> i64 {
         .unwrap_or(0)
 }
 
-fn decode_removal_approval(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectRemovalApprovalRecord> {
+fn decode_removal_approval(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<ProjectRemovalApprovalRecord> {
     Ok(ProjectRemovalApprovalRecord {
         id: row.get(0)?,
         project_id: row.get(1)?,
@@ -500,11 +511,15 @@ fn read_removal_approval(
     approval_id: &str,
 ) -> Result<Option<ProjectRemovalApprovalRecord>, StorageError> {
     conn.query_row(
-        &format!("SELECT {REMOVAL_APPROVAL_COLUMNS} FROM project_removal_approvals
-                  WHERE project_id = ?1 AND id = ?2"),
+        &format!(
+            "SELECT {REMOVAL_APPROVAL_COLUMNS} FROM project_removal_approvals
+                  WHERE project_id = ?1 AND id = ?2"
+        ),
         params![project_id, approval_id],
         decode_removal_approval,
-    ).optional().map_err(|error| StorageError::sqlite("read removal approval", error))
+    )
+    .optional()
+    .map_err(|error| StorageError::sqlite("read removal approval", error))
 }
 
 fn effective_removal_state(
@@ -962,23 +977,30 @@ impl RelayStorage {
 
     fn apply_schema_eight(&mut self) -> Result<(), StorageError> {
         let applied_at = sqlite_now(&self.conn)?;
-        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| StorageError::sqlite("begin schema-8 migration", error))?;
         tx.execute_batch(
             "ALTER TABLE projects ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'active'
                CHECK(lifecycle_state IN ('active', 'archived', 'removed'));
              CREATE INDEX projects_lifecycle_state ON projects(lifecycle_state, created_at, id);",
-        ).map_err(|error| StorageError::sqlite("add project lifecycle state", error))?;
+        )
+        .map_err(|error| StorageError::sqlite("add project lifecycle state", error))?;
         tx.execute(
             "INSERT INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
             params![8i64, applied_at],
-        ).map_err(|error| StorageError::sqlite("record schema migration 8", error))?;
-        tx.commit().map_err(|error| StorageError::sqlite("commit schema migration 8", error))
+        )
+        .map_err(|error| StorageError::sqlite("record schema migration 8", error))?;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit schema migration 8", error))
     }
 
     fn apply_schema_nine(&mut self) -> Result<(), StorageError> {
         let applied_at = sqlite_now(&self.conn)?;
-        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| StorageError::sqlite("begin schema-9 migration", error))?;
         tx.execute_batch(
             "CREATE TABLE project_dependency_coverage (
@@ -1013,18 +1035,23 @@ impl RelayStorage {
                catalog_json TEXT NOT NULL,
                catalog_sha256 TEXT NOT NULL,
                updated_at TEXT NOT NULL
-             );"
-        ).map_err(|error| StorageError::sqlite("create dependency coverage", error))?;
+             );",
+        )
+        .map_err(|error| StorageError::sqlite("create dependency coverage", error))?;
         tx.execute(
             "INSERT INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
             params![9i64, applied_at],
-        ).map_err(|error| StorageError::sqlite("record schema migration 9", error))?;
-        tx.commit().map_err(|error| StorageError::sqlite("commit schema migration 9", error))
+        )
+        .map_err(|error| StorageError::sqlite("record schema migration 9", error))?;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit schema migration 9", error))
     }
 
     fn apply_schema_ten(&mut self) -> Result<(), StorageError> {
         let applied_at = sqlite_now(&self.conn)?;
-        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| StorageError::sqlite("begin schema-10 migration", error))?;
         tx.execute_batch(
             "ALTER TABLE projects ADD COLUMN state_revision INTEGER NOT NULL DEFAULT 1
@@ -1051,13 +1078,16 @@ impl RelayStorage {
                executed_at_ms INTEGER
              );
              CREATE INDEX project_removal_approvals_project
-               ON project_removal_approvals(project_id, created_at_ms DESC, id DESC);"
-        ).map_err(|error| StorageError::sqlite("create project removal approvals", error))?;
+               ON project_removal_approvals(project_id, created_at_ms DESC, id DESC);",
+        )
+        .map_err(|error| StorageError::sqlite("create project removal approvals", error))?;
         tx.execute(
             "INSERT INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
             params![10i64, applied_at],
-        ).map_err(|error| StorageError::sqlite("record schema migration 10", error))?;
-        tx.commit().map_err(|error| StorageError::sqlite("commit schema migration 10", error))
+        )
+        .map_err(|error| StorageError::sqlite("record schema migration 10", error))?;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit schema migration 10", error))
     }
 
     pub fn db_path(&self) -> &Path {
@@ -1155,7 +1185,10 @@ impl RelayStorage {
         self.list_projects_with_inactive(false)
     }
 
-    pub fn list_projects_with_inactive(&self, include_inactive: bool) -> Result<Vec<ProjectRecord>, StorageError> {
+    pub fn list_projects_with_inactive(
+        &self,
+        include_inactive: bool,
+    ) -> Result<Vec<ProjectRecord>, StorageError> {
         let mut statement = self
             .conn
             .prepare(
@@ -1185,29 +1218,54 @@ impl RelayStorage {
     }
 
     pub fn get_active_project(&self, id: &str) -> Result<ProjectRecord, StorageError> {
-        let project = self.get_project(id)?
+        let project = self
+            .get_project(id)?
             .ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
         if project.lifecycle_state != "active" {
-            return Err(StorageError::new("PROJECT_NOT_FOUND", "project is not active"));
+            return Err(StorageError::new(
+                "PROJECT_NOT_FOUND",
+                "project is not active",
+            ));
         }
         Ok(project)
     }
 
-    pub fn set_project_lifecycle(&self, id: &str, target: &str) -> Result<(ProjectRecord, bool), StorageError> {
+    pub fn set_project_lifecycle(
+        &self,
+        id: &str,
+        target: &str,
+    ) -> Result<(ProjectRecord, bool), StorageError> {
         if !matches!(target, "active" | "archived") {
-            return Err(StorageError::new("VALIDATION_FAILED", "unsupported lifecycle state"));
+            return Err(StorageError::new(
+                "VALIDATION_FAILED",
+                "unsupported lifecycle state",
+            ));
         }
-        let tx = self.conn.unchecked_transaction()
+        let tx = self
+            .conn
+            .unchecked_transaction()
             .map_err(|error| StorageError::sqlite("begin project lifecycle change", error))?;
-        let current: Option<String> = tx.query_row(
-            "SELECT lifecycle_state FROM projects WHERE id = ?1", [id], |row| row.get(0),
-        ).optional().map_err(|error| StorageError::sqlite("read project lifecycle state", error))?;
-        let current = current.ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
+        let current: Option<String> = tx
+            .query_row(
+                "SELECT lifecycle_state FROM projects WHERE id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| StorageError::sqlite("read project lifecycle state", error))?;
+        let current =
+            current.ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
         if current == "removed" {
-            return Err(StorageError::new("PROJECT_REMOVED", "removed project cannot be restored or archived"));
+            return Err(StorageError::new(
+                "PROJECT_REMOVED",
+                "removed project cannot be restored or archived",
+            ));
         }
         if target == "active" && !matches!(current.as_str(), "active" | "archived") {
-            return Err(StorageError::new("PROJECT_NOT_ARCHIVED", "only archived projects can be restored"));
+            return Err(StorageError::new(
+                "PROJECT_NOT_ARCHIVED",
+                "only archived projects can be restored",
+            ));
         }
         let changed = current != target;
         if changed {
@@ -1218,99 +1276,194 @@ impl RelayStorage {
                      SET status = 'stale', content_verification_required = 1, updated_at = ?2
                      WHERE project_id = ?1",
                     params![id, now],
-                ).map_err(|error| StorageError::sqlite("invalidate restored project index", error))?;
+                )
+                .map_err(|error| {
+                    StorageError::sqlite("invalidate restored project index", error)
+                })?;
             }
             tx.execute(
                 "UPDATE projects SET lifecycle_state = ?2, updated_at = ?3,
                    state_revision = state_revision + 1 WHERE id = ?1",
                 params![id, target, now],
-            ).map_err(|error| StorageError::sqlite("change project lifecycle state", error))?;
+            )
+            .map_err(|error| StorageError::sqlite("change project lifecycle state", error))?;
         }
-        tx.commit().map_err(|error| StorageError::sqlite("commit project lifecycle change", error))?;
-        let project = self.get_project(id)?
-            .ok_or_else(|| StorageError::new("STORAGE_ERROR", "project disappeared after lifecycle change"))?;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit project lifecycle change", error))?;
+        let project = self.get_project(id)?.ok_or_else(|| {
+            StorageError::new(
+                "STORAGE_ERROR",
+                "project disappeared after lifecycle change",
+            )
+        })?;
         Ok((project, changed))
     }
 
-    pub fn plan_project_removal(&self, project_id: &str, requester_actor: &str, requester_client: &str, requester_delegator: Option<&str>) -> Result<ProjectRemovalApprovalRecord, StorageError> {
-        let tx = self.conn.unchecked_transaction().map_err(|e| StorageError::sqlite("begin removal plan", e))?;
-        let project: Option<(i64, String)> = tx.query_row(
-            "SELECT state_revision, lifecycle_state FROM projects WHERE id = ?1", [project_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        ).optional().map_err(|e| StorageError::sqlite("read removal target", e))?;
-        let (revision, lifecycle) = project.ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
-        if lifecycle == "removed" { return Err(StorageError::new("PROJECT_REMOVED", "project is already removed")); }
+    pub fn plan_project_removal(
+        &self,
+        project_id: &str,
+        requester_actor: &str,
+        requester_client: &str,
+        requester_delegator: Option<&str>,
+    ) -> Result<ProjectRemovalApprovalRecord, StorageError> {
+        let tx = self
+            .conn
+            .unchecked_transaction()
+            .map_err(|e| StorageError::sqlite("begin removal plan", e))?;
+        let project: Option<(i64, String)> = tx
+            .query_row(
+                "SELECT state_revision, lifecycle_state FROM projects WHERE id = ?1",
+                [project_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(|e| StorageError::sqlite("read removal target", e))?;
+        let (revision, lifecycle) =
+            project.ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
+        if lifecycle == "removed" {
+            return Err(StorageError::new(
+                "PROJECT_REMOVED",
+                "project is already removed",
+            ));
+        }
         let now = current_unix_ms();
-        let outstanding: i64 = tx.query_row(
-            "SELECT COUNT(*) FROM project_removal_approvals WHERE project_id = ?1
+        let outstanding: i64 = tx
+            .query_row(
+                "SELECT COUNT(*) FROM project_removal_approvals WHERE project_id = ?1
              AND state IN ('pending', 'approved_pending_execution') AND expires_at_ms > ?2
              AND project_state_revision = ?3 AND project_lifecycle_state = ?4",
-            params![project_id, now, revision, lifecycle], |row| row.get(0),
-        ).map_err(|e| StorageError::sqlite("count outstanding removal plans", e))?;
-        if outstanding >= 4 { return Err(StorageError::new("APPROVAL_LIMIT", "too many outstanding removal plans for project")); }
+                params![project_id, now, revision, lifecycle],
+                |row| row.get(0),
+            )
+            .map_err(|e| StorageError::sqlite("count outstanding removal plans", e))?;
+        if outstanding >= 4 {
+            return Err(StorageError::new(
+                "APPROVAL_LIMIT",
+                "too many outstanding removal plans for project",
+            ));
+        }
         let id = opaque_id("APR");
         let expires = now.saturating_add(15 * 60 * 1000);
-        tx.execute("INSERT INTO project_removal_approvals
+        tx.execute(
+            "INSERT INTO project_removal_approvals
             (id, project_id, state, project_state_revision, project_lifecycle_state,
              requester_actor, requester_client, requester_delegator, created_at_ms, expires_at_ms)
             VALUES (?1, ?2, 'pending', ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-            params![id, project_id, revision, lifecycle, requester_actor, requester_client, requester_delegator, now, expires],
-        ).map_err(|e| StorageError::sqlite("write removal plan", e))?;
-        let approval = read_removal_approval(&tx, project_id, &id)?.expect("inserted approval exists");
-        tx.commit().map_err(|e| StorageError::sqlite("commit removal plan", e))?;
+            params![
+                id,
+                project_id,
+                revision,
+                lifecycle,
+                requester_actor,
+                requester_client,
+                requester_delegator,
+                now,
+                expires
+            ],
+        )
+        .map_err(|e| StorageError::sqlite("write removal plan", e))?;
+        let approval =
+            read_removal_approval(&tx, project_id, &id)?.expect("inserted approval exists");
+        tx.commit()
+            .map_err(|e| StorageError::sqlite("commit removal plan", e))?;
         Ok(approval)
     }
 
-    pub fn get_project_removal_approval(&self, project_id: &str, approval_id: &str) -> Result<ProjectRemovalApprovalRecord, StorageError> {
+    pub fn get_project_removal_approval(
+        &self,
+        project_id: &str,
+        approval_id: &str,
+    ) -> Result<ProjectRemovalApprovalRecord, StorageError> {
         let mut approval = read_removal_approval(&self.conn, project_id, approval_id)?
             .ok_or_else(|| StorageError::new("APPROVAL_NOT_FOUND", "removal approval not found"))?;
-        let project: (i64, String) = self.conn.query_row(
-            "SELECT state_revision, lifecycle_state FROM projects WHERE id = ?1", [project_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        ).map_err(|e| StorageError::sqlite("read removal target", e))?;
-        approval.state = effective_removal_state(&approval, project.0, &project.1, current_unix_ms()).to_string();
+        let project: (i64, String) = self
+            .conn
+            .query_row(
+                "SELECT state_revision, lifecycle_state FROM projects WHERE id = ?1",
+                [project_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .map_err(|e| StorageError::sqlite("read removal target", e))?;
+        approval.state =
+            effective_removal_state(&approval, project.0, &project.1, current_unix_ms())
+                .to_string();
         Ok(approval)
     }
 
-    pub fn list_project_removal_approvals(&self, project_id: &str, limit: usize) -> Result<Vec<ProjectRemovalApprovalRecord>, StorageError> {
-        let project: Option<(i64, String)> = self.conn.query_row(
-            "SELECT state_revision, lifecycle_state FROM projects WHERE id = ?1", [project_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        ).optional().map_err(|e| StorageError::sqlite("read removal target", e))?;
-        let (revision, lifecycle) = project.ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
+    pub fn list_project_removal_approvals(
+        &self,
+        project_id: &str,
+        limit: usize,
+    ) -> Result<Vec<ProjectRemovalApprovalRecord>, StorageError> {
+        let project: Option<(i64, String)> = self
+            .conn
+            .query_row(
+                "SELECT state_revision, lifecycle_state FROM projects WHERE id = ?1",
+                [project_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(|e| StorageError::sqlite("read removal target", e))?;
+        let (revision, lifecycle) =
+            project.ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
         let mut stmt = self.conn.prepare(&format!("SELECT {REMOVAL_APPROVAL_COLUMNS} FROM project_removal_approvals WHERE project_id = ?1 ORDER BY created_at_ms DESC, id DESC LIMIT ?2"))
             .map_err(|e| StorageError::sqlite("prepare removal approval list", e))?;
-        let rows = stmt.query_map(params![project_id, limit.min(100) as i64], decode_removal_approval)
+        let rows = stmt
+            .query_map(
+                params![project_id, limit.min(100) as i64],
+                decode_removal_approval,
+            )
             .map_err(|e| StorageError::sqlite("list removal approvals", e))?;
         let mut out = Vec::new();
         let now = current_unix_ms();
         for row in rows {
-            let mut approval = row.map_err(|e| StorageError::sqlite("decode removal approval", e))?;
-            approval.state = effective_removal_state(&approval, revision, &lifecycle, now).to_string();
+            let mut approval =
+                row.map_err(|e| StorageError::sqlite("decode removal approval", e))?;
+            approval.state =
+                effective_removal_state(&approval, revision, &lifecycle, now).to_string();
             out.push(approval);
         }
         Ok(out)
     }
 
-    pub fn task_context_snapshot(&self, project_id: &str, result_ids: &[&str], approval_ids: &[&str]) -> Result<TaskContextSnapshot, StorageError> {
+    pub fn task_context_snapshot(
+        &self,
+        project_id: &str,
+        result_ids: &[&str],
+        approval_ids: &[&str],
+    ) -> Result<TaskContextSnapshot, StorageError> {
         if result_ids.len() > 8 || approval_ids.len() > 4 {
-            return Err(StorageError::new("VALIDATION_FAILED", "task context source limit exceeded"));
+            return Err(StorageError::new(
+                "VALIDATION_FAILED",
+                "task context source limit exceeded",
+            ));
         }
-        let tx = self.conn.unchecked_transaction()
+        let tx = self
+            .conn
+            .unchecked_transaction()
             .map_err(|e| StorageError::sqlite("begin task context snapshot", e))?;
-        let project = self.get_project(project_id)?
+        let project = self
+            .get_project(project_id)?
             .ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
-        let project_state_revision: i64 = tx.query_row(
-            "SELECT state_revision FROM projects WHERE id = ?1", [project_id], |row| row.get(0),
-        ).map_err(|e| StorageError::sqlite("read project revision", e))?;
+        let project_state_revision: i64 = tx
+            .query_row(
+                "SELECT state_revision FROM projects WHERE id = ?1",
+                [project_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| StorageError::sqlite("read project revision", e))?;
         let index = self.get_project_index_state(project_id)?;
         let configuration = self.get_project_configuration(project_id)?;
         let mut results = Vec::with_capacity(result_ids.len());
         for id in result_ids {
-            let record = self.get_result(id)?
-                .ok_or_else(|| StorageError::new("RESULT_NOT_FOUND", "result not found in project"))?;
+            let record = self.get_result(id)?.ok_or_else(|| {
+                StorageError::new("RESULT_NOT_FOUND", "result not found in project")
+            })?;
             if record.project_id.as_deref() != Some(project_id) {
-                return Err(StorageError::new("RESULT_NOT_FOUND", "result not found in project"));
+                return Err(StorageError::new(
+                    "RESULT_NOT_FOUND",
+                    "result not found in project",
+                ));
             }
             results.push(record);
         }
@@ -1318,53 +1471,107 @@ impl RelayStorage {
         for id in approval_ids {
             removal_approvals.push(self.get_project_removal_approval(project_id, id)?);
         }
-        tx.commit().map_err(|e| StorageError::sqlite("commit task context snapshot", e))?;
-        Ok(TaskContextSnapshot { project, project_state_revision, index, configuration, results, removal_approvals })
+        tx.commit()
+            .map_err(|e| StorageError::sqlite("commit task context snapshot", e))?;
+        Ok(TaskContextSnapshot {
+            project,
+            project_state_revision,
+            index,
+            configuration,
+            results,
+            removal_approvals,
+        })
     }
 
-    pub fn decide_project_removal(&self, project_id: &str, approval_id: &str, approve: bool, approver_actor: &str, approver_client: &str) -> Result<ProjectRemovalApprovalRecord, StorageError> {
-        let tx = self.conn.unchecked_transaction().map_err(|e| StorageError::sqlite("begin removal decision", e))?;
+    pub fn decide_project_removal(
+        &self,
+        project_id: &str,
+        approval_id: &str,
+        approve: bool,
+        approver_actor: &str,
+        approver_client: &str,
+    ) -> Result<ProjectRemovalApprovalRecord, StorageError> {
+        let tx = self
+            .conn
+            .unchecked_transaction()
+            .map_err(|e| StorageError::sqlite("begin removal decision", e))?;
         let mut approval = read_removal_approval(&tx, project_id, approval_id)?
             .ok_or_else(|| StorageError::new("APPROVAL_NOT_FOUND", "removal approval not found"))?;
-        let project: (i64, String) = tx.query_row("SELECT state_revision, lifecycle_state FROM projects WHERE id = ?1", [project_id], |row| Ok((row.get(0)?, row.get(1)?)))
+        let project: (i64, String) = tx
+            .query_row(
+                "SELECT state_revision, lifecycle_state FROM projects WHERE id = ?1",
+                [project_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
             .map_err(|e| StorageError::sqlite("read removal target", e))?;
         let state = effective_removal_state(&approval, project.0, &project.1, current_unix_ms());
         if matches!(state, "stale" | "expired") {
-            tx.execute("UPDATE project_removal_approvals SET state = ?3 WHERE project_id = ?1 AND id = ?2", params![project_id, approval_id, state])
-                .map_err(|e| StorageError::sqlite("record invalid removal approval", e))?;
-            approval = read_removal_approval(&tx, project_id, approval_id)?.expect("approval exists");
-            tx.commit().map_err(|e| StorageError::sqlite("commit invalid removal approval", e))?;
+            tx.execute(
+                "UPDATE project_removal_approvals SET state = ?3 WHERE project_id = ?1 AND id = ?2",
+                params![project_id, approval_id, state],
+            )
+            .map_err(|e| StorageError::sqlite("record invalid removal approval", e))?;
+            approval =
+                read_removal_approval(&tx, project_id, approval_id)?.expect("approval exists");
+            tx.commit()
+                .map_err(|e| StorageError::sqlite("commit invalid removal approval", e))?;
             return Ok(approval);
         }
         let next = match (state, approve) {
             ("pending", true) => "approved_pending_execution",
             ("pending" | "approved_pending_execution", false) => "rejected",
-            _ => return Err(StorageError::new("APPROVAL_STATE_CONFLICT", "approval cannot be decided in its current state")),
+            _ => {
+                return Err(StorageError::new(
+                    "APPROVAL_STATE_CONFLICT",
+                    "approval cannot be decided in its current state",
+                ));
+            }
         };
         let now = current_unix_ms();
         tx.execute("UPDATE project_removal_approvals SET state = ?3, approver_actor = ?4, approver_client = ?5, decided_at_ms = ?6 WHERE project_id = ?1 AND id = ?2",
             params![project_id, approval_id, next, approver_actor, approver_client, now])
             .map_err(|e| StorageError::sqlite("write removal decision", e))?;
         approval = read_removal_approval(&tx, project_id, approval_id)?.expect("approval exists");
-        tx.commit().map_err(|e| StorageError::sqlite("commit removal decision", e))?;
+        tx.commit()
+            .map_err(|e| StorageError::sqlite("commit removal decision", e))?;
         Ok(approval)
     }
 
-    pub fn execute_project_removal(&self, project_id: &str, approval_id: &str, executor_actor: &str, executor_client: &str) -> Result<(ProjectRemovalApprovalRecord, bool), StorageError> {
-        let tx = self.conn.unchecked_transaction().map_err(|e| StorageError::sqlite("begin approved removal", e))?;
+    pub fn execute_project_removal(
+        &self,
+        project_id: &str,
+        approval_id: &str,
+        executor_actor: &str,
+        executor_client: &str,
+    ) -> Result<(ProjectRemovalApprovalRecord, bool), StorageError> {
+        let tx = self
+            .conn
+            .unchecked_transaction()
+            .map_err(|e| StorageError::sqlite("begin approved removal", e))?;
         let mut approval = read_removal_approval(&tx, project_id, approval_id)?
             .ok_or_else(|| StorageError::new("APPROVAL_NOT_FOUND", "removal approval not found"))?;
-        if approval.state == "executed" { return Ok((approval, false)); }
-        let project: (i64, String) = tx.query_row("SELECT state_revision, lifecycle_state FROM projects WHERE id = ?1", [project_id], |row| Ok((row.get(0)?, row.get(1)?)))
+        if approval.state == "executed" {
+            return Ok((approval, false));
+        }
+        let project: (i64, String) = tx
+            .query_row(
+                "SELECT state_revision, lifecycle_state FROM projects WHERE id = ?1",
+                [project_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
             .map_err(|e| StorageError::sqlite("read removal target", e))?;
         let state = effective_removal_state(&approval, project.0, &project.1, current_unix_ms());
         if state != "approved_pending_execution" {
             if state == "stale" || state == "expired" {
                 tx.execute("UPDATE project_removal_approvals SET state = ?3 WHERE project_id = ?1 AND id = ?2", params![project_id, approval_id, state])
                     .map_err(|e| StorageError::sqlite("record invalid removal approval", e))?;
-                tx.commit().map_err(|e| StorageError::sqlite("commit invalid removal approval", e))?;
+                tx.commit()
+                    .map_err(|e| StorageError::sqlite("commit invalid removal approval", e))?;
             }
-            return Err(StorageError::new("APPROVAL_STATE_CONFLICT", format!("removal approval is {state}")));
+            return Err(StorageError::new(
+                "APPROVAL_STATE_CONFLICT",
+                format!("removal approval is {state}"),
+            ));
         }
         let now_text = sqlite_now(&tx)?;
         let now = current_unix_ms();
@@ -1374,7 +1581,8 @@ impl RelayStorage {
             params![project_id, approval_id, executor_actor, executor_client, now])
             .map_err(|e| StorageError::sqlite("record approved removal", e))?;
         approval = read_removal_approval(&tx, project_id, approval_id)?.expect("approval exists");
-        tx.commit().map_err(|e| StorageError::sqlite("commit approved removal", e))?;
+        tx.commit()
+            .map_err(|e| StorageError::sqlite("commit approved removal", e))?;
         Ok((approval, true))
     }
 
@@ -1479,10 +1687,23 @@ impl RelayStorage {
         .map_err(|error| {
             StorageError::sqlite("invalidate edges after configuration change", error)
         })?;
-        tx.execute("DELETE FROM project_dependency_coverage WHERE project_id = ?1", [project_id])
-            .map_err(|error| StorageError::sqlite("invalidate parser coverage after configuration change", error))?;
-        tx.execute("DELETE FROM project_dependency_edge_invalidations WHERE project_id = ?1", [project_id])
-            .map_err(|error| StorageError::sqlite("invalidate edge history after configuration change", error))?;
+        tx.execute(
+            "DELETE FROM project_dependency_coverage WHERE project_id = ?1",
+            [project_id],
+        )
+        .map_err(|error| {
+            StorageError::sqlite(
+                "invalidate parser coverage after configuration change",
+                error,
+            )
+        })?;
+        tx.execute(
+            "DELETE FROM project_dependency_edge_invalidations WHERE project_id = ?1",
+            [project_id],
+        )
+        .map_err(|error| {
+            StorageError::sqlite("invalidate edge history after configuration change", error)
+        })?;
         tx.commit()
             .map_err(|error| StorageError::sqlite("commit project configuration", error))?;
         self.get_project_configuration(project_id)?.ok_or_else(|| {
@@ -1525,20 +1746,26 @@ impl RelayStorage {
     pub fn mark_project_index_stale(&self, project_id: &str) -> Result<(), StorageError> {
         self.get_active_project(project_id)?;
         let now = sqlite_now(&self.conn)?;
-        let tx = self.conn.unchecked_transaction()
+        let tx = self
+            .conn
+            .unchecked_transaction()
             .map_err(|error| StorageError::sqlite("begin index continuity loss", error))?;
         tx.execute(
-                "UPDATE project_index_state
+            "UPDATE project_index_state
              SET status = 'stale', content_verification_required = 1, updated_at = ?2
              WHERE project_id = ?1",
-                params![project_id, now],
-            )
-            .map_err(|error| StorageError::sqlite("mark project index stale", error))?;
+            params![project_id, now],
+        )
+        .map_err(|error| StorageError::sqlite("mark project index stale", error))?;
         tx.execute(
             "DELETE FROM project_dependency_coverage WHERE project_id = ?1",
             [project_id],
-        ).map_err(|error| StorageError::sqlite("invalidate coverage after continuity loss", error))?;
-        tx.commit().map_err(|error| StorageError::sqlite("commit index continuity loss", error))?;
+        )
+        .map_err(|error| {
+            StorageError::sqlite("invalidate coverage after continuity loss", error)
+        })?;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit index continuity loss", error))?;
         Ok(())
     }
 
@@ -1580,20 +1807,27 @@ impl RelayStorage {
         project_id: &str,
         limit: usize,
     ) -> Result<Vec<IndexedFileSnapshot>, StorageError> {
-        let mut statement = self.conn.prepare(
-            "SELECT relative_path, size_bytes, modified_unix_ns, content_sha256
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT relative_path, size_bytes, modified_unix_ns, content_sha256
              FROM project_files WHERE project_id = ?1
              ORDER BY relative_path LIMIT ?2",
-        ).map_err(|error| StorageError::sqlite("prepare bounded project files", error))?;
-        let rows = statement.query_map(
-            params![project_id, i64::try_from(limit).unwrap_or(i64::MAX)],
-            |row| Ok(IndexedFileSnapshot {
-                relative_path: row.get(0)?,
-                size_bytes: row.get::<_, i64>(1)?.max(0) as u64,
-                modified_unix_ns: row.get::<_, i64>(2)?.max(0) as u64,
-                content_sha256: row.get(3)?,
-            }),
-        ).map_err(|error| StorageError::sqlite("query bounded project files", error))?;
+            )
+            .map_err(|error| StorageError::sqlite("prepare bounded project files", error))?;
+        let rows = statement
+            .query_map(
+                params![project_id, i64::try_from(limit).unwrap_or(i64::MAX)],
+                |row| {
+                    Ok(IndexedFileSnapshot {
+                        relative_path: row.get(0)?,
+                        size_bytes: row.get::<_, i64>(1)?.max(0) as u64,
+                        modified_unix_ns: row.get::<_, i64>(2)?.max(0) as u64,
+                        content_sha256: row.get(3)?,
+                    })
+                },
+            )
+            .map_err(|error| StorageError::sqlite("query bounded project files", error))?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|error| StorageError::sqlite("decode bounded project files", error))
     }
@@ -1693,10 +1927,16 @@ impl RelayStorage {
             [project_id],
         )
         .map_err(|error| StorageError::sqlite("clear prior project dependencies", error))?;
-        tx.execute("DELETE FROM project_dependency_coverage WHERE project_id = ?1", [project_id])
-            .map_err(|error| StorageError::sqlite("clear prior parser coverage", error))?;
-        tx.execute("DELETE FROM project_dependency_edge_invalidations WHERE project_id = ?1", [project_id])
-            .map_err(|error| StorageError::sqlite("clear prior edge history", error))?;
+        tx.execute(
+            "DELETE FROM project_dependency_coverage WHERE project_id = ?1",
+            [project_id],
+        )
+        .map_err(|error| StorageError::sqlite("clear prior parser coverage", error))?;
+        tx.execute(
+            "DELETE FROM project_dependency_edge_invalidations WHERE project_id = ?1",
+            [project_id],
+        )
+        .map_err(|error| StorageError::sqlite("clear prior edge history", error))?;
 
         for file in files {
             tx.execute(
@@ -1828,7 +2068,9 @@ impl RelayStorage {
                        WHERE project_id = ?1 AND (source_path = ?2 OR target_path = ?2)",
                     params![project_id, path, next_generation],
                 )
-                .map_err(|error| StorageError::sqlite("record invalidated dependency edges", error))?;
+                .map_err(|error| {
+                    StorageError::sqlite("record invalidated dependency edges", error)
+                })?;
                 tx.execute(
                     "DELETE FROM project_dependency_coverage
                      WHERE project_id = ?1 AND source_path IN (
@@ -1837,13 +2079,17 @@ impl RelayStorage {
                      )",
                     params![project_id, path],
                 )
-                .map_err(|error| StorageError::sqlite("invalidate parser coverage for changed edge", error))?;
+                .map_err(|error| {
+                    StorageError::sqlite("invalidate parser coverage for changed edge", error)
+                })?;
                 tx.execute(
                     "DELETE FROM project_dependency_coverage
                      WHERE project_id = ?1 AND source_path = ?2",
                     params![project_id, path],
                 )
-                .map_err(|error| StorageError::sqlite("invalidate changed source parser coverage", error))?;
+                .map_err(|error| {
+                    StorageError::sqlite("invalidate changed source parser coverage", error)
+                })?;
                 tx.execute(
                     "DELETE FROM project_dependency_edges
                      WHERE project_id = ?1
@@ -2272,25 +2518,32 @@ impl RelayStorage {
         project_id: &str,
         limit: usize,
     ) -> Result<Vec<DependencyCoverageRecord>, StorageError> {
-        let mut statement = self.conn.prepare(
-            "SELECT project_id, source_path, source_sha256, producer_id,
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT project_id, source_path, source_sha256, producer_id,
                     producer_version, indexed_generation, configuration_revision, target_count
              FROM project_dependency_coverage WHERE project_id = ?1
              ORDER BY source_path, producer_id LIMIT ?2",
-        ).map_err(|error| StorageError::sqlite("prepare parser coverage list", error))?;
-        let rows = statement.query_map(
-            params![project_id, i64::try_from(limit).unwrap_or(i64::MAX)],
-            |row| Ok(DependencyCoverageRecord {
-                project_id: row.get(0)?,
-                source_path: row.get(1)?,
-                source_sha256: row.get(2)?,
-                producer_id: row.get(3)?,
-                producer_version: row.get(4)?,
-                indexed_generation: row.get(5)?,
-                configuration_revision: row.get(6)?,
-                target_count: row.get::<_, i64>(7)?.max(0) as u32,
-            }),
-        ).map_err(|error| StorageError::sqlite("query parser coverage", error))?;
+            )
+            .map_err(|error| StorageError::sqlite("prepare parser coverage list", error))?;
+        let rows = statement
+            .query_map(
+                params![project_id, i64::try_from(limit).unwrap_or(i64::MAX)],
+                |row| {
+                    Ok(DependencyCoverageRecord {
+                        project_id: row.get(0)?,
+                        source_path: row.get(1)?,
+                        source_sha256: row.get(2)?,
+                        producer_id: row.get(3)?,
+                        producer_version: row.get(4)?,
+                        indexed_generation: row.get(5)?,
+                        configuration_revision: row.get(6)?,
+                        target_count: row.get::<_, i64>(7)?.max(0) as u32,
+                    })
+                },
+            )
+            .map_err(|error| StorageError::sqlite("query parser coverage", error))?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|error| StorageError::sqlite("decode parser coverage", error))
     }
@@ -2301,25 +2554,36 @@ impl RelayStorage {
         after_generation: i64,
         limit: usize,
     ) -> Result<Vec<InvalidatedDependencyEdgeRecord>, StorageError> {
-        let mut statement = self.conn.prepare(
-            "SELECT project_id, generation, source_path, target_path, source_sha256,
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT project_id, generation, source_path, target_path, source_sha256,
                     producer_id, producer_version
              FROM project_dependency_edge_invalidations
              WHERE project_id = ?1 AND generation > ?2
              ORDER BY generation, source_path, target_path, producer_id LIMIT ?3",
-        ).map_err(|error| StorageError::sqlite("prepare dependency invalidation list", error))?;
-        let rows = statement.query_map(
-            params![project_id, after_generation, i64::try_from(limit).unwrap_or(i64::MAX)],
-            |row| Ok(InvalidatedDependencyEdgeRecord {
-                project_id: row.get(0)?,
-                generation: row.get(1)?,
-                source_path: row.get(2)?,
-                target_path: row.get(3)?,
-                source_sha256: row.get(4)?,
-                producer_id: row.get(5)?,
-                producer_version: row.get(6)?,
-            }),
-        ).map_err(|error| StorageError::sqlite("query dependency invalidations", error))?;
+            )
+            .map_err(|error| StorageError::sqlite("prepare dependency invalidation list", error))?;
+        let rows = statement
+            .query_map(
+                params![
+                    project_id,
+                    after_generation,
+                    i64::try_from(limit).unwrap_or(i64::MAX)
+                ],
+                |row| {
+                    Ok(InvalidatedDependencyEdgeRecord {
+                        project_id: row.get(0)?,
+                        generation: row.get(1)?,
+                        source_path: row.get(2)?,
+                        target_path: row.get(3)?,
+                        source_sha256: row.get(4)?,
+                        producer_id: row.get(5)?,
+                        producer_version: row.get(6)?,
+                    })
+                },
+            )
+            .map_err(|error| StorageError::sqlite("query dependency invalidations", error))?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|error| StorageError::sqlite("decode dependency invalidations", error))
     }
@@ -2334,29 +2598,48 @@ impl RelayStorage {
         let catalog_json = json_text(catalog)?;
         let catalog_sha256 = sha256_hex(catalog_json.as_bytes());
         let now = sqlite_now(&self.conn)?;
-        let tx = self.conn.unchecked_transaction()
+        let tx = self
+            .conn
+            .unchecked_transaction()
             .map_err(|error| StorageError::sqlite("begin check catalog update", error))?;
-        let index_generation: i64 = tx.query_row(
-            "SELECT generation FROM project_index_state WHERE project_id = ?1",
-            [project_id], |row| row.get(0),
-        ).optional().map_err(|error| StorageError::sqlite("read check catalog index generation", error))?
-            .ok_or_else(|| StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing"))?;
-        let configuration_revision: Option<i64> = tx.query_row(
-            "SELECT revision FROM project_configuration WHERE project_id = ?1",
-            [project_id], |row| row.get(0),
-        ).optional().map_err(|error| StorageError::sqlite("read check catalog configuration revision", error))?;
-        let current_revision: Option<i64> = tx.query_row(
-            "SELECT revision FROM project_check_catalog WHERE project_id = ?1",
-            [project_id], |row| row.get(0),
-        ).optional().map_err(|error| StorageError::sqlite("read check catalog revision", error))?;
+        let index_generation: i64 = tx
+            .query_row(
+                "SELECT generation FROM project_index_state WHERE project_id = ?1",
+                [project_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| StorageError::sqlite("read check catalog index generation", error))?
+            .ok_or_else(|| {
+                StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing")
+            })?;
+        let configuration_revision: Option<i64> = tx
+            .query_row(
+                "SELECT revision FROM project_configuration WHERE project_id = ?1",
+                [project_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| {
+                StorageError::sqlite("read check catalog configuration revision", error)
+            })?;
+        let current_revision: Option<i64> = tx
+            .query_row(
+                "SELECT revision FROM project_check_catalog WHERE project_id = ?1",
+                [project_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| StorageError::sqlite("read check catalog revision", error))?;
         if current_revision.unwrap_or(0) != expected_revision {
             return Err(StorageError::new(
                 "CHECK_CATALOG_CONFLICT",
                 "check catalog revision changed",
             ));
         }
-        let revision = expected_revision.checked_add(1)
-            .ok_or_else(|| StorageError::new("CHECK_CATALOG_CONFLICT", "check catalog revision exhausted"))?;
+        let revision = expected_revision.checked_add(1).ok_or_else(|| {
+            StorageError::new("CHECK_CATALOG_CONFLICT", "check catalog revision exhausted")
+        })?;
         tx.execute(
             "INSERT INTO project_check_catalog(project_id, revision, index_generation,
                configuration_revision, catalog_json, catalog_sha256, updated_at)
@@ -2368,42 +2651,59 @@ impl RelayStorage {
                catalog_json=excluded.catalog_json,
                catalog_sha256=excluded.catalog_sha256,
                updated_at=excluded.updated_at",
-            params![project_id, revision, index_generation, configuration_revision,
-                    catalog_json, catalog_sha256, now],
-        ).map_err(|error| StorageError::sqlite("write check catalog", error))?;
-        tx.commit().map_err(|error| StorageError::sqlite("commit check catalog update", error))?;
-        self.get_project_check_catalog(project_id)?.ok_or_else(||
-            StorageError::new("STORAGE_ERROR", "check catalog disappeared after update"))
+            params![
+                project_id,
+                revision,
+                index_generation,
+                configuration_revision,
+                catalog_json,
+                catalog_sha256,
+                now
+            ],
+        )
+        .map_err(|error| StorageError::sqlite("write check catalog", error))?;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit check catalog update", error))?;
+        self.get_project_check_catalog(project_id)?.ok_or_else(|| {
+            StorageError::new("STORAGE_ERROR", "check catalog disappeared after update")
+        })
     }
 
     pub fn get_project_check_catalog(
         &self,
         project_id: &str,
     ) -> Result<Option<ProjectCheckCatalogRecord>, StorageError> {
-        self.conn.query_row(
-            "SELECT project_id, revision, index_generation, configuration_revision,
+        self.conn
+            .query_row(
+                "SELECT project_id, revision, index_generation, configuration_revision,
                     catalog_json, catalog_sha256
              FROM project_check_catalog WHERE project_id = ?1",
-            [project_id],
-            |row| {
-                let catalog_json: String = row.get(4)?;
-                let catalog_sha256: String = row.get(5)?;
-                if sha256_hex(catalog_json.as_bytes()) != catalog_sha256 {
-                    return Err(rusqlite::Error::FromSqlConversionFailure(
-                        5, rusqlite::types::Type::Text,
-                        Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, "check catalog digest mismatch")),
-                    ));
-                }
-                Ok(ProjectCheckCatalogRecord {
-                    project_id: row.get(0)?,
-                    revision: row.get(1)?,
-                    index_generation: row.get(2)?,
-                    configuration_revision: row.get(3)?,
-                    catalog: parse_json(&catalog_json, 4)?,
-                    catalog_sha256,
-                })
-            },
-        ).optional().map_err(|error| StorageError::sqlite("read check catalog", error))
+                [project_id],
+                |row| {
+                    let catalog_json: String = row.get(4)?;
+                    let catalog_sha256: String = row.get(5)?;
+                    if sha256_hex(catalog_json.as_bytes()) != catalog_sha256 {
+                        return Err(rusqlite::Error::FromSqlConversionFailure(
+                            5,
+                            rusqlite::types::Type::Text,
+                            Box::new(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "check catalog digest mismatch",
+                            )),
+                        ));
+                    }
+                    Ok(ProjectCheckCatalogRecord {
+                        project_id: row.get(0)?,
+                        revision: row.get(1)?,
+                        index_generation: row.get(2)?,
+                        configuration_revision: row.get(3)?,
+                        catalog: parse_json(&catalog_json, 4)?,
+                        catalog_sha256,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|error| StorageError::sqlite("read check catalog", error))
     }
 
     pub fn project_plan_snapshot(
@@ -2413,30 +2713,285 @@ impl RelayStorage {
         max_items: usize,
     ) -> Result<ProjectPlanSnapshot, StorageError> {
         self.get_active_project(project_id)?;
-        let tx = self.conn.unchecked_transaction()
+        let tx = self
+            .conn
+            .unchecked_transaction()
             .map_err(|error| StorageError::sqlite("begin check plan snapshot", error))?;
-        let state = self.get_project_index_state(project_id)?
-            .ok_or_else(|| StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing"))?;
+        let state = self.get_project_index_state(project_id)?.ok_or_else(|| {
+            StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing")
+        })?;
         let configuration = self.get_project_configuration(project_id)?;
-        let catalog = self.get_project_check_catalog(project_id)?
-            .ok_or_else(|| StorageError::new("CHECK_CATALOG_MISSING", "project check catalog is missing"))?;
-        let changes = self.list_project_changes_since(project_id, after_generation, max_items + 1)?;
+        let catalog = self.get_project_check_catalog(project_id)?.ok_or_else(|| {
+            StorageError::new("CHECK_CATALOG_MISSING", "project check catalog is missing")
+        })?;
+        let changes =
+            self.list_project_changes_since(project_id, after_generation, max_items + 1)?;
         let edges = self.list_project_dependency_edges(project_id, None, max_items + 1)?;
-        let invalidations = self.list_project_dependency_invalidations_since(project_id, after_generation, max_items + 1)?;
+        let invalidations = self.list_project_dependency_invalidations_since(
+            project_id,
+            after_generation,
+            max_items + 1,
+        )?;
         let coverage = self.list_project_dependency_coverage(project_id, max_items + 1)?;
         let files = if state.file_count <= max_items as u64 {
             self.list_project_files_bounded(project_id, max_items + 1)?
         } else {
             Vec::new()
         };
-        let bounds_exceeded = state.file_count > max_items as u64 || files.len() > max_items
-            || changes.len() > max_items || edges.len() > max_items
-            || invalidations.len() > max_items || coverage.len() > max_items;
-        tx.commit().map_err(|error| StorageError::sqlite("commit check plan snapshot", error))?;
+        let bounds_exceeded = state.file_count > max_items as u64
+            || files.len() > max_items
+            || changes.len() > max_items
+            || edges.len() > max_items
+            || invalidations.len() > max_items
+            || coverage.len() > max_items;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit check plan snapshot", error))?;
         Ok(ProjectPlanSnapshot {
-            state, configuration, catalog, files, changes, edges,
-            invalidations, coverage, bounds_exceeded,
+            state,
+            configuration,
+            catalog,
+            files,
+            changes,
+            edges,
+            invalidations,
+            coverage,
+            bounds_exceeded,
         })
+    }
+
+    /// Commit every selected deterministic check result and the replay marker
+    /// in one SQLite transaction after rechecking the observed plan boundary.
+    pub fn commit_check_execution(
+        &self,
+        snapshot: &ProjectPlanSnapshot,
+        planned: &Value,
+        after_generation: i64,
+        prepared: &[PreparedCheckExecution],
+        producer_version: &str,
+        provenance: &Value,
+        trust: &str,
+    ) -> Result<Value, StorageError> {
+        let project_id = snapshot.state.project_id.as_str();
+        let plan_id = planned["plan_id"]
+            .as_str()
+            .ok_or_else(|| StorageError::new("CHECK_PLAN_CONFLICT", "plan identity is missing"))?;
+        let suffix = plan_id
+            .strip_prefix("PLAN-")
+            .filter(|value| value.len() == 32 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+            .ok_or_else(|| StorageError::new("CHECK_PLAN_CONFLICT", "plan identity is invalid"))?;
+        let selected = planned["checks"]
+            .as_array()
+            .ok_or_else(|| StorageError::new("CHECK_PLAN_CONFLICT", "plan checks are missing"))?;
+        if selected.len() != prepared.len()
+            || prepared.len() > 128
+            || selected.iter().zip(prepared).any(|(entry, check)| {
+                entry["check_id"] != check.check_id
+                    || entry["planned_check_id"] != check.planned_check_id
+                    || (check.status == "untested") != check.result_payload.is_none()
+            })
+        {
+            return Err(StorageError::new(
+                "CHECK_PLAN_CONFLICT",
+                "prepared checks differ from plan",
+            ));
+        }
+        let job_id = format!("JOB-{suffix}");
+        let tx = self
+            .conn
+            .unchecked_transaction()
+            .map_err(|error| StorageError::sqlite("begin check execution", error))?;
+        let existing: Option<(String, String, String)> = tx
+            .query_row(
+                "SELECT project_id, command, checkpoint_json FROM jobs WHERE id = ?1",
+                [&job_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()
+            .map_err(|error| StorageError::sqlite("read check execution replay", error))?;
+        if let Some((owner, command, checkpoint_json)) = existing {
+            let mut response: Value = serde_json::from_str(&checkpoint_json).map_err(|_| {
+                StorageError::new("STORAGE_ERROR", "check execution replay is damaged")
+            })?;
+            if owner != project_id
+                || command != "automation.checks.execute"
+                || response["plan_id"] != plan_id
+            {
+                return Err(StorageError::new(
+                    "CHECK_PLAN_CONFLICT",
+                    "check execution identity conflicts",
+                ));
+            }
+            response["replayed"] = json!(true);
+            tx.commit()
+                .map_err(|error| StorageError::sqlite("finish check execution replay", error))?;
+            return Ok(response);
+        }
+        let guard: Option<(
+            String,
+            i64,
+            i64,
+            String,
+            bool,
+            i64,
+            i64,
+            String,
+            Option<i64>,
+            Option<i64>,
+        )> = tx
+            .query_row(
+                "SELECT p.lifecycle_state, i.generation, i.baseline_generation, i.status,
+                        i.content_verification_required, c.revision, c.index_generation,
+                        c.catalog_sha256, c.configuration_revision,
+                        (SELECT revision FROM project_configuration WHERE project_id = p.id)
+                 FROM projects p
+                 JOIN project_index_state i ON i.project_id = p.id
+                 JOIN project_check_catalog c ON c.project_id = p.id
+                 WHERE p.id = ?1",
+                [project_id],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                        row.get(6)?,
+                        row.get(7)?,
+                        row.get(8)?,
+                        row.get(9)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|error| StorageError::sqlite("read check execution guard", error))?;
+        let Some((
+            lifecycle,
+            generation,
+            baseline,
+            index_status,
+            verification_required,
+            catalog_revision,
+            catalog_index_generation,
+            catalog_sha256,
+            catalog_configuration_revision,
+            live_configuration_revision,
+        )) = guard
+        else {
+            return Err(StorageError::new(
+                "CHECK_PLAN_CONFLICT",
+                "check execution state is missing",
+            ));
+        };
+        if lifecycle != "active"
+            || index_status != "ready"
+            || verification_required
+            || generation != snapshot.state.generation
+            || after_generation < baseline
+            || catalog_revision != snapshot.catalog.revision
+            || catalog_index_generation != snapshot.catalog.index_generation
+            || catalog_sha256 != snapshot.catalog.catalog_sha256
+            || catalog_configuration_revision != snapshot.catalog.configuration_revision
+            || live_configuration_revision
+                != snapshot.configuration.as_ref().map(|row| row.revision)
+            || prepared.len() > 128
+        {
+            return Err(StorageError::new(
+                "CHECK_PLAN_CONFLICT",
+                "check execution plan changed",
+            ));
+        }
+        let now = sqlite_now(&self.conn)?;
+        let provenance_json = json_text(provenance)?;
+        let mut checks = Vec::with_capacity(prepared.len());
+        let mut passed_count = 0usize;
+        let mut failed_count = 0usize;
+        let mut untested_count = 0usize;
+        for check in prepared {
+            let result_id = if let Some(payload) = &check.result_payload {
+                let id = opaque_id("RES");
+                let payload_json = json_text(payload)?;
+                if payload_json.len() > 4096 {
+                    return Err(StorageError::new(
+                        "CHECK_RESULT_TOO_LARGE",
+                        "check result exceeds limit",
+                    ));
+                }
+                let payload_sha256 = sha256_hex(payload_json.as_bytes());
+                tx.execute(
+                    "INSERT INTO results(id, project_id, kind, schema_version,
+                        producer_version, payload_json, payload_sha256, created_at,
+                        provenance_json, trust)
+                     VALUES (?1, ?2, 'DECLARED_INDEX_CHECK', 1, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    params![
+                        id,
+                        project_id,
+                        producer_version,
+                        payload_json,
+                        payload_sha256,
+                        now,
+                        provenance_json,
+                        trust
+                    ],
+                )
+                .map_err(|error| StorageError::sqlite("write check result", error))?;
+                Some(id)
+            } else {
+                None
+            };
+            match check.status {
+                "passed" => passed_count += 1,
+                "failed" => failed_count += 1,
+                "untested" => untested_count += 1,
+                _ => {
+                    return Err(StorageError::new(
+                        "STORAGE_ERROR",
+                        "check status is invalid",
+                    ));
+                }
+            }
+            checks.push(json!({
+                "check_id": check.check_id,
+                "planned_check_id": check.planned_check_id,
+                "status": check.status,
+                "reason_code": check.reason_code,
+                "result_id": result_id,
+            }));
+        }
+        let response = json!({
+            "project_id": project_id,
+            "plan_id": plan_id,
+            "job_id": job_id,
+            "index_generation": generation,
+            "evidence_scope": "indexed_snapshot_at_generation",
+            "mode": planned["mode"],
+            "fallback_reason": planned["fallback_reason"],
+            "selected_check_count": prepared.len(),
+            "passed_count": passed_count,
+            "failed_count": failed_count,
+            "untested_count": untested_count,
+            "replayed": false,
+            "checks": checks,
+        });
+        let checkpoint_json = json_text(&response)?;
+        tx.execute(
+            "INSERT INTO jobs(id, project_id, command, state, checkpoint_json,
+                result_id, created_at, updated_at, provenance_json, trust)
+             VALUES (?1, ?2, 'automation.checks.execute', 'completed', ?3,
+                NULL, ?4, ?4, ?5, ?6)",
+            params![
+                job_id,
+                project_id,
+                checkpoint_json,
+                now,
+                provenance_json,
+                trust
+            ],
+        )
+        .map_err(|error| StorageError::sqlite("write check execution job", error))?;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit check execution", error))?;
+        Ok(response)
     }
 
     pub fn put_result(
@@ -2683,18 +3238,28 @@ impl RelayStorage {
         project_id: Option<&str>,
         limit: usize,
     ) -> Result<Vec<JobDescription>, StorageError> {
-        let mut statement = self.conn.prepare(
-            "SELECT id, project_id, command, state, result_id, trust, created_at, updated_at
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT id, project_id, command, state, result_id, trust, created_at, updated_at
              FROM jobs WHERE (?1 IS NULL OR project_id = ?1)
              ORDER BY updated_at DESC, id DESC LIMIT ?2",
-        ).map_err(|error| StorageError::sqlite("prepare job list", error))?;
-        let rows = statement.query_map(params![project_id, limit as i64], |row| {
-            Ok(JobDescription {
-                id: row.get(0)?, project_id: row.get(1)?, command: row.get(2)?,
-                state: row.get(3)?, result_id: row.get(4)?, trust: row.get(5)?,
-                created_at: row.get(6)?, updated_at: row.get(7)?,
+            )
+            .map_err(|error| StorageError::sqlite("prepare job list", error))?;
+        let rows = statement
+            .query_map(params![project_id, limit as i64], |row| {
+                Ok(JobDescription {
+                    id: row.get(0)?,
+                    project_id: row.get(1)?,
+                    command: row.get(2)?,
+                    state: row.get(3)?,
+                    result_id: row.get(4)?,
+                    trust: row.get(5)?,
+                    created_at: row.get(6)?,
+                    updated_at: row.get(7)?,
+                })
             })
-        }).map_err(|error| StorageError::sqlite("query job list", error))?;
+            .map_err(|error| StorageError::sqlite("query job list", error))?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|error| StorageError::sqlite("decode job list", error))
     }
@@ -3323,11 +3888,24 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
         let storage = RelayStorage::open(&path).unwrap();
-        storage.register_project(Some("PRJ-life"), "Fixture", "file:///fixture").unwrap();
-        assert_eq!(storage.replace_project_baseline("PRJ-life", &[], 0).unwrap().status, "ready");
-        storage.set_project_lifecycle("PRJ-life", "archived").unwrap();
+        storage
+            .register_project(Some("PRJ-life"), "Fixture", "file:///fixture")
+            .unwrap();
+        assert_eq!(
+            storage
+                .replace_project_baseline("PRJ-life", &[], 0)
+                .unwrap()
+                .status,
+            "ready"
+        );
+        storage
+            .set_project_lifecycle("PRJ-life", "archived")
+            .unwrap();
         storage.set_project_lifecycle("PRJ-life", "active").unwrap();
-        let state = storage.get_project_index_state("PRJ-life").unwrap().unwrap();
+        let state = storage
+            .get_project_index_state("PRJ-life")
+            .unwrap()
+            .unwrap();
         assert_eq!(state.status, "stale");
         assert!(state.content_verification_required);
         drop(storage);
@@ -3340,26 +3918,109 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
         let storage = RelayStorage::open(&path).unwrap();
-        storage.register_project(Some("PRJ-a"), "A", "file:///a").unwrap();
-        let stale = storage.plan_project_removal("PRJ-a", "requester", "client", None).unwrap();
-        storage.register_project(Some("PRJ-a"), "A2", "file:///a2").unwrap();
-        assert_eq!(storage.get_project_removal_approval("PRJ-a", &stale.id).unwrap().state, "stale");
-        let rejected = storage.plan_project_removal("PRJ-a", "requester", "client", None).unwrap();
-        assert_eq!(storage.decide_project_removal("PRJ-a", &rejected.id, false, "approver", "client").unwrap().state, "rejected");
-        assert_eq!(storage.execute_project_removal("PRJ-a", &rejected.id, "executor", "client").unwrap_err().code, "APPROVAL_STATE_CONFLICT");
-        let expired = storage.plan_project_removal("PRJ-a", "requester", "client", None).unwrap();
-        storage.conn.execute("UPDATE project_removal_approvals SET expires_at_ms = 1 WHERE id = ?1", [&expired.id]).unwrap();
-        assert_eq!(storage.get_project_removal_approval("PRJ-a", &expired.id).unwrap().state, "expired");
-        assert_eq!(storage.decide_project_removal("PRJ-a", &expired.id, true, "approver", "client").unwrap().state, "expired");
-        let approved = storage.plan_project_removal("PRJ-a", "requester", "client", Some("owner")).unwrap();
-        assert_eq!(storage.decide_project_removal("PRJ-a", &approved.id, true, "approver", "client").unwrap().state, "approved_pending_execution");
+        storage
+            .register_project(Some("PRJ-a"), "A", "file:///a")
+            .unwrap();
+        let stale = storage
+            .plan_project_removal("PRJ-a", "requester", "client", None)
+            .unwrap();
+        storage
+            .register_project(Some("PRJ-a"), "A2", "file:///a2")
+            .unwrap();
+        assert_eq!(
+            storage
+                .get_project_removal_approval("PRJ-a", &stale.id)
+                .unwrap()
+                .state,
+            "stale"
+        );
+        let rejected = storage
+            .plan_project_removal("PRJ-a", "requester", "client", None)
+            .unwrap();
+        assert_eq!(
+            storage
+                .decide_project_removal("PRJ-a", &rejected.id, false, "approver", "client")
+                .unwrap()
+                .state,
+            "rejected"
+        );
+        assert_eq!(
+            storage
+                .execute_project_removal("PRJ-a", &rejected.id, "executor", "client")
+                .unwrap_err()
+                .code,
+            "APPROVAL_STATE_CONFLICT"
+        );
+        let expired = storage
+            .plan_project_removal("PRJ-a", "requester", "client", None)
+            .unwrap();
+        storage
+            .conn
+            .execute(
+                "UPDATE project_removal_approvals SET expires_at_ms = 1 WHERE id = ?1",
+                [&expired.id],
+            )
+            .unwrap();
+        assert_eq!(
+            storage
+                .get_project_removal_approval("PRJ-a", &expired.id)
+                .unwrap()
+                .state,
+            "expired"
+        );
+        assert_eq!(
+            storage
+                .decide_project_removal("PRJ-a", &expired.id, true, "approver", "client")
+                .unwrap()
+                .state,
+            "expired"
+        );
+        let approved = storage
+            .plan_project_removal("PRJ-a", "requester", "client", Some("owner"))
+            .unwrap();
+        assert_eq!(
+            storage
+                .decide_project_removal("PRJ-a", &approved.id, true, "approver", "client")
+                .unwrap()
+                .state,
+            "approved_pending_execution"
+        );
         drop(storage);
         let reopened = RelayStorage::open(&path).unwrap();
-        assert_eq!(reopened.get_project_removal_approval("PRJ-a", &approved.id).unwrap().state, "approved_pending_execution");
-        assert!(reopened.execute_project_removal("PRJ-a", &approved.id, "executor", "client").unwrap().1);
-        assert!(!reopened.execute_project_removal("PRJ-a", &approved.id, "executor", "client").unwrap().1);
-        assert_eq!(reopened.get_project("PRJ-a").unwrap().unwrap().lifecycle_state, "removed");
-        assert_eq!(reopened.get_project_removal_approval("PRJ-a", &approved.id).unwrap().state, "executed");
+        assert_eq!(
+            reopened
+                .get_project_removal_approval("PRJ-a", &approved.id)
+                .unwrap()
+                .state,
+            "approved_pending_execution"
+        );
+        assert!(
+            reopened
+                .execute_project_removal("PRJ-a", &approved.id, "executor", "client")
+                .unwrap()
+                .1
+        );
+        assert!(
+            !reopened
+                .execute_project_removal("PRJ-a", &approved.id, "executor", "client")
+                .unwrap()
+                .1
+        );
+        assert_eq!(
+            reopened
+                .get_project("PRJ-a")
+                .unwrap()
+                .unwrap()
+                .lifecycle_state,
+            "removed"
+        );
+        assert_eq!(
+            reopened
+                .get_project_removal_approval("PRJ-a", &approved.id)
+                .unwrap()
+                .state,
+            "executed"
+        );
         drop(reopened);
         fs::remove_dir_all(dir).unwrap();
     }
@@ -3370,29 +4031,110 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
         let storage = RelayStorage::open(&path).unwrap();
-        storage.register_project(Some("PRJ-life"), "Fixture", "file:///fixture").unwrap();
-        let result = storage.put_result(
-            Some("PRJ-life"), "TEST", &json!({ "value": 7 }), "0.1.0", &json!({}), "local",
-        ).unwrap();
-        let job = storage.checkpoint_job(
-            Some("JOB-life"), Some("PRJ-life"), "fixture.work", "DONE",
-            &json!({ "step": 1 }), Some(&result.id), &json!({}), "local",
-        ).unwrap();
-        assert_eq!(storage.set_project_lifecycle("PRJ-life", "removed").unwrap_err().code, "VALIDATION_FAILED");
-        let plan = storage.plan_project_removal("PRJ-life", "requester", "client", None).unwrap();
-        storage.decide_project_removal("PRJ-life", &plan.id, true, "approver", "client").unwrap();
-        assert!(storage.execute_project_removal("PRJ-life", &plan.id, "executor", "client").unwrap().1);
-        assert!(!storage.execute_project_removal("PRJ-life", &plan.id, "executor", "client").unwrap().1);
+        storage
+            .register_project(Some("PRJ-life"), "Fixture", "file:///fixture")
+            .unwrap();
+        let result = storage
+            .put_result(
+                Some("PRJ-life"),
+                "TEST",
+                &json!({ "value": 7 }),
+                "0.1.0",
+                &json!({}),
+                "local",
+            )
+            .unwrap();
+        let job = storage
+            .checkpoint_job(
+                Some("JOB-life"),
+                Some("PRJ-life"),
+                "fixture.work",
+                "DONE",
+                &json!({ "step": 1 }),
+                Some(&result.id),
+                &json!({}),
+                "local",
+            )
+            .unwrap();
+        assert_eq!(
+            storage
+                .set_project_lifecycle("PRJ-life", "removed")
+                .unwrap_err()
+                .code,
+            "VALIDATION_FAILED"
+        );
+        let plan = storage
+            .plan_project_removal("PRJ-life", "requester", "client", None)
+            .unwrap();
+        storage
+            .decide_project_removal("PRJ-life", &plan.id, true, "approver", "client")
+            .unwrap();
+        assert!(
+            storage
+                .execute_project_removal("PRJ-life", &plan.id, "executor", "client")
+                .unwrap()
+                .1
+        );
+        assert!(
+            !storage
+                .execute_project_removal("PRJ-life", &plan.id, "executor", "client")
+                .unwrap()
+                .1
+        );
         assert!(storage.list_projects().unwrap().is_empty());
-        assert_eq!(storage.get_result(&result.id).unwrap().unwrap().project_id.as_deref(), Some("PRJ-life"));
-        assert_eq!(storage.get_job(&job.id).unwrap().unwrap().result_id.as_deref(), Some(result.id.as_str()));
-        assert_eq!(storage.put_result(Some("PRJ-life"), "TEST", &json!({}), "0.1.0", &json!({}), "local").unwrap_err().code, "PROJECT_NOT_FOUND");
+        assert_eq!(
+            storage
+                .get_result(&result.id)
+                .unwrap()
+                .unwrap()
+                .project_id
+                .as_deref(),
+            Some("PRJ-life")
+        );
+        assert_eq!(
+            storage
+                .get_job(&job.id)
+                .unwrap()
+                .unwrap()
+                .result_id
+                .as_deref(),
+            Some(result.id.as_str())
+        );
+        assert_eq!(
+            storage
+                .put_result(
+                    Some("PRJ-life"),
+                    "TEST",
+                    &json!({}),
+                    "0.1.0",
+                    &json!({}),
+                    "local"
+                )
+                .unwrap_err()
+                .code,
+            "PROJECT_NOT_FOUND"
+        );
         drop(storage);
 
         let reopened = RelayStorage::open(&path).unwrap();
         assert_eq!(reopened.schema_version().unwrap(), STORAGE_SCHEMA_VERSION);
-        assert_eq!(reopened.get_project("PRJ-life").unwrap().unwrap().lifecycle_state, "removed");
-        assert_eq!(reopened.get_job(&job.id).unwrap().unwrap().project_id.as_deref(), Some("PRJ-life"));
+        assert_eq!(
+            reopened
+                .get_project("PRJ-life")
+                .unwrap()
+                .unwrap()
+                .lifecycle_state,
+            "removed"
+        );
+        assert_eq!(
+            reopened
+                .get_job(&job.id)
+                .unwrap()
+                .unwrap()
+                .project_id
+                .as_deref(),
+            Some("PRJ-life")
+        );
         drop(reopened);
         fs::remove_dir_all(dir).unwrap();
     }
@@ -3479,12 +4221,22 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let storage = RelayStorage::open(dir.join("relay.sqlite3")).unwrap();
         let result = storage
-            .put_result(None, "TEST", &json!({ "status": "original" }), "0.1.0", &json!({}), "local")
+            .put_result(
+                None,
+                "TEST",
+                &json!({ "status": "original" }),
+                "0.1.0",
+                &json!({}),
+                "local",
+            )
             .unwrap();
-        storage.conn.execute(
-            "UPDATE results SET payload_json = ?1 WHERE id = ?2",
-            rusqlite::params![r#"{"status":"changed"}"#, &result.id],
-        ).unwrap();
+        storage
+            .conn
+            .execute(
+                "UPDATE results SET payload_json = ?1 WHERE id = ?2",
+                rusqlite::params![r#"{"status":"changed"}"#, &result.id],
+            )
+            .unwrap();
         assert!(storage.get_result(&result.id).is_err());
         drop(storage);
         fs::remove_dir_all(dir).unwrap();
@@ -3972,26 +4724,59 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
         let storage = RelayStorage::open(&path).unwrap();
-        storage.register_project(Some("PRJ-coverage"), "Coverage", "file:///fixture").unwrap();
+        storage
+            .register_project(Some("PRJ-coverage"), "Coverage", "file:///fixture")
+            .unwrap();
         let files = [
-            IndexedFileSnapshot { relative_path: "source.txt".into(), size_bytes: 1, modified_unix_ns: 1, content_sha256: "a".repeat(64) },
-            IndexedFileSnapshot { relative_path: "empty.txt".into(), size_bytes: 1, modified_unix_ns: 1, content_sha256: "b".repeat(64) },
-            IndexedFileSnapshot { relative_path: "target.txt".into(), size_bytes: 1, modified_unix_ns: 1, content_sha256: "c".repeat(64) },
+            IndexedFileSnapshot {
+                relative_path: "source.txt".into(),
+                size_bytes: 1,
+                modified_unix_ns: 1,
+                content_sha256: "a".repeat(64),
+            },
+            IndexedFileSnapshot {
+                relative_path: "empty.txt".into(),
+                size_bytes: 1,
+                modified_unix_ns: 1,
+                content_sha256: "b".repeat(64),
+            },
+            IndexedFileSnapshot {
+                relative_path: "target.txt".into(),
+                size_bytes: 1,
+                modified_unix_ns: 1,
+                content_sha256: "c".repeat(64),
+            },
         ];
-        storage.replace_project_baseline("PRJ-coverage", &files, 3).unwrap();
-        storage.replace_project_dependencies(DependencyReplacement {
-            project_id: "PRJ-coverage", expected_generation: 1,
-            source_path: "source.txt", expected_source_sha256: &files[0].content_sha256,
-            producer_id: "fixture", producer_version: "1", configuration_guard: None,
-            targets: &["target.txt".to_string()],
-        }).unwrap();
-        storage.replace_project_dependencies(DependencyReplacement {
-            project_id: "PRJ-coverage", expected_generation: 1,
-            source_path: "empty.txt", expected_source_sha256: &files[1].content_sha256,
-            producer_id: "fixture", producer_version: "1", configuration_guard: None,
-            targets: &[],
-        }).unwrap();
-        let coverage = storage.list_project_dependency_coverage("PRJ-coverage", 10).unwrap();
+        storage
+            .replace_project_baseline("PRJ-coverage", &files, 3)
+            .unwrap();
+        storage
+            .replace_project_dependencies(DependencyReplacement {
+                project_id: "PRJ-coverage",
+                expected_generation: 1,
+                source_path: "source.txt",
+                expected_source_sha256: &files[0].content_sha256,
+                producer_id: "fixture",
+                producer_version: "1",
+                configuration_guard: None,
+                targets: &["target.txt".to_string()],
+            })
+            .unwrap();
+        storage
+            .replace_project_dependencies(DependencyReplacement {
+                project_id: "PRJ-coverage",
+                expected_generation: 1,
+                source_path: "empty.txt",
+                expected_source_sha256: &files[1].content_sha256,
+                producer_id: "fixture",
+                producer_version: "1",
+                configuration_guard: None,
+                targets: &[],
+            })
+            .unwrap();
+        let coverage = storage
+            .list_project_dependency_coverage("PRJ-coverage", 10)
+            .unwrap();
         assert_eq!(coverage.len(), 2);
         assert_eq!(coverage[0].source_path, "empty.txt");
         assert_eq!(coverage[0].target_count, 0);
@@ -3999,32 +4784,75 @@ mod tests {
         drop(storage);
 
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.list_project_dependency_coverage("PRJ-coverage", 10).unwrap().len(), 2);
-        let changed_target = IndexedFileSnapshot { relative_path: "target.txt".into(), size_bytes: 2, modified_unix_ns: 2, content_sha256: "d".repeat(64) };
-        storage.apply_project_reconciliation(ProjectIndexCommit {
-            project_id: "PRJ-coverage", expected_generation: 1,
-            touched_files: &[changed_target.clone()],
-            changes: &[IndexChange {
-                change_kind: "modified".into(), relative_path: "target.txt".into(),
-                previous_path: None, before_sha256: Some(files[2].content_sha256.clone()),
-                after_sha256: Some(changed_target.content_sha256.clone()),
-            }],
-            file_count: 3, total_bytes: 4, mode: IndexCommitMode::Authoritative,
-            content_verified: false,
-        }).unwrap();
-        let coverage = storage.list_project_dependency_coverage("PRJ-coverage", 10).unwrap();
+        assert_eq!(
+            storage
+                .list_project_dependency_coverage("PRJ-coverage", 10)
+                .unwrap()
+                .len(),
+            2
+        );
+        let changed_target = IndexedFileSnapshot {
+            relative_path: "target.txt".into(),
+            size_bytes: 2,
+            modified_unix_ns: 2,
+            content_sha256: "d".repeat(64),
+        };
+        storage
+            .apply_project_reconciliation(ProjectIndexCommit {
+                project_id: "PRJ-coverage",
+                expected_generation: 1,
+                touched_files: &[changed_target.clone()],
+                changes: &[IndexChange {
+                    change_kind: "modified".into(),
+                    relative_path: "target.txt".into(),
+                    previous_path: None,
+                    before_sha256: Some(files[2].content_sha256.clone()),
+                    after_sha256: Some(changed_target.content_sha256.clone()),
+                }],
+                file_count: 3,
+                total_bytes: 4,
+                mode: IndexCommitMode::Authoritative,
+                content_verified: false,
+            })
+            .unwrap();
+        let coverage = storage
+            .list_project_dependency_coverage("PRJ-coverage", 10)
+            .unwrap();
         assert_eq!(coverage.len(), 1);
         assert_eq!(coverage[0].source_path, "empty.txt");
-        let history = storage.list_project_dependency_invalidations_since("PRJ-coverage", 1, 10).unwrap();
+        let history = storage
+            .list_project_dependency_invalidations_since("PRJ-coverage", 1, 10)
+            .unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].generation, 2);
         assert_eq!(history[0].source_path, "source.txt");
         assert_eq!(history[0].target_path, "target.txt");
         storage.mark_project_index_stale("PRJ-coverage").unwrap();
-        assert!(storage.list_project_dependency_coverage("PRJ-coverage", 10).unwrap().is_empty());
-        storage.replace_project_baseline("PRJ-coverage", &[files[0].clone(), files[1].clone(), changed_target], 4).unwrap();
-        assert!(storage.list_project_dependency_coverage("PRJ-coverage", 10).unwrap().is_empty());
-        assert!(storage.list_project_dependency_invalidations_since("PRJ-coverage", 0, 10).unwrap().is_empty());
+        assert!(
+            storage
+                .list_project_dependency_coverage("PRJ-coverage", 10)
+                .unwrap()
+                .is_empty()
+        );
+        storage
+            .replace_project_baseline(
+                "PRJ-coverage",
+                &[files[0].clone(), files[1].clone(), changed_target],
+                4,
+            )
+            .unwrap();
+        assert!(
+            storage
+                .list_project_dependency_coverage("PRJ-coverage", 10)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            storage
+                .list_project_dependency_invalidations_since("PRJ-coverage", 0, 10)
+                .unwrap()
+                .is_empty()
+        );
         drop(storage);
         fs::remove_dir_all(dir).unwrap();
     }
@@ -4035,23 +4863,47 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
         let storage = RelayStorage::open(&path).unwrap();
-        storage.register_project(Some("PRJ-checks"), "Checks", "file:///fixture").unwrap();
-        storage.replace_project_baseline("PRJ-checks", &[], 0).unwrap();
+        storage
+            .register_project(Some("PRJ-checks"), "Checks", "file:///fixture")
+            .unwrap();
+        storage
+            .replace_project_baseline("PRJ-checks", &[], 0)
+            .unwrap();
         let catalog = serde_json::json!({"format_version": 1, "checks": []});
-        let first = storage.put_project_check_catalog("PRJ-checks", 0, &catalog).unwrap();
+        let first = storage
+            .put_project_check_catalog("PRJ-checks", 0, &catalog)
+            .unwrap();
         assert_eq!(first.revision, 1);
         assert_eq!(first.index_generation, 1);
         assert_eq!(first.catalog, catalog);
-        assert_eq!(storage.put_project_check_catalog("PRJ-checks", 0, &catalog)
-            .unwrap_err().code, "CHECK_CATALOG_CONFLICT");
+        assert_eq!(
+            storage
+                .put_project_check_catalog("PRJ-checks", 0, &catalog)
+                .unwrap_err()
+                .code,
+            "CHECK_CATALOG_CONFLICT"
+        );
         drop(storage);
 
         let reopened = RelayStorage::open(&path).unwrap();
-        assert_eq!(reopened.get_project_check_catalog("PRJ-checks").unwrap().unwrap().revision, 1);
-        reopened.conn.execute(
-            "UPDATE project_check_catalog SET catalog_json = ?1 WHERE project_id = ?2",
-            params![r#"{"format_version":1,"checks":[{"id":"changed"}]}"#, "PRJ-checks"],
-        ).unwrap();
+        assert_eq!(
+            reopened
+                .get_project_check_catalog("PRJ-checks")
+                .unwrap()
+                .unwrap()
+                .revision,
+            1
+        );
+        reopened
+            .conn
+            .execute(
+                "UPDATE project_check_catalog SET catalog_json = ?1 WHERE project_id = ?2",
+                params![
+                    r#"{"format_version":1,"checks":[{"id":"changed"}]}"#,
+                    "PRJ-checks"
+                ],
+            )
+            .unwrap();
         assert!(reopened.get_project_check_catalog("PRJ-checks").is_err());
         drop(reopened);
         fs::remove_dir_all(dir).unwrap();

@@ -3,7 +3,7 @@
   "relay_version_family": "0.1",
   "registry_format": 1,
   "registry_id": "dsi.relay.commands",
-  "registry_sha256": "176f297ed4199524b2a2c4103e8be81f87cee847d2f9fa3586ec32df5fb6dbe5",
+  "registry_sha256": "7935c78615503f168881bd1410d7ae4cdc7600a29f9207882a7123396ecb774c",
   "required_capabilities": [
     "system.status@1",
     "system.doctor@1",

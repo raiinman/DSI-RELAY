@@ -236,7 +236,7 @@ Exit criteria:
 
 ## Phase 4 — Context and cost engine
 
-Status: Active foundation — `result.describe` provides a project-scoped metadata-only lookup, and `result.context` selects exact scalar facts from an authorized durable result within a requested byte budget. `context.compile` combines up to eight authorized results for one project, preserves each source ID and freshness metadata, and reports same-kind exact-fact conflicts without choosing a winner. Required facts or conflicts that do not fit fail explicitly. A deterministic Context Gauntlet fixture measures exact retention and serialized bytes for stored results. Full task/state/decision compilation, model/client cost benchmarks, and Phase 4 exit criteria remain open. Earlier evidence: `PHASE4_RESULT_DESCRIPTION_EVIDENCE.md`, `PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md`, and `PHASE4_CONTEXT_GAUNTLET_FIRST_FIXTURE.md`.
+Status: Active foundation — `result.describe` provides a project-scoped metadata-only lookup, and `result.context` selects exact scalar facts from an authorized durable result within a requested byte budget. `context.compile` combines up to eight authorized results for one project, preserves each source ID and freshness metadata, and reports same-kind exact-fact conflicts without choosing a winner. Required facts or conflicts that do not fit fail explicitly. An eight-entry in-memory cache reuses identical authorized compilations after every source is reloaded and digest-checked; usage/status counters distinguish actual hits, misses, and skipped fact collection. Its runtime benefit has not been measured and it makes no token-savings claim. A deterministic Context Gauntlet fixture measures exact retention and serialized bytes for stored results. Full task/state/decision compilation, model/client cost benchmarks, and Phase 4 exit criteria remain open. Earlier evidence: `PHASE4_RESULT_DESCRIPTION_EVIDENCE.md`, `PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md`, and `PHASE4_CONTEXT_GAUNTLET_FIRST_FIXTURE.md`.
 
 Build:
 
@@ -332,7 +332,7 @@ Exit criteria:
 
 ## Phase 8 — Asset adapters
 
-Status: Active early foundation — a local asset manifest validator checks bounded source/export links and lineage through CLI/dashboard. The dashboard accepts a bounded local manifest and presents compact findings and lineage counts. Shared `assets.impact.analyze` maps changed project-relative paths to affected declared assets and related dependencies without exposing paths, including files now missing or stale. Krita declared formats can be inspected through the same paths. The bounded Blender headless mesh checker is routed through an authorized shared command and CLI for project-relative `.blend` files; native Blender workflow remains untested until a real installation and file are exercised. Native Krita and UEFN execution, export/build automation, and integrated acceptance remain open.
+Status: Active early foundation — a local asset manifest validator checks bounded source/export links and lineage through CLI/dashboard. The dashboard accepts a bounded local manifest and presents compact findings and lineage counts. Shared `assets.impact.analyze` maps changed project-relative paths to affected declared assets and related dependencies without exposing paths, including files now missing or stale. Krita declared formats can be inspected through the same paths. The bounded Blender headless mesh checker is routed through an authorized shared command and CLI for project-relative `.blend` files; native Blender workflow remains untested until a real installation and file are exercised. A fixed CLI-only Krita command can export one project-local `.kra` to a new `.png` through Krita's documented command line, with bounded process, create-only publication, and source/output SHA-256 observations. Native Krita execution, UEFN asset integration, durable build records, and integrated acceptance remain UNTESTED/open until real app sessions are available.
 
 Build:
 
@@ -352,7 +352,7 @@ Exit criteria:
 
 ## Phase 9 — Skills and remote clients
 
-Status: Active early foundation — a compact local `relay-core` skill, command reference generated from the shared registry, and version/capability-checking PowerShell wrapper exist. A runnable authenticated loopback gateway forwards only bounded registry discovery, with a protected per-user token and local probe/list/describe commands. A live coding-agent workflow, public remote access, ChatGPT-compatible client, and context-overhead comparison remain open.
+Status: Active early foundation — a compact local `relay-core` skill, command reference generated from the shared registry, and version/capability-checking PowerShell wrapper exist. A runnable authenticated loopback gateway forwards only bounded registry discovery, with a protected per-user token and local probe/list/describe commands. Its local `/mcp` endpoint implements the exact stateless `2026-07-28` discovery and registry-tool subset; older handshake MCP clients are explicitly unsupported. `remote_client_status: untested`. A live coding-agent workflow, external client token handoff, public remote access, ChatGPT-compatible client, and context-overhead comparison remain open.
 
 Build:
 
@@ -396,7 +396,7 @@ Exit criteria:
 
 ## Phase 11 — Public hardening
 
-Status: Open — MIT license and RAiiNMAN credit are selected in the development line; the public binary remains an unpublished draft. Unsigned local staging and guarded fixture-only install/update/uninstall scripts exist, with signing, trusted schema discovery, actual per-user installation, and clean-account installation still open. A bounded integrated-report model exists, but no full integrated run or public acceptance has occurred.
+Status: Open — MIT license and RAiiNMAN credit are selected in the development line; the public binary remains an unpublished draft. Unsigned local staging and guarded fixture-only install/update/uninstall scripts exist. A separate signed-catalog verifier contract now requires exact SHA-256 payload/catalog matching, CA-trusted publisher identity, pinned signer/root certificates, online revocation, and timestamped Windows Authenticode verification; no certificate or real signed package is available to pass it. Trusted schema discovery, actual per-user installation, clean-account installation, and installer rollback remain open. A bounded integrated-report model exists, but no full integrated run or public acceptance has occurred.
 
 Before public beta:
 

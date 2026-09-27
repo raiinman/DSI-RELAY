@@ -11,7 +11,7 @@ pub fn execute(
 ) -> Option<Result<Value, ExtensionError>> {
     if !matches!(request.command.as_str(),
         "assets.manifest.validate" | "assets.krita.inspect" | "assets.impact.analyze"
-        | "assets.blender.mesh.validate") {
+        | "assets.blender.mesh.validate" | "assets.krita.export") {
         return None;
     }
     let project_id = request.arguments["project_id"]
@@ -25,6 +25,18 @@ pub fn execute(
             let file = project_blend_file(&root, relative)?;
             let report = relay_blender::validate_blend(&file, None);
             blender_result(report)
+        })());
+    }
+    if request.command == "assets.krita.export" {
+        return Some((|| {
+            let root = core.trusted_project_root(project_id)?;
+            let source = project_existing_file(&root, request.arguments["source_path"].as_str()
+                .expect("shared registry validates source_path"), "kra")?;
+            let target = project_new_file(&root, request.arguments["export_path"].as_str()
+                .expect("shared registry validates export_path"), "png")?;
+            serde_json::to_value(relay_krita::export_png(&source, &target)).map_err(|_| {
+                ExtensionError::new("ASSET_SERIALIZATION_FAILED", "Krita export result is unavailable")
+            })
         })());
     }
     let manifest_text = request.arguments["manifest_json"]
@@ -80,18 +92,29 @@ pub fn execute(
 }
 
 fn project_blend_file(root: &Path, relative: &str) -> Result<PathBuf, ExtensionError> {
-    let invalid = || ExtensionError::new("ASSET_PATH_INVALID", "project-relative .blend path is invalid");
+    project_existing_file(root, relative, "blend")
+}
+
+fn valid_asset_relative(relative: &str, extension: &str) -> bool {
     if relative.is_empty() || relative.len() > 512 || relative.starts_with('/')
         || relative.contains(['\\', ':']) || relative.bytes().any(|byte| byte < 32 || byte == 127)
-        || !relative.to_ascii_lowercase().ends_with(".blend")
+        || !Path::new(relative).extension().and_then(|part| part.to_str())
+            .is_some_and(|part| part.eq_ignore_ascii_case(extension))
     {
-        return Err(invalid());
+        return false;
     }
     let parts: Vec<&str> = relative.split('/').collect();
     if parts.iter().any(|part| part.is_empty() || *part == "." || *part == ".."
         || part.ends_with([' ', '.']) || is_windows_device_name(part)) {
-        return Err(invalid());
+        return false;
     }
+    true
+}
+
+fn project_existing_file(root: &Path, relative: &str, extension: &str) -> Result<PathBuf, ExtensionError> {
+    let invalid = || ExtensionError::new("ASSET_PATH_INVALID", "project-relative asset path is invalid");
+    if !valid_asset_relative(relative, extension) { return Err(invalid()); }
+    let parts: Vec<&str> = relative.split('/').collect();
     let mut file = root.to_path_buf();
     for (index, part) in parts.iter().enumerate() {
         file.push(part);
@@ -111,6 +134,25 @@ fn project_blend_file(root: &Path, relative: &str) -> Result<PathBuf, ExtensionE
         return Err(invalid());
     }
     Ok(canonical)
+}
+
+fn project_new_file(root: &Path, relative: &str, extension: &str) -> Result<PathBuf, ExtensionError> {
+    let invalid = || ExtensionError::new("ASSET_PATH_INVALID", "project-relative export path is invalid");
+    if !valid_asset_relative(relative, extension) { return Err(invalid()); }
+    let parts: Vec<&str> = relative.split('/').collect();
+    let mut parent = root.to_path_buf();
+    for part in &parts[..parts.len() - 1] {
+        parent.push(part);
+        let meta = fs::symlink_metadata(&parent).map_err(|_| invalid())?;
+        if !meta.is_dir() || meta.file_type().is_symlink() || is_reparse_point(&meta) {
+            return Err(invalid());
+        }
+    }
+    let canonical = fs::canonicalize(parent).map_err(|_| invalid())?;
+    if !canonical.starts_with(root) { return Err(invalid()); }
+    let target = canonical.join(parts[parts.len() - 1]);
+    if fs::symlink_metadata(&target).is_ok() { return Err(invalid()); }
+    Ok(target)
 }
 
 fn blender_result(report: relay_blender::ValidationReport) -> Result<Value, ExtensionError> {
@@ -292,6 +334,30 @@ mod tests {
         );
         assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
         drop(core);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn krita_export_paths_are_create_only_and_project_local() {
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let dir = std::env::temp_dir().join(format!("relay-krita-path-{}-{nonce}", std::process::id()));
+        fs::create_dir_all(dir.join("assets")).unwrap();
+        fs::write(dir.join("assets/source.kra"), b"fixture").unwrap();
+        let root = fs::canonicalize(&dir).unwrap();
+        assert!(project_existing_file(&root, "assets/source.kra", "kra").is_ok());
+        assert!(project_new_file(&root, "assets/export.png", "png").is_ok());
+        fs::write(dir.join("assets/export.png"), b"existing").unwrap();
+        assert!(project_new_file(&root, "assets/export.png", "png").is_err());
+        assert!(project_new_file(&root, "../escape.png", "png").is_err());
+        assert!(project_new_file(&root, "missing/export.png", "png").is_err());
+        assert!(project_new_file(&root, "assets/export.kra", "png").is_err());
+        let result = serde_json::to_value(relay_krita::export_png(
+            Path::new("wrong.psd"), Path::new("unused.png"),
+        )).unwrap();
+        let spec = relay_contracts::registry::resolve_command("assets.krita.export", Some(1)).unwrap();
+        assert!(relay_contracts::registry::validate_value(&spec.result_schema, &result).is_ok());
+        assert_eq!(result["native_workflow_status"], "untested");
+        assert!(!result.to_string().contains(root.to_string_lossy().as_ref()));
         fs::remove_dir_all(dir).unwrap();
     }
 }

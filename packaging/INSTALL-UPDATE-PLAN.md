@@ -6,6 +6,36 @@ path only with an explicit unsigned-development opt-in and expected archive
 digest. They do not sign, publish, auto-download, launch the daemon, or clear
 the public release gates.
 
+## Signed release verification contract
+
+A future public package may place all distributable files in one `payload/`
+directory and a separately signed `payload.cat` beside it. Build the catalog
+with Windows `New-FileCatalog -CatalogVersion 2.0` over the completed payload,
+then sign and RFC 3161 timestamp the catalog with a reviewed CA-issued code
+signing certificate. `Verify-SignedDistribution.ps1` is a separate read-only
+gate for that layout; it does not sign or install anything.
+
+Release policy must supply the exact SHA-256 digest of `payload.cat`, signer
+certificate subject and thumbprint, and trusted CA root thumbprint from an
+independent reviewed source, not values copied from the downloaded package.
+The verifier rejects reparse points and missing core files, checks every
+payload file against the SHA-256 catalog with `Test-FileCatalog`, checks the
+catalog's trusted Authenticode publisher, builds a current online-revocation
+code-signing chain to the pinned root, and requires a Microsoft-signed Windows
+SDK SignTool `verify /pa /all /tw` exit code of zero. Warnings fail the gate.
+This verifies the folder before any archive or installer activation; the
+archive or installer must separately bind to the verified folder digest and
+repeat verification after extraction. GitHub artifact attestations can add
+provenance but do not replace Windows Authenticode trust.
+
+The certificate, signer/root pins, signed catalog, timestamp service, trusted
+delivery metadata, and release installer path are not yet available. The
+signed verifier has no passing real-certificate fixture and cannot certify
+public distribution at this stage. A new valid signature may still trigger
+Windows SmartScreen reputation warnings during early distribution.
+
+Microsoft references: [Test-FileCatalog](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/test-filecatalog?view=powershell-7.6), [SignTool](https://learn.microsoft.com/en-us/windows/win32/seccrypto/signtool), [Get-AuthenticodeSignature](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/get-authenticodesignature?view=powershell-7.6), and [SmartScreen reputation](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation).
+
 ## Install root
 
 - Use one per-user program root under `%LOCALAPPDATA%\Programs\DSI-RELAY`.

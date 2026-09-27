@@ -80,6 +80,7 @@
             }
           },
           "automation_mode": { "type": "string", "enum": ["running", "paused", "unavailable"] },
+          "context_cache": { "type": "object" },
           "uptime_ms": { "type": "integer", "minimum": 0 }
         },
         "additionalProperties": true
@@ -465,6 +466,40 @@
               "code": { "type": "string", "enum": ["non_finite_vertex", "self_edge", "degenerate_face"] }
             }, "additionalProperties": false
           } },
+          "elapsed_ms": { "type": "integer", "minimum": 0 }
+        }, "additionalProperties": false
+      },
+      "errors": ["PROJECT_NOT_FOUND", "PROJECT_ROOT_UNAVAILABLE", "STORAGE_UNAVAILABLE", "ASSET_PATH_INVALID", "ASSET_SERIALIZATION_FAILED", "INTEGRATION_UNAVAILABLE"]
+    },
+    {
+      "id": "assets.krita.export",
+      "version": 1,
+      "stability": "phase8",
+      "summary": "Create a new PNG from one project-local KRA using Krita's fixed command-line export.",
+      "effect_class": "project_write",
+      "permission": "project_write",
+      "idempotency": "keyed",
+      "surfaces": ["cli"],
+      "arguments_schema": {
+        "type": "object", "required": ["project_id", "source_path", "export_path"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "source_path": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "export_path": { "type": "string", "minLength": 1, "maxLength": 512 }
+        }, "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["status", "native_workflow_status", "scope", "message", "output_bytes", "source_sha256", "output_sha256", "source_changed", "elapsed_ms"],
+        "properties": {
+          "status": { "type": "string", "enum": ["exported", "unavailable", "incomplete", "invalid_input", "tool_error"] },
+          "native_workflow_status": { "type": "string", "enum": ["checked", "incomplete", "untested"] },
+          "scope": { "type": "string", "const": "fixed_krita_kra_to_png_export" },
+          "message": { "type": "string", "maxLength": 160 },
+          "output_bytes": { "type": ["integer", "null"], "minimum": 0, "maximum": 536870912 },
+          "source_sha256": { "type": ["string", "null"], "minLength": 64, "maxLength": 64 },
+          "output_sha256": { "type": ["string", "null"], "minLength": 64, "maxLength": 64 },
+          "source_changed": { "type": "boolean" },
           "elapsed_ms": { "type": "integer", "minimum": 0 }
         }, "additionalProperties": false
       },
@@ -1295,7 +1330,18 @@
           "total_response_bytes": { "type": "integer", "minimum": 0 },
           "remote_calls": { "type": "integer", "minimum": 0 },
           "model_tokens_in": { "type": "integer", "minimum": 0 },
-          "model_tokens_out": { "type": "integer", "minimum": 0 }
+          "model_tokens_out": { "type": "integer", "minimum": 0 },
+          "context_cache": {
+            "type": "object", "required": ["available", "scope"],
+            "properties": {
+              "available": { "type": "boolean" },
+              "scope": { "type": "string", "const": "current_process" },
+              "entries": { "type": "integer", "minimum": 0, "maximum": 8 },
+              "hits": { "type": "integer", "minimum": 0 },
+              "misses": { "type": "integer", "minimum": 0 },
+              "source_fact_collections_avoided": { "type": "integer", "minimum": 0 }
+            }, "additionalProperties": false
+          }
         },
         "additionalProperties": false
       },

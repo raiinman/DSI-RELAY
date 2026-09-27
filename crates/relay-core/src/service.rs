@@ -16,7 +16,7 @@ use relay_contracts::{CommandRequest, CommandResponse, PROTOCOL_MAX, PROTOCOL_MI
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
@@ -98,6 +98,51 @@ pub struct RelayCore {
     producer: Producer,
     automation_available: std::sync::atomic::AtomicBool,
     automation_paused: std::sync::atomic::AtomicBool,
+    context_cache: Mutex<ContextCache>,
+}
+
+const MAX_CONTEXT_CACHE_ENTRIES: usize = 8;
+const MAX_CONTEXT_CACHE_VALUE_BYTES: usize = 32 * 1024;
+
+#[derive(PartialEq, Eq)]
+struct ContextSourceKey {
+    id: String,
+    payload_sha256: String,
+    kind: String,
+    created_at: String,
+    trust: String,
+    producer_version: String,
+    schema_version: i64,
+}
+
+#[derive(PartialEq, Eq)]
+struct ContextCacheKey {
+    project_id: String,
+    sources: Vec<ContextSourceKey>,
+    required_pointers: Vec<(String, String)>,
+    focus_terms: Vec<String>,
+    max_bytes: usize,
+}
+
+#[derive(Default)]
+struct ContextCache {
+    entries: VecDeque<(ContextCacheKey, Value)>,
+    hits: u64,
+    misses: u64,
+    source_fact_collections_avoided: u64,
+}
+
+impl ContextCache {
+    fn summary(&self) -> Value {
+        json!({
+            "available": true,
+            "scope": "current_process",
+            "entries": self.entries.len(),
+            "hits": self.hits,
+            "misses": self.misses,
+            "source_fact_collections_avoided": self.source_fact_collections_avoided,
+        })
+    }
 }
 
 /// Trusted daemon input only. Canonical roots and indexed source identities never enter
@@ -129,6 +174,46 @@ impl ExtensionError {
 }
 
 impl RelayCore {
+    fn context_cache_summary(&self) -> Value {
+        self.context_cache
+            .lock()
+            .map(|cache| cache.summary())
+            .unwrap_or_else(|_| json!({ "available": false, "scope": "current_process" }))
+    }
+
+    fn context_cache_lookup(&self, key: &ContextCacheKey) -> Option<Value> {
+        let mut cache = self.context_cache.lock().ok()?;
+        if let Some((_, value)) = cache.entries.iter().find(|(cached, _)| cached == key) {
+            let value = value.clone();
+            cache.hits = cache.hits.saturating_add(1);
+            cache.source_fact_collections_avoided = cache
+                .source_fact_collections_avoided
+                .saturating_add(key.sources.len() as u64);
+            Some(value)
+        } else {
+            cache.misses = cache.misses.saturating_add(1);
+            None
+        }
+    }
+
+    fn context_cache_insert(&self, key: ContextCacheKey, value: Value) {
+        if !serde_json::to_vec(&value)
+            .is_ok_and(|bytes| bytes.len() <= MAX_CONTEXT_CACHE_VALUE_BYTES)
+        {
+            return;
+        }
+        let Ok(mut cache) = self.context_cache.lock() else {
+            return;
+        };
+        if cache.entries.iter().any(|(cached, _)| cached == &key) {
+            return;
+        }
+        if cache.entries.len() == MAX_CONTEXT_CACHE_ENTRIES {
+            cache.entries.pop_front();
+        }
+        cache.entries.push_back((key, value));
+    }
+
     pub fn ready_index_snapshot(
         &self,
         project_id: &str,
@@ -451,6 +536,7 @@ impl RelayCore {
             },
             automation_available: std::sync::atomic::AtomicBool::new(false),
             automation_paused: std::sync::atomic::AtomicBool::new(false),
+            context_cache: Mutex::new(ContextCache::default()),
         }
     }
 
@@ -1231,6 +1317,7 @@ impl RelayCore {
             "diagnostics": diagnostics,
             "host_components": runtime.host_components,
             "automation_mode": self.automation_mode(),
+            "context_cache": self.context_cache_summary(),
             "uptime_ms": runtime.uptime_ms
         }))
     }
@@ -2225,8 +2312,36 @@ impl RelayCore {
             Ok(records)
         })?;
         records.sort_by(|left, right| left.id.cmp(&right.id));
+        let mut sources = Vec::with_capacity(records.len());
+        for record in &records {
+            sources.push(ContextSourceKey {
+                id: record.id.clone(),
+                payload_sha256: record.payload_sha256.clone(),
+                kind: record.kind.clone(),
+                created_at: record.created_at.clone(),
+                trust: record.trust.clone(),
+                producer_version: record.producer_version.clone(),
+                schema_version: record.schema_version,
+            });
+        }
+        let cache_key = ContextCacheKey {
+            project_id: project_id.to_string(),
+            sources,
+            required_pointers: required
+                .iter()
+                .map(|(id, pointer)| ((*id).to_string(), (*pointer).to_string()))
+                .collect(),
+            focus_terms: focus_terms.iter().map(|term| (*term).to_string()).collect(),
+            max_bytes,
+        };
+        if let Some(cached) = self.context_cache_lookup(&cache_key) {
+            return Ok(cached);
+        }
         match context::compile_project_results(project_id, &records, max_bytes, &required, &focus_terms) {
-            Ok(view) => Ok(view),
+            Ok(view) => {
+                self.context_cache_insert(cache_key, view.clone());
+                Ok(view)
+            },
             Err(context::CompileError::BudgetTooSmall) => Err(CoreCommandError::new(
                 "CONTEXT_BUDGET_TOO_SMALL", "byte budget cannot hold source metadata, conflicts, and required facts")),
             Err(context::CompileError::RequiredFactUnavailable) => Err(CoreCommandError::new(
@@ -2354,9 +2469,11 @@ impl RelayCore {
 
     fn usage_summary(&self) -> Result<Value, CoreCommandError> {
         let summary = self.with_storage(|storage| storage.usage_summary())?;
-        serde_json::to_value(summary).map_err(|error| {
+        let mut value = serde_json::to_value(summary).map_err(|error| {
             CoreCommandError::new("STORAGE_ERROR", format!("serialize usage summary: {error}"))
-        })
+        })?;
+        value["context_cache"] = self.context_cache_summary();
+        Ok(value)
     }
 
     fn parse_data_class(value: &str) -> Result<DataClass, CoreCommandError> {
@@ -4133,6 +4250,23 @@ mod tests {
         assert_eq!(output["sources"].as_array().unwrap().len(), 2);
         assert_eq!(output["freshness_basis"], "stored_source_timestamps_only");
         assert!(serde_json::to_vec(&output).unwrap().len() <= 4096);
+        let first_usage = core.execute(request("REQ-cache-first", "usage.summary", json!({})), &runtime);
+        let first_cache = &first_usage.result.as_ref().unwrap()["context_cache"];
+        assert_eq!(first_cache["misses"], 1);
+        assert_eq!(first_cache["hits"], 0);
+        let repeated = core.execute(request("REQ-compile-repeat", "context.compile", args.clone()), &runtime);
+        assert!(repeated.ok, "{repeated:?}");
+        assert_eq!(repeated.result.unwrap(), output);
+        let reused = core.execute(request("REQ-cache-reused", "usage.summary", json!({})), &runtime);
+        let reused_cache = &reused.result.as_ref().unwrap()["context_cache"];
+        assert_eq!(reused_cache["hits"], 1);
+        assert_eq!(reused_cache["source_fact_collections_avoided"], 2);
+        assert_eq!(reused_cache["entries"], 1);
+        let mut focused = args.clone();
+        focused["focus_terms"] = json!(["status"]);
+        assert!(core.execute(request("REQ-compile-focused", "context.compile", focused), &runtime).ok);
+        let distinct = core.execute(request("REQ-cache-distinct", "usage.summary", json!({})), &runtime);
+        assert_eq!(distinct.result.unwrap()["context_cache"]["misses"], 2);
 
         let mut foreign = args.clone();
         foreign["result_ids"] = json!([ids[0], ids[2]]);
@@ -4142,6 +4276,8 @@ mod tests {
         scoped.project_ids = Some(["PRJ-b".to_string()].into_iter().collect());
         let denial = core.execute_authorized(request("REQ-compile-denied", "context.compile", args), &runtime, &scoped);
         assert_eq!(denial.error.unwrap().code, "PROJECT_SCOPE_DENIED");
+        let after_denial = core.execute(request("REQ-cache-after-denial", "usage.summary", json!({})), &runtime);
+        assert_eq!(after_denial.result.unwrap()["context_cache"]["hits"], 1);
         drop(core);
         fs::remove_dir_all(dir).unwrap();
     }

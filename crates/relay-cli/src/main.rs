@@ -186,7 +186,7 @@ fn execute_human(request: CommandRequest, json_output: bool, view: &str) -> Resu
 fn run(args: &[String]) -> Result<i32, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Err(
-            "usage: relay <status|doctor|diagnostics|pause|resume|support-bundle|discover|onboard|dashboard-url|commands|project-list|project-register|project-archive|project-restore|project-remove|context-compile|uefn-inspect|uefn-audit|uefn-discover|uefn-toolsets|uefn-describe|verse-analyze|verse-record|asset-validate|asset-impact|blender-mesh-check|krita-inspect|parser-install|result-list|result-get|job-list|job-get|shutdown|exec>"
+            "usage: relay <status|doctor|diagnostics|pause|resume|support-bundle|discover|onboard|dashboard-url|commands|project-list|project-register|project-archive|project-restore|project-remove|context-compile|uefn-inspect|uefn-audit|uefn-discover|uefn-toolsets|uefn-describe|verse-analyze|verse-record|asset-validate|asset-impact|blender-mesh-check|krita-inspect|krita-export|parser-install|result-list|result-get|job-list|job-get|shutdown|exec>"
                 .to_string(),
         );
     };
@@ -615,6 +615,25 @@ fn run(args: &[String]) -> Result<i32, String> {
                 }), None),
                 has_json_flag(args), "default",
             )
+        }
+        "krita-export" => {
+            let usage = "usage: relay krita-export <project-id> <project-relative.kra> <new-project-relative.png> [--json]";
+            let project_id = args.get(1).filter(|value| !value.starts_with("--"))
+                .ok_or_else(|| usage.to_string())?;
+            let source_path = args.get(2).filter(|value| !value.starts_with("--"))
+                .ok_or_else(|| usage.to_string())?;
+            let export_path = args.get(3).filter(|value| !value.starts_with("--"))
+                .ok_or_else(|| usage.to_string())?;
+            if args.iter().skip(4).any(|value| value != "--json") {
+                return Err(usage.to_string());
+            }
+            let response = invoke(&make_request("assets.krita.export", json!({
+                    "project_id": project_id, "source_path": source_path,
+                    "export_path": export_path
+                }), Some(format!("CLI-{}", request_id()))))?;
+            if has_json_flag(args) { print_machine(&response); } else { print_human(&response); }
+            Ok(if response.ok && response.result.as_ref()
+                .is_some_and(|value| value["status"] == "exported") { 0 } else { 2 })
         }
         "parser-install" => {
             if args.len() != 6 || args[5] != "--allow-source-delivery" {

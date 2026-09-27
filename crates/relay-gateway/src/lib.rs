@@ -13,6 +13,7 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const GATEWAY_PROTOCOL: u32 = 1;
+pub const MCP_PROTOCOL_VERSION: &str = "2026-07-28";
 pub const MAX_HEADER_BYTES: usize = 4_096;
 pub const MAX_BODY_BYTES: usize = 8_192;
 pub const MAX_RESPONSE_BYTES: usize = 64 * 1_024;
@@ -147,7 +148,210 @@ impl Gateway {
         match request.path.as_str() {
             "/v1/negotiate" => self.negotiate(&request.body),
             "/v1/execute" => self.execute(&request.body),
+            "/mcp" => self.mcp(&request),
             _ => HttpResponse::error(404, "NOT_FOUND"),
+        }
+    }
+
+    /// Stateless MCP Streamable HTTP 2026-07-28, limited to registry discovery.
+    fn mcp(&self, request: &HttpRequest) -> HttpResponse {
+        let parsed: Value = match serde_json::from_slice(&request.body) {
+            Ok(value) => value,
+            Err(_) => return mcp_error(400, Value::Null, -32700, "Parse error"),
+        };
+        let id = parsed.get("id").cloned().unwrap_or(Value::Null);
+        if parsed.get("jsonrpc").and_then(Value::as_str) != Some("2.0")
+            || !(id.is_string() || id.is_number())
+            || id.as_str().is_some_and(|value| value.len() > 128)
+        {
+            return mcp_error(400, Value::Null, -32600, "Invalid Request");
+        }
+        let Some(method) = parsed.get("method").and_then(Value::as_str) else {
+            return mcp_error(400, id, -32600, "Invalid Request");
+        };
+        let Some(params) = parsed.get("params").and_then(Value::as_object) else {
+            return mcp_error(400, id, -32602, "Invalid params");
+        };
+        let Some(meta) = params.get("_meta").and_then(Value::as_object) else {
+            return mcp_error(400, id, -32602, "Invalid params");
+        };
+        let body_version = meta
+            .get("io.modelcontextprotocol/protocolVersion")
+            .and_then(Value::as_str);
+        let header_version = request
+            .headers
+            .get("mcp-protocol-version")
+            .map(String::as_str);
+        if header_version.is_none()
+            || header_version != body_version
+            || request.headers.get("mcp-method").map(String::as_str) != Some(method)
+        {
+            return mcp_error(400, id, -32020, "Header mismatch");
+        }
+        if header_version != Some(MCP_PROTOCOL_VERSION) {
+            let requested = header_version
+                .filter(|value| {
+                    value.len() <= 32
+                        && value
+                            .bytes()
+                            .all(|byte| byte.is_ascii_digit() || byte == b'-')
+                })
+                .unwrap_or("unsupported");
+            return mcp_error_with_data(
+                400,
+                id,
+                -32022,
+                "Unsupported protocol version",
+                json!({"supported":[MCP_PROTOCOL_VERSION],"requested":requested}),
+            );
+        }
+        if !request.headers.get("accept").is_some_and(|value| {
+            value
+                .split(',')
+                .any(|item| item.trim().split(';').next() == Some("application/json"))
+                && value
+                    .split(',')
+                    .any(|item| item.trim().split(';').next() == Some("text/event-stream"))
+        }) || !meta
+            .get("io.modelcontextprotocol/clientInfo")
+            .is_some_and(|value| {
+                value
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .is_some_and(|name| !name.is_empty() && name.len() <= 128)
+                    && value
+                        .get("version")
+                        .and_then(Value::as_str)
+                        .is_some_and(|version| !version.is_empty() && version.len() <= 64)
+            })
+            || !meta
+                .get("io.modelcontextprotocol/clientCapabilities")
+                .is_some_and(Value::is_object)
+        {
+            return mcp_error(400, id, -32602, "Invalid params");
+        }
+        if method == "tools/call" {
+            let name = params.get("name").and_then(Value::as_str);
+            if name.is_none()
+                || !mcp_name_matches(
+                    name.unwrap_or(""),
+                    request.headers.get("mcp-name").map(String::as_str),
+                )
+            {
+                return mcp_error(400, id, -32020, "Header mismatch");
+            }
+        }
+        match method {
+            "server/discover" => {
+                let Some(status) = self.host_status() else {
+                    return mcp_error(503, id, -32603, "Host unavailable");
+                };
+                let capabilities = if status
+                    .capabilities
+                    .iter()
+                    .any(|item| EXPOSED.contains(&item.as_str()))
+                {
+                    json!({"tools":{}})
+                } else {
+                    json!({})
+                };
+                mcp_result(
+                    id,
+                    json!({
+                        "resultType":"complete", "supportedVersions":[MCP_PROTOCOL_VERSION],
+                        "capabilities":capabilities,
+                        "_meta":{"io.modelcontextprotocol/serverInfo":{"name":"relay-registry-gateway","version":env!("CARGO_PKG_VERSION")}},
+                        "instructions":"Read-only RELAY command registry discovery on this computer.",
+                        "ttlMs":0, "cacheScope":"private"
+                    }),
+                )
+            }
+            "tools/list" => {
+                if params.get("cursor").is_some() {
+                    return mcp_error(400, id, -32602, "Invalid params");
+                }
+                let Some(status) = self.host_status() else {
+                    return mcp_error(503, id, -32603, "Host unavailable");
+                };
+                let mut tools = Vec::new();
+                if status
+                    .capabilities
+                    .iter()
+                    .any(|item| item == "registry.list@1")
+                {
+                    tools.push(json!({"name":"relay_registry_list","title":"List RELAY commands","description":"List a bounded set of AI-exposed RELAY command definitions by prefix.",
+                        "inputSchema":{"type":"object","required":["prefix"],"properties":{"prefix":{"type":"string","minLength":1,"maxLength":64},"limit":{"type":"integer","minimum":1,"maximum":20}},"additionalProperties":false}}));
+                }
+                if status
+                    .capabilities
+                    .iter()
+                    .any(|item| item == "registry.describe@1")
+                {
+                    tools.push(json!({"name":"relay_registry_describe","title":"Describe a RELAY command","description":"Describe one AI-exposed RELAY command definition.",
+                        "inputSchema":{"type":"object","required":["command"],"properties":{"command":{"type":"string","minLength":1,"maxLength":128},"version":{"type":"integer","minimum":1}},"additionalProperties":false}}));
+                }
+                mcp_result(
+                    id,
+                    json!({"resultType":"complete","tools":tools,"ttlMs":0,"cacheScope":"private"}),
+                )
+            }
+            "tools/call" => {
+                let (command, arguments) = match params.get("name").and_then(Value::as_str) {
+                    Some("relay_registry_list") => {
+                        let Some(input) = params.get("arguments").and_then(Value::as_object) else {
+                            return mcp_error(400, id, -32602, "Invalid params");
+                        };
+                        if input.keys().any(|key| key != "prefix" && key != "limit") {
+                            return mcp_error(400, id, -32602, "Invalid params");
+                        }
+                        (
+                            "registry.list",
+                            json!({"surface":"ai","prefix":input.get("prefix"),"limit":input.get("limit").cloned().unwrap_or(json!(20))}),
+                        )
+                    }
+                    Some("relay_registry_describe") => {
+                        let Some(input) = params.get("arguments").and_then(Value::as_object) else {
+                            return mcp_error(400, id, -32602, "Invalid params");
+                        };
+                        if input.keys().any(|key| key != "command" && key != "version") {
+                            return mcp_error(400, id, -32602, "Invalid params");
+                        }
+                        let mut args = json!({"command":input.get("command")});
+                        if let Some(version) = input.get("version") {
+                            args["version"] = version.clone();
+                        }
+                        ("registry.describe", args)
+                    }
+                    _ => return mcp_error(400, id, -32602, "Unknown tool"),
+                };
+                if !self.validate_discovery_arguments(command, &arguments) {
+                    return mcp_error(400, id, -32602, "Invalid params");
+                }
+                let body = json!({"gateway_protocol":GATEWAY_PROTOCOL,"command":command,"command_version":1,"arguments":arguments});
+                let forwarded = self.execute(body.to_string().as_bytes());
+                if forwarded.status != 200 {
+                    return mcp_error(503, id, -32603, "Discovery unavailable");
+                }
+                if forwarded.body.get("ok").and_then(Value::as_bool) != Some(true) {
+                    return mcp_result(
+                        id,
+                        json!({"resultType":"complete","content":[{"type":"text","text":"Registry discovery failed"}],"isError":true}),
+                    );
+                }
+                let Some(result) = forwarded.body.get("result") else {
+                    return mcp_error(502, id, -32603, "Invalid host response");
+                };
+                if !serde_json::to_vec(result)
+                    .is_ok_and(|value| value.len() <= MAX_RESPONSE_BYTES / 2)
+                {
+                    return mcp_error(502, id, -32603, "Host response too large");
+                }
+                mcp_result(
+                    id,
+                    json!({"resultType":"complete","content":[{"type":"text","text":"Registry discovery completed; read structuredContent."}],"structuredContent":result}),
+                )
+            }
+            _ => mcp_error(404, id, -32601, "Method not found"),
         }
     }
 
@@ -331,6 +535,52 @@ struct HttpRequest {
 struct HttpResponse {
     status: u16,
     body: Value,
+}
+
+fn mcp_result(id: Value, result: Value) -> HttpResponse {
+    let body = json!({"jsonrpc":"2.0","id":id.clone(),"result":result});
+    if serde_json::to_vec(&body).is_ok_and(|bytes| bytes.len() <= MAX_RESPONSE_BYTES) {
+        HttpResponse::ok(body)
+    } else {
+        mcp_error(502, id, -32603, "Response too large")
+    }
+}
+
+fn mcp_name_matches(name: &str, header: Option<&str>) -> bool {
+    // These are the only supported tool names. The alternate forms are the
+    // transport's required Base64 sentinel encoding of those ASCII names.
+    match (name, header) {
+        (
+            "relay_registry_list",
+            Some("relay_registry_list" | "=?base64?cmVsYXlfcmVnaXN0cnlfbGlzdA==?="),
+        ) => true,
+        (
+            "relay_registry_describe",
+            Some("relay_registry_describe" | "=?base64?cmVsYXlfcmVnaXN0cnlfZGVzY3JpYmU=?="),
+        ) => true,
+        (other, Some(value)) if valid_command_token(other, 128) && other == value => true,
+        _ => false,
+    }
+}
+
+fn mcp_error(status: u16, id: Value, code: i32, message: &'static str) -> HttpResponse {
+    HttpResponse {
+        status,
+        body: json!({"jsonrpc":"2.0","id":id,"error":{"code":code,"message":message}}),
+    }
+}
+
+fn mcp_error_with_data(
+    status: u16,
+    id: Value,
+    code: i32,
+    message: &'static str,
+    data: Value,
+) -> HttpResponse {
+    HttpResponse {
+        status,
+        body: json!({"jsonrpc":"2.0","id":id,"error":{"code":code,"message":message,"data":data}}),
+    }
 }
 
 impl HttpResponse {
@@ -656,6 +906,110 @@ mod tests {
         let (reply, calls) = exchange(&body, "/v1/execute", "", Some(TOKEN), None);
         assert!(reply.starts_with("HTTP/1.1 200"));
         assert_eq!(calls, 2); // host capability check plus one shared command
+    }
+
+    fn mcp_body(id: u32, method: &str, mut extra: Value) -> String {
+        extra["_meta"] = json!({
+            "io.modelcontextprotocol/protocolVersion": MCP_PROTOCOL_VERSION,
+            "io.modelcontextprotocol/clientInfo": {"name":"fixture","version":"1.0"},
+            "io.modelcontextprotocol/clientCapabilities": {}
+        });
+        json!({"jsonrpc":"2.0","id":id,"method":method,"params":extra}).to_string()
+    }
+
+    fn mcp_headers(method: &str, name: Option<&str>) -> String {
+        format!(
+            "Accept: application/json, text/event-stream\r\nMCP-Protocol-Version: {MCP_PROTOCOL_VERSION}\r\nMcp-Method: {method}\r\n{}",
+            name.map(|value| format!("Mcp-Name: {value}\r\n"))
+                .unwrap_or_default()
+        )
+    }
+
+    #[test]
+    fn mcp_discovers_and_lists_only_registry_tools() {
+        let discover = mcp_body(1, "server/discover", json!({}));
+        let (reply, calls) = exchange(
+            &discover,
+            "/mcp",
+            &mcp_headers("server/discover", None),
+            Some(TOKEN),
+            None,
+        );
+        assert!(reply.starts_with("HTTP/1.1 200"));
+        assert!(reply.contains("\"supportedVersions\":[\"2026-07-28\"]"));
+        assert_eq!(calls, 1);
+        let list = mcp_body(2, "tools/list", json!({}));
+        let (reply, calls) = exchange(
+            &list,
+            "/mcp",
+            &mcp_headers("tools/list", None),
+            Some(TOKEN),
+            None,
+        );
+        assert!(reply.starts_with("HTTP/1.1 200"));
+        assert!(reply.contains("relay_registry_list"));
+        assert!(reply.contains("relay_registry_describe"));
+        assert!(!reply.contains("project.register"));
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn mcp_calls_only_bounded_registry_discovery() {
+        let call = mcp_body(
+            3,
+            "tools/call",
+            json!({"name":"relay_registry_list","arguments":{"prefix":"project.","limit":8}}),
+        );
+        let (reply, calls) = exchange(
+            &call,
+            "/mcp",
+            &mcp_headers("tools/call", Some("relay_registry_list")),
+            Some(TOKEN),
+            None,
+        );
+        assert!(reply.starts_with("HTTP/1.1 200"));
+        assert!(reply.contains("\"structuredContent\""));
+        assert_eq!(calls, 2);
+        let write = mcp_body(
+            4,
+            "tools/call",
+            json!({"name":"project.register","arguments":{}}),
+        );
+        let (reply, calls) = exchange(
+            &write,
+            "/mcp",
+            &mcp_headers("tools/call", Some("project.register")),
+            Some(TOKEN),
+            None,
+        );
+        assert!(reply.starts_with("HTTP/1.1 400"));
+        assert!(reply.contains("Unknown tool"));
+        assert_eq!(calls, 0);
+    }
+
+    #[test]
+    fn mcp_rejects_header_mismatch_and_unsupported_version() {
+        let call = mcp_body(
+            5,
+            "tools/call",
+            json!({"name":"relay_registry_list","arguments":{"prefix":"project."}}),
+        );
+        let (reply, calls) = exchange(
+            &call,
+            "/mcp",
+            &mcp_headers("tools/call", Some("relay_registry_describe")),
+            Some(TOKEN),
+            None,
+        );
+        assert!(reply.starts_with("HTTP/1.1 400"));
+        assert!(reply.contains("-32020"));
+        assert_eq!(calls, 0);
+        let old = mcp_body(6, "tools/list", json!({})).replace(MCP_PROTOCOL_VERSION, "2025-11-25");
+        let headers = mcp_headers("tools/list", None).replace(MCP_PROTOCOL_VERSION, "2025-11-25");
+        let (reply, calls) = exchange(&old, "/mcp", &headers, Some(TOKEN), None);
+        assert!(reply.starts_with("HTTP/1.1 400"));
+        assert!(reply.contains("-32022"));
+        assert_eq!(calls, 0);
     }
 
     #[test]

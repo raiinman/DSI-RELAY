@@ -39,6 +39,7 @@ Own the canonical RELAY command-line client.
 - `asset-impact` sends a bounded local manifest and changed project-relative paths through the shared structural impact command; it prints only affected IDs, reason codes, and the explicit creator-app state.
 - `blender-mesh-check` invokes the shared read-only native mesh command for one project-relative `.blend` file without accepting a caller-supplied executable or script.
 - `krita-inspect` sends that bounded manifest through the shared Krita declaration/link inspection command; native Krita execution remains untested.
+- `krita-export` explicitly invokes the shared create-only KRA-to-PNG project-write command with two project-relative paths; it cannot select an executable or script, and returns a nonzero exit when no PNG was published.
 - `uefn-discover` invokes an explicit localhost-only MCP capability probe. `verse-analyze` sends a bounded imported capture and optional assertion file through the shared analysis command; it never labels the import as a live UEFN pass.
 - `uefn-toolsets` invokes the bounded discovery-only toolset command; it does not dispatch editor tools.
 - `uefn-describe` summarizes one advertised toolset's input shape through the shared discovery-only command.

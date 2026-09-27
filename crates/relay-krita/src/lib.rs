@@ -1,9 +1,12 @@
-//! Bounded Krita asset metadata inspection. No Krita process is started here.
+//! Bounded Krita asset inspection and explicit local CLI export.
 
 use relay_assets::{FindingCode as AssetFindingCode, Manifest, ManifestError, validate_manifest};
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
+
+mod export;
+pub use export::{ExportReport, ExportStatus, export_png};
 
 pub const SCHEMA_VERSION: u32 = 1;
 pub const MAX_VISIBLE_ASSETS: usize = 64;
@@ -29,7 +32,7 @@ pub struct KritaCapabilities {
     pub schema_version: u32,
     pub local_manifest_inspection: bool,
     pub declared_format_check: bool,
-    /// Krita's published CLI documents export, but RELAY has not enabled it.
+    /// Krita's published CLI documents export; this inspection does not run it.
     pub cli_export_documented: bool,
     pub binary_state: BinaryState,
     pub native_export: ExecutionState,

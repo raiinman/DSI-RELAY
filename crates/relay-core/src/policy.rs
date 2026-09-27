@@ -154,7 +154,7 @@ impl ExecutionAuthority {
             actor_id: "local-user".to_string(),
             client_id: client_id.into(),
             delegator_id: None,
-            permissions: ["read", "state_write", "host_control"]
+            permissions: ["read", "state_write", "host_control", "project_write"]
                 .into_iter()
                 .map(str::to_string)
                 .collect(),
@@ -163,6 +163,7 @@ impl ExecutionAuthority {
                 "analyze",
                 "relay_self_repair",
                 "relay_state_write",
+                "project_write",
             ]
             .into_iter()
             .map(str::to_string)

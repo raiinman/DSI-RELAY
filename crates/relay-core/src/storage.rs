@@ -1832,6 +1832,17 @@ impl RelayStorage {
                 [id],
                 |row| {
                     let payload_json: String = row.get(5)?;
+                    let payload_sha256: String = row.get(6)?;
+                    if sha256_hex(payload_json.as_bytes()) != payload_sha256 {
+                        return Err(rusqlite::Error::FromSqlConversionFailure(
+                            6,
+                            rusqlite::types::Type::Text,
+                            Box::new(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "result payload digest mismatch",
+                            )),
+                        ));
+                    }
                     let provenance_json: String = row.get(7)?;
                     Ok(ResultRecord {
                         id: row.get(0)?,
@@ -1840,7 +1851,7 @@ impl RelayStorage {
                         schema_version: row.get(3)?,
                         producer_version: row.get(4)?,
                         payload: parse_json(&payload_json, 5)?,
-                        payload_sha256: row.get(6)?,
+                        payload_sha256,
                         provenance: parse_json(&provenance_json, 7)?,
                         trust: row.get(8)?,
                         created_at: row.get(9)?,
@@ -2764,6 +2775,23 @@ mod tests {
         assert_eq!(job.checkpoint["stage"], 2);
         assert_eq!(job.provenance, json!({}));
         assert_eq!(job.trust, "local");
+        drop(storage);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn result_read_rejects_payload_changed_without_matching_digest() {
+        let dir = temp_dir("result-digest");
+        fs::create_dir_all(&dir).unwrap();
+        let storage = RelayStorage::open(dir.join("relay.sqlite3")).unwrap();
+        let result = storage
+            .put_result(None, "TEST", &json!({ "status": "original" }), "0.1.0", &json!({}), "local")
+            .unwrap();
+        storage.conn.execute(
+            "UPDATE results SET payload_json = ?1 WHERE id = ?2",
+            rusqlite::params![r#"{"status":"changed"}"#, &result.id],
+        ).unwrap();
+        assert!(storage.get_result(&result.id).is_err());
         drop(storage);
         fs::remove_dir_all(dir).unwrap();
     }

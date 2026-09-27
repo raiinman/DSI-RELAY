@@ -297,7 +297,13 @@ fn classify_workflow(
         .iter()
         .any(|entry| entry.availability == Availability::Unknown);
 
-    let (status, reason_code) = if unavailable {
+    let (status, reason_code) = if observation
+        .as_ref()
+        .is_some_and(|observation| observation.status == WorkflowStatus::Failed)
+    {
+        let observation = observation.as_ref().expect("checked above");
+        (WorkflowStatus::Failed, observation.reason_code.clone())
+    } else if unavailable {
         (
             WorkflowStatus::Untested,
             "REQUIRED_ENVIRONMENT_UNAVAILABLE".to_string(),
@@ -549,6 +555,21 @@ mod tests {
             report.workflows[0].reason_code,
             "OBSERVED_EVIDENCE_REQUIRED"
         );
+    }
+
+    #[test]
+    fn attempted_failure_is_not_hidden_by_later_unavailable_environment() {
+        let mut failed = observation(EvidenceSource::None);
+        failed.status = WorkflowStatus::Failed;
+        failed.reason_code = "RUNNER_INTERRUPTED".into();
+        let report = assemble_report(
+            plan(Requirement::Uefn, Availability::Unavailable),
+            vec![failed],
+            200,
+        )
+        .unwrap();
+        assert_eq!(report.workflows[0].status, WorkflowStatus::Failed);
+        assert_eq!(report.workflows[0].reason_code, "RUNNER_INTERRUPTED");
     }
 
     #[test]

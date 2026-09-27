@@ -239,6 +239,7 @@ dependencies = [
 name = "relay"
 version = "0.1.0"
 dependencies = [
+ "relay-adapter",
  "relay-contracts",
  "serde",
  "serde_json",

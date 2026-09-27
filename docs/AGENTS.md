@@ -58,6 +58,7 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `PHASE3_SEVENTH_SLICE_EVIDENCE.md` — schema-7 project configuration and declared adapter version metadata evidence.
 - `PHASE3_EIGHTH_SLICE_EVIDENCE.md` — sandboxed generic dependency parser operation and bounded observation validation evidence.
 - `PHASE3_NINTH_SLICE_EVIDENCE.md` — installed and authorized parser dispatch, guarded edge replacement, and stale-edge invalidation evidence.
+- `PHASE3_PARSER_INSTALL_FIRST_SLICE_EVIDENCE.md` — offline local package installation, grant-validation tests, and remaining live-command limits.
 - `PHASE3_TENTH_SLICE_EVIDENCE.md` — live parser health, code-only diagnostics, and installation/quarantine recovery evidence.
 - `PHASE3_WATCHER_LOAD_EVIDENCE.md` — live burst, prolonged event activity, and recovery callback-race observations and limits.
 - `PHASE3_RESOURCE_BUDGET_METHOD.md` — repeatable scale measurements, release-gate method, and hardware-tier proof plan.

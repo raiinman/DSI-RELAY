@@ -1,4 +1,5 @@
 use relay::client;
+use relay::parser_install::{self, InstallOptions};
 use relay_contracts::{
     registry, CommandRequest, CommandResponse, RequestContext,
     LOCAL_HOST_STATE_FORMAT,
@@ -7,6 +8,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::fs;
 use std::io::Read;
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Deserialize)]
@@ -184,7 +186,7 @@ fn execute_human(
 fn run(args: &[String]) -> Result<i32, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Err(
-            "usage: relay <status|doctor|dashboard-url|commands|project-list|project-register|result-get|job-get|shutdown|exec>"
+            "usage: relay <status|doctor|dashboard-url|commands|project-list|project-register|parser-install|result-get|job-get|shutdown|exec>"
                 .to_string(),
         );
     };
@@ -229,6 +231,20 @@ fn run(args: &[String]) -> Result<i32, String> {
             has_json_flag(args),
             "default",
         ),
+        "parser-install" => {
+            if args.len() != 6 || args[5] != "--allow-source-delivery" {
+                return Err("usage: relay parser-install <project-id> <manifest.json> <worker.exe> <extensions-comma-separated> --allow-source-delivery".into());
+            }
+            let message = parser_install::install(InstallOptions {
+                project_id: args[1].clone(),
+                manifest_path: PathBuf::from(&args[2]),
+                worker_path: PathBuf::from(&args[3]),
+                source_extensions: args[4].split(',').map(str::to_string).collect(),
+                allow_source_delivery: true,
+            })?;
+            println!("{message}");
+            Ok(0)
+        }
         "result-get" => {
             let id = args.get(1)
                 .ok_or_else(|| "result-get requires result ID".to_string())?;

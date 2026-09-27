@@ -15,6 +15,7 @@ The repeatable resource measurement method and one-host five-run sample are in P
 Parser health and recovery evidence is in PHASE3_TENTH_SLICE_EVIDENCE.md. One-host parser cost evidence and its raw three-run report are in PHASE3_PARSER_RESOURCE_EVIDENCE.md and PHASE3_PARSER_RESOURCE_THREE_RUN_2026-09-26.json.
 PHASE3_PORTABLE_BENCHMARK_DRAFT.md records the local no-Cargo synthetic benchmark draft and remaining package gates.
 PUBLIC_PREVIEW_PATH.md separates a synthetic measurement preview from a public RELAY beta and lists the release controls needed before distributing binaries.
+MEASUREMENT_PREVIEW_CI_PLAN.md records the branch-only hosted Windows package check and its limits; it is not a desktop-account or hardware-tier result.
 The current Rust release dependency and license-expression inventory is in RELEASE_DEPENDENCY_LICENSE_INVENTORY.md.
 PHASE4_RESULT_DESCRIPTION_EVIDENCE.md records the early metadata-only result lookup; Phase 4 remains open.
 PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md records the first byte-budgeted exact-fact view by result ID and its test limits.

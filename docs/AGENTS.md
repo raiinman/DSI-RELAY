@@ -70,6 +70,7 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `PHASE4_RESULT_DESCRIPTION_EVIDENCE.md` — early metadata-only result retrieval foundation and focused verification; Phase 4 remains open.
 - `PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md` — byte-budgeted exact-fact result view, scope/privacy tests, and explicit Phase 4 limits.
 - `PUBLIC_PREVIEW_PATH.md` — scoped measurement-preview and public-beta release path, privacy-preserving report contract, and distribution gates.
+- `MEASUREMENT_PREVIEW_CI_PLAN.md` — branch-only hosted Windows package validation plan and evidence limits.
 - `RELEASE_DEPENDENCY_LICENSE_INVENTORY.md` — lockfile-based Windows CLI/daemon crate versions and license expressions; package-level notice review is in `release/THIRD_PARTY_NOTICE_REVIEW.md`.
 - `ROADMAP.md` — staged delivery plan and milestone exit criteria.
 - `RESEARCH_PLAN.md` — academic/technical research and benchmark program.

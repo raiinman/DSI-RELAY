@@ -131,10 +131,17 @@ function Invoke-Relay {
         try {
             $cliFailure = $stderrText | ConvertFrom-Json
             $message = [string]$cliFailure.error.message
-            if ($message -eq 'HOST_UNAVAILABLE') { Write-Host 'RELAY CLI could not find daemon state' }
-            elseif ($message -match '^open local pipe failed: [0-9]{1,10}$') { Write-Host 'RELAY CLI could not open the daemon pipe' }
-            elseif ($message -eq 'pipe closed') { Write-Host 'RELAY CLI pipe closed before response' }
-            elseif ($message -match '^HOST_STATE_INCOMPATIBLE:') { Write-Host 'RELAY CLI host state was incompatible' }
+            $safeCategory = $message.Split(':')[0]
+            if ($safeCategory -in @(
+                'HOST_UNAVAILABLE', 'HOST_STATE_INCOMPATIBLE', 'INVALID_MACHINE_INPUT',
+                'read stdin', 'parse host state', 'open local pipe failed',
+                'read local pipe failed', 'write local pipe failed', 'pipe closed',
+                'pipe returned zero bytes', 'pipe message too large', 'pipe utf8',
+                'pipe wrote zero bytes',
+                'parse response', 'parse hello response', 'parse command response',
+                'serialize request', 'BAD_HANDSHAKE', 'UNAUTHORIZED',
+                'PROTOCOL_INCOMPATIBLE'
+            )) { Write-Host "RELAY CLI error category: $safeCategory" }
         }
         catch { }
         throw "RELAY command $Command failed"

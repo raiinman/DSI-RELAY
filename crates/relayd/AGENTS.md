@@ -45,6 +45,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 - The ignored live installed-parser resource fixture in `tests/phase3_parser_resource.rs` measures initial publication, changed-source reparse, foreground latency, idle CPU, and resident memory on one host; `tests/phase3_parser_resource_report.ps1` records repeatable samples and source fingerprints without claiming a supported hardware tier.
 - The draft portable runner in `tests/phase3_portable_benchmark.ps1` exercises a staged release daemon on another host; its smoke results are functional evidence until minimum/recommended hardware and creator-app contention are measured.
 - The portable runner smoke should verify a successful staged-binary run, an existing report path left byte-identical without starting a daemon, and an induced CLI timeout that leaves a fixed-code failure report with no new daemon or fixture root.
+- The portable runner reports fixed failure codes for daemon launch, early exit, readiness timeout, and CLI timeout without copying raw process output into its report.
 - `src/dashboard.rs` unit tests and `tests/phase5_dashboard.rs` verify live HTTP token/origin/write rejection and parity with the named-pipe command path.
 
 # Child DOX Index

@@ -29,6 +29,7 @@ jobs:
       - name: Select stable Windows Rust toolchain
         run: |
           $ErrorActionPreference = 'Stop'
+          Write-Output "Windows runner session ID: $((Get-Process -Id $PID).SessionId)"
           rustup toolchain install stable-x86_64-pc-windows-msvc --profile minimal
           if ($LASTEXITCODE -ne 0) { throw 'Stable Rust toolchain installation failed' }
           rustup default stable-x86_64-pc-windows-msvc

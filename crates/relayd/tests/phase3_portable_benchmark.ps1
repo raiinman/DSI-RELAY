@@ -17,6 +17,7 @@ $cliPath = Join-Path $binaryRoot 'relay.exe'
 $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\')
 $script:reportInitialized = $false
 $script:cliTimedOut = $false
+$script:benchmarkFailureCode = $null
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $report = [ordered]@{
     schema_version = 2
@@ -135,7 +136,10 @@ function Wait-Daemon {
     $deadline = [DateTime]::UtcNow.AddSeconds(10)
     $statePath = Join-Path $stateDir 'host.json'
     while ([DateTime]::UtcNow -lt $deadline) {
-        if ($Process.HasExited) { throw 'RELAY daemon exited before becoming ready' }
+        if ($Process.HasExited) {
+            $script:benchmarkFailureCode = 'BENCHMARK_DAEMON_EXITED'
+            throw 'RELAY daemon exited before becoming ready'
+        }
         if (Test-Path -LiteralPath $statePath) {
             try {
                 $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
@@ -145,6 +149,7 @@ function Wait-Daemon {
         }
         Start-Sleep -Milliseconds 50
     }
+    $script:benchmarkFailureCode = 'BENCHMARK_DAEMON_NOT_READY'
     throw 'RELAY daemon did not become ready in ten seconds'
 }
 
@@ -270,7 +275,11 @@ try {
     Write-Host "Run $run of ${Runs}: creating two temporary $FilesPerProject-file projects"
     New-SyntheticProject $rootA
     New-SyntheticProject $rootB
-    $daemon = Start-Process -FilePath $daemonPath -PassThru -WindowStyle Hidden
+    try { $daemon = Start-Process -FilePath $daemonPath -PassThru -WindowStyle Hidden }
+    catch {
+        $script:benchmarkFailureCode = 'BENCHMARK_DAEMON_LAUNCH_FAILED'
+        throw
+    }
     $hostState = Wait-Daemon $daemon
 
     Set-Stage "run_${run}_baseline"
@@ -379,10 +388,11 @@ try {
 catch {
     $report.status = 'failed'
     $report.failure_code = if ($script:cliTimedOut) { 'BENCHMARK_CLI_TIMEOUT' }
+        elseif ($script:benchmarkFailureCode) { $script:benchmarkFailureCode }
         elseif ($report.current_stage -eq 'preflight') { 'BENCHMARK_PREFLIGHT_FAILED' }
         else { 'BENCHMARK_STAGE_FAILED' }
     try { Save-Report } catch { }
-    throw "Benchmark failed at $($report.current_stage); inspect the local JSON report"
+    throw "Benchmark failed at $($report.current_stage) ($($report.failure_code)); inspect the local JSON report"
 }
 finally {
     if ($report.status -eq 'in_progress') {

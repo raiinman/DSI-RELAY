@@ -1,0 +1,2 @@
+# Keep the release inventory fingerprint stable across Windows checkouts.
+Cargo.lock text eol=lf

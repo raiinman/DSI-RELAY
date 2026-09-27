@@ -7,6 +7,7 @@
 
 - AGENTS.md files are binding work contracts for their subtrees.
 - Work products, source materials, instructions, records, assets, and durable docs must stay understandable from the nearest applicable AGENTS.md plus every parent AGENTS.md above it.
+- Keep `Cargo.lock` checked out with LF line endings through `.gitattributes`; the release dependency and provenance checks pin its raw SHA-256 across Windows hosts.
 
 ## Read Before Editing
 

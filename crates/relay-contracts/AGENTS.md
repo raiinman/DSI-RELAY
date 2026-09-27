@@ -19,7 +19,7 @@ Own the versioned machine contracts shared by RELAY Core and every client surfac
 - Dependency replacement accepts an optional complete configuration-selection guard (revision, adapter ID, adapter version). Core checks it atomically for automatic parser submissions; omitted guards preserve existing manual callers and grant no authority.
 - `system.status` permits an additive bounded host-component health array; command clients can read live parser health without reading local host state files.
 - `result.describe` is a distinct read-only command for metadata and stored payload size; `result.get` remains the full-payload command.
-- `result.context` is a byte-budgeted read of exact allowlisted scalar facts by result ID; it references `result.get` for complete evidence and does not authorize remote data transfer.
+- `result.context` is a byte-budgeted read of exact allowlisted scalar facts by result ID. An optional bounded `required_pointers` list must return each eligible exact fact or fail explicitly; it cannot override the safety filter or project scope. The response references `result.get` for complete evidence and does not authorize remote data transfer.
 - No secret values, project paths, or runtime state are embedded in contract metadata.
 
 # Verification

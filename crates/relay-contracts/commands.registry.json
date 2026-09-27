@@ -416,7 +416,12 @@
         "required": ["result_id", "max_bytes"],
         "properties": {
           "result_id": { "type": "string", "minLength": 1 },
-          "max_bytes": { "type": "integer", "minimum": 512, "maximum": 16384 }
+          "max_bytes": { "type": "integer", "minimum": 512, "maximum": 16384 },
+          "required_pointers": {
+            "description": "Optional exact JSON Pointers to already eligible scalar facts; all must fit or the read fails.",
+            "type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+          }
         },
         "additionalProperties": false
       },
@@ -446,7 +451,7 @@
         },
         "additionalProperties": false
       },
-      "errors": ["RESULT_NOT_FOUND", "CONTEXT_BUDGET_TOO_SMALL", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+      "errors": ["RESULT_NOT_FOUND", "CONTEXT_BUDGET_TOO_SMALL", "CONTEXT_FACT_UNAVAILABLE", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
     },
     {
       "id": "job.checkpoint",

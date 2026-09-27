@@ -2057,6 +2057,30 @@ impl RelayCore {
         let max_bytes = arguments["max_bytes"]
             .as_u64()
             .expect("registry validation requires max_bytes") as usize;
+        let required_pointers: Vec<&str> = arguments
+            .get("required_pointers")
+            .map(|value| {
+                value.as_array()
+                    .expect("registry validation requires an array")
+                    .iter()
+                    .map(|pointer| pointer.as_str().expect("registry validation requires strings"))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if arguments.get("required_pointers").is_some()
+            && (required_pointers.is_empty()
+                || required_pointers.len() > 8
+                || required_pointers.iter().collect::<BTreeSet<_>>().len()
+                    != required_pointers.len()
+                || required_pointers
+                    .iter()
+                    .any(|pointer| !context::valid_required_pointer(pointer)))
+        {
+            return Err(CoreCommandError::new(
+                "VALIDATION_FAILED",
+                "required_pointers must contain 1-8 unique bounded JSON Pointers",
+            ));
+        }
         let result = self.with_storage(|storage| storage.get_result(id))?;
         let result = result.ok_or_else(|| {
             CoreCommandError::new("RESULT_NOT_FOUND", "result not found")
@@ -2064,12 +2088,21 @@ impl RelayCore {
         authority
             .require_project(result.project_id.as_deref())
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
-        context::compile_result(&result, max_bytes).ok_or_else(|| {
-            CoreCommandError::new(
+        match context::compile_result_required(&result, max_bytes, &required_pointers) {
+            Ok(view) => Ok(view),
+            Err(context::CompileError::BudgetTooSmall) => Err(CoreCommandError::new(
                 "CONTEXT_BUDGET_TOO_SMALL",
-                "the requested byte budget cannot hold the context envelope",
-            )
-        })
+                if required_pointers.is_empty() {
+                    "the requested byte budget cannot hold the context envelope"
+                } else {
+                    "the requested byte budget cannot hold all required context facts"
+                },
+            )),
+            Err(context::CompileError::RequiredFactUnavailable) => Err(CoreCommandError::new(
+                "CONTEXT_FACT_UNAVAILABLE",
+                "a required context fact is unavailable",
+            )),
+        }
     }
     fn job_checkpoint(
         &self,
@@ -2925,6 +2958,96 @@ mod tests {
             context_request(), &runtime(), &scoped,
         );
         assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
+
+        drop(core);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn required_context_facts_are_exact_scoped_and_fail_closed() {
+        let dir = temp_dir("required-context");
+        let core = RelayCore::open(CoreConfig::new(&dir));
+        let project_id = register_project(&core);
+        let mut entries: Vec<Value> = (0..401)
+            .map(|index| json!({ "event_code": format!("EVENT-{index:03}") }))
+            .collect();
+        entries[200] = json!({ "target_code": "TARGET-EXACT-42" });
+        let mut put = request("REQ-required-put", "result.put", json!({
+            "project_id": project_id,
+            "payload": {
+                "entries": entries,
+                "api_token": "PRIVATE-TOKEN",
+                "coordinate": { "x": 12.125 }
+            }
+        }));
+        put.idempotency_key = Some("IDEMP-required-put".to_string());
+        let stored = core.execute(put, &runtime());
+        assert!(stored.ok, "{:?}", stored.error);
+        let result_id = stored.result.unwrap()["id"].as_str().unwrap().to_string();
+        let read = |pointers: Value, max_bytes: usize| core.execute(
+            request("REQ-required-read", "result.context", json!({
+                "result_id": result_id,
+                "max_bytes": max_bytes,
+                "required_pointers": pointers
+            })), &runtime());
+
+        let focused = read(json!(["/entries/200/target_code"]), 1024);
+        assert!(focused.ok, "{:?}", focused.error);
+        let focused = focused.result.unwrap();
+        assert!(serde_json::to_vec(&focused).unwrap().len() <= 1024);
+        assert!(focused["facts"].as_array().unwrap().iter().any(|fact| {
+            fact["pointer"] == "/entries/200/target_code"
+                && fact["value"] == "TARGET-EXACT-42"
+        }));
+        let pair = read(json!([
+            "/entries/200/target_code", "/entries/0/event_code"
+        ]), 1024);
+        assert!(pair.ok, "{:?}", pair.error);
+        let pair = pair.result.unwrap();
+        let pair_facts = pair["facts"].as_array().unwrap();
+        assert_eq!(pair_facts[0]["pointer"], "/entries/200/target_code");
+        assert_eq!(pair_facts[0]["value"], "TARGET-EXACT-42");
+        assert_eq!(pair_facts[1]["pointer"], "/entries/0/event_code");
+        assert_eq!(pair_facts[1]["value"], "EVENT-000");
+
+        for pointer in ["/api_token", "/coordinate/x", "/missing"] {
+            let failed = read(json!([pointer]), 1024);
+            assert_eq!(failed.error.as_ref().unwrap().code, "CONTEXT_FACT_UNAVAILABLE");
+            let serialized = serde_json::to_string(&failed).unwrap();
+            assert!(!serialized.contains("PRIVATE-TOKEN"));
+            assert!(!serialized.contains("12.125"));
+            assert!(!serialized.contains(pointer));
+        }
+        for pointer in ["entries/200/target_code", "/entries/~2", "/entries/~"] {
+            let failed = read(json!([pointer]), 1024);
+            assert_eq!(failed.error.unwrap().code, "VALIDATION_FAILED");
+        }
+        assert_eq!(read(json!(vec!["/entries/200/target_code"; 2]), 1024)
+            .error.unwrap().code, "VALIDATION_FAILED");
+
+        let mut scoped = ExecutionAuthority::local_user("CLIENT-scoped");
+        scoped.project_ids = Some(["PRJ-other".to_string()].into_iter().collect());
+        let denied = core.execute_authorized(
+            request("REQ-required-denied", "result.context", json!({
+                "result_id": result_id,
+                "max_bytes": 1024,
+                "required_pointers": ["/entries/200/target_code"]
+            })), &runtime(), &scoped);
+        assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
+
+        let mut large = request("REQ-required-large-put", "result.put", json!({
+            "project_id": project_id,
+            "payload": { "items": vec![json!({ "code": "X".repeat(128) }); 8] }
+        }));
+        large.idempotency_key = Some("IDEMP-required-large-put".to_string());
+        let stored = core.execute(large, &runtime());
+        assert!(stored.ok, "{:?}", stored.error);
+        let large_id = stored.result.unwrap()["id"].as_str().unwrap().to_string();
+        let pointers: Vec<String> = (0..8).map(|index| format!("/items/{index}/code")).collect();
+        let failed = core.execute(request("REQ-required-too-large", "result.context", json!({
+            "result_id": large_id, "max_bytes": 512, "required_pointers": pointers
+        })), &runtime());
+        assert_eq!(failed.error.unwrap().code, "CONTEXT_BUDGET_TOO_SMALL");
 
         drop(core);
         fs::remove_dir_all(dir).unwrap();

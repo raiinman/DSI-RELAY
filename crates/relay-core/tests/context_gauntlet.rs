@@ -232,6 +232,36 @@ fn deterministic_context_gauntlet_first_fixture() {
                 ),
             );
         }
+        let required_result =
+            if fixture.name.starts_with("competing_target_") {
+                let pointer = fixture.observed[0];
+                let response = core.execute(
+                    request(
+                        "REQ-gauntlet-required",
+                        "result.context",
+                        json!({
+                            "result_id": result_id, "max_bytes": BUDGET,
+                            "required_pointers": [pointer]
+                        }),
+                    ),
+                    &runtime,
+                );
+                assert!(response.ok, "{}: {:?}", fixture.name, response.error);
+                let focused = response.result.unwrap();
+                let bytes = serde_json::to_vec(&focused).unwrap().len();
+                assert!(bytes <= BUDGET);
+                let source_value = full["payload"].pointer(pointer).unwrap();
+                assert!(
+                    focused["facts"].as_array().unwrap().iter().any(|fact| {
+                        fact["pointer"] == pointer && fact["value"] == *source_value
+                    }),
+                    "{} lost required exact fact",
+                    fixture.name
+                );
+                json!({ "body_bytes": bytes, "exact_retained": true })
+            } else {
+                Value::Null
+            };
         println!(
             "{}",
             json!({
@@ -241,6 +271,7 @@ fn deterministic_context_gauntlet_first_fixture() {
                 "budget_bytes": BUDGET,
                 "retained_assertions": fixture.retained.len(),
                 "observed_retention": observed_retention,
+                "required_result": required_result,
                 "selected_facts": facts.len(),
                 "omitted_scalars": compact["omitted_scalar_count"],
                 "truncated": compact["truncated"]

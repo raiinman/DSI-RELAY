@@ -1,5 +1,6 @@
 param(
     [string]$InstallRoot,
+    [string]$DataRoot,
     [switch]$AllowUnsignedLocalDevelopment,
     [switch]$FixtureMode,
     [Parameter(Mandatory = $true)]
@@ -8,14 +9,22 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^[0-9a-fA-F]{64}$')]
     [string]$ExpectedArchiveSha256,
-    [Parameter(Mandatory = $true)]
-    [ValidateRange(1, 10000)]
+    [ValidateRange(0, 10000)]
     [int]$ObservedStorageSchema
 )
 
 $ErrorActionPreference = 'Stop'
 if (-not $AllowUnsignedLocalDevelopment) {
     throw 'Unsigned rollback requires -AllowUnsignedLocalDevelopment'
+}
+if ($DataRoot -and -not $FixtureMode) { throw 'Custom data roots require -FixtureMode' }
+if ($FixtureMode -and -not $DataRoot) { throw 'Fixture rollback requires an explicit fixture data root' }
+if (-not $FixtureMode -and $env:RELAY_STATE_DIR) {
+    throw 'Local rollback cannot infer the data root while RELAY_STATE_DIR is set'
+}
+if (-not $DataRoot) {
+    if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA is required for local rollback' }
+    $DataRoot = Join-Path $env:LOCALAPPDATA 'DSI\RELAY'
 }
 if (-not $InstallRoot) { $InstallRoot = Join-Path $env:LOCALAPPDATA 'Programs\DSI-RELAY' }
 $root = [IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($InstallRoot))
@@ -105,6 +114,21 @@ if ($currentReceipt.schema_version -ne 1 -or
     $currentReceipt.channel -ne 'unsigned_local_development') {
     throw 'Current version pointer does not match its receipt'
 }
+$currentVersionPath = Join-Path $versionsRoot ([string]$current.active_version)
+Assert-DirectChild $currentVersionPath $versionsRoot
+Assert-Directory $currentVersionPath
+& (Join-Path $PSScriptRoot 'Verify-UnsignedStage.ps1') -PackageDirectory $currentVersionPath
+$currentManifestPath = Join-Path $currentVersionPath 'bundle-manifest.json'
+Assert-RegularFile $currentManifestPath
+$currentManifest = Get-Content -LiteralPath $currentManifestPath -Raw | ConvertFrom-Json
+if ($currentManifest.version -ne $current.active_version -or
+    [int]$currentManifest.storage_schema_min -ne [int]$currentReceipt.storage_schema_min -or
+    [int]$currentManifest.storage_schema_max -ne [int]$currentReceipt.storage_schema_max -or
+    ($currentReceipt.PSObject.Properties.Name -contains 'manifest_sha256' -and
+        [string]$currentReceipt.manifest_sha256 -ne
+            (Get-FileHash -LiteralPath $currentManifestPath -Algorithm SHA256).Hash.ToLowerInvariant())) {
+    throw 'Current version manifest does not match its receipt'
+}
 
 $versionPath = Join-Path $versionsRoot $Version
 $receiptPath = Join-Path $receiptsRoot "$Version.json"
@@ -120,10 +144,6 @@ if ($receipt.schema_version -ne 1 -or $receipt.version -ne $Version -or
     [int]$receipt.storage_schema_max -lt [int]$receipt.storage_schema_min) {
     throw 'Previous version receipt or expected archive digest is invalid'
 }
-if ($ObservedStorageSchema -lt [int]$receipt.storage_schema_min -or
-    $ObservedStorageSchema -gt [int]$receipt.storage_schema_max) {
-    throw 'ROLLBACK_STORAGE_SCHEMA_INCOMPATIBLE'
-}
 & (Join-Path $PSScriptRoot 'Verify-UnsignedStage.ps1') -PackageDirectory $versionPath
 $manifestPath = Join-Path $versionPath 'bundle-manifest.json'
 Assert-RegularFile $manifestPath
@@ -138,13 +158,25 @@ if ($receipt.PSObject.Properties.Name -contains 'manifest_sha256' -and
     throw 'Previous version manifest digest does not match its receipt'
 }
 
+$observedStorageSchema = & (Join-Path $PSScriptRoot 'Read-StorageSchema.ps1') `
+    -RelaydPath (Join-Path $currentVersionPath 'relayd.exe') -DataRoot $DataRoot
+if ($PSBoundParameters.ContainsKey('ObservedStorageSchema') -and
+    $ObservedStorageSchema -ne $observedStorageSchema) {
+    throw 'ROLLBACK_STORAGE_SCHEMA_MISMATCH'
+}
+if ($observedStorageSchema -eq 0) { throw 'ROLLBACK_STORAGE_SCHEMA_UNKNOWN' }
+if ($observedStorageSchema -lt [int]$receipt.storage_schema_min -or
+    $observedStorageSchema -gt [int]$receipt.storage_schema_max) {
+    throw 'ROLLBACK_STORAGE_SCHEMA_INCOMPATIBLE'
+}
+
 Write-JsonAtomic $currentPath ([ordered]@{
     schema_version = 1
     active_version = $Version
     archive_sha256 = $ExpectedArchiveSha256.ToLowerInvariant()
     storage_schema_min = [int]$receipt.storage_schema_min
     storage_schema_max = [int]$receipt.storage_schema_max
-    observed_storage_schema = $ObservedStorageSchema
+    observed_storage_schema = $observedStorageSchema
     channel = 'unsigned_local_development'
     previous_version = [string]$current.active_version
 })

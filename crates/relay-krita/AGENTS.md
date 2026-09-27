@@ -17,6 +17,7 @@ Own Krita-specific asset inspection and fixed local KRA-to-PNG export outside RE
 - Export accepts a bounded regular `.kra`, stages a PNG with a random sibling name in the target directory, stops oversized output, checks PNG size and signature, and publishes through create-only same-volume linking. Existing targets are never overwritten; temporary files are cleaned by their exact path.
 - Successful export records SHA-256 digests for the source and published PNG, with a second source digest check before publication. Digests are provenance observations, not full image-content validation.
 - Export status distinguishes missing Krita (`untested`), interrupted work (`incomplete`), and a completed native attempt. A PNG signature is not full image-content validation, which remains `untested`.
+- Recovery inspection reads an existing project-local KRA/PNG pair through the host's path gate and checks each opened Windows handle against the canonical project root, refusing reparse points and concurrent writers. It bounds both files, checks a PNG header, and hashes each handle twice without changing either file. Platforms without that handle guard report unavailable. Its result is a candidate with unverified native origin; only a fresh explicit export to a new path can establish native execution evidence.
 
 # Work Guidance
 
@@ -26,6 +27,7 @@ Own Krita-specific asset inspection and fixed local KRA-to-PNG export outside RE
 # Verification
 
 - Focused crate checks and path/format tests; a real Krita export remains part of integrated testing.
+- Recovery fixture checks verify unavailable and malformed files, bounded hashes, unchanged output, and unverified native-origin labels; they are not creator-app tests.
 
 # Child DOX Index
 

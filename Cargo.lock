@@ -411,6 +411,7 @@ dependencies = [
  "relay-uefn",
  "relay-uefn-mcp",
  "relay-verse",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2",

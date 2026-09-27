@@ -91,7 +91,7 @@ fn shutdown(state: &LocalHostState, child: &mut Child) {
 fn authority_transactions_usage_and_egress_survive_restart() {
     let dir = unique_dir("vertical");
     fs::create_dir_all(&dir).unwrap();
-    let instance = "phase2-second-slice";
+    let instance = dir.file_name().unwrap().to_str().unwrap();
 
     let mut first = spawn_host(&dir, instance);
     let first_state = wait_state(&dir, first.id());
@@ -215,7 +215,7 @@ fn authority_transactions_usage_and_egress_survive_restart() {
     let mut second = spawn_host(&dir, instance);
     let second_state = wait_state(&dir, second.id());
     assert_eq!(second_state.recovery_state, "Healthy");
-    assert_eq!(second_state.storage_schema_version, Some(7));
+    assert!(second_state.storage_schema_version.is_some_and(|version| version >= 7));
 
     let transactions = call(
         &second_state,

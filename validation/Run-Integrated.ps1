@@ -31,9 +31,9 @@ $known = @(
     'dashboard.browser', 'dashboard.approval_review', 'dashboard.accessibility',
     'uefn.static_inspection', 'uefn.mcp_discovery', 'uefn.spawn_audit', 'verse.imported_analysis', 'verse.project_file_analysis',
     'uefn.live_runtime', 'uefn.live_capture_assertions', 'assets.local_links', 'assets.impact_analysis',
-    'krita.declared_formats', 'blender.mesh_validation', 'blender.native_mesh', 'krita.native_export',
+    'krita.declared_formats', 'krita.recovery_candidate', 'blender.mesh_validation', 'blender.native_mesh', 'krita.native_export',
     'gateway.local_discovery_overhead', 'gateway.local_result_context', 'gateway.remote_client', 'skills.local_client', 'remote.chatgpt_client',
-    'onboarding.clean_account', 'onboarding.recovery', 'automation.pause_resume', 'automation.check_plan', 'automation.declared_index_checks', 'hardware.minimum_pc',
+    'onboarding.clean_account', 'onboarding.recovery', 'automation.pause_resume', 'automation.check_plan', 'automation.declared_index_checks', 'automation.direct_index_fixture', 'hardware.minimum_pc',
     'report.evidence_capture', 'privacy.local_only', 'installer.upgrade_rollback', 'release.public_install'
 )
 if ($plan.schema_version -ne 1 -or $plan.workflows.Count -ne $known.Count) { throw 'INVALID_RUN_PLAN' }
@@ -1030,6 +1030,40 @@ try {
                         $reason = if ($status -eq 'passed') { 'KRITA_DECLARATIONS_VALID' } else { 'KRITA_DECLARATION_FINDINGS' }
                         $evidenceEligible = $true
                     }
+                    'krita.recovery_candidate' {
+                        $fixtureRoot = Join-Path $script:ownedFull 'krita-recovery-project'
+                        $null = [System.IO.Directory]::CreateDirectory($fixtureRoot)
+                        $source = Join-Path $fixtureRoot 'source.kra'
+                        $output = Join-Path $fixtureRoot 'existing.png'
+                        [System.IO.File]::WriteAllText($source, 'unverified KRA fixture', $utf8)
+                        [byte[]]$png = @(137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0)
+                        [System.IO.File]::WriteAllBytes($output, $png)
+                        $beforeHash = (Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash
+                        $fixtureProjectId = 'VAL-KRITA-' + [Guid]::NewGuid().ToString('N').Substring(0, 12)
+                        $null = Require-Relay 'project.import' @{
+                            id = $fixtureProjectId; name = 'Integrated Krita Recovery Fixture'; root_path = $fixtureRoot
+                        } $true
+                        $arguments = @{
+                            project_id = $fixtureProjectId; source_path = 'source.kra'; export_path = 'existing.png'
+                        }
+                        $candidate = Require-Relay 'assets.krita.reconcile' $arguments $true
+                        $replay = Require-Relay 'assets.krita.reconcile' $arguments $true
+                        $saved = Require-Relay 'result.get' @{ result_id = [string]$candidate.result_id }
+                        $afterHash = (Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash
+                        $valid = $candidate.status -eq 'candidate' -and
+                            $candidate.record_state -eq 'candidate_stored' -and
+                            $candidate.native_origin -eq 'unverified' -and
+                            $candidate.native_workflow_status -eq 'untested' -and
+                            $candidate.result_id -eq $replay.result_id -and
+                            $replay.record_replayed -eq $true -and
+                            $saved.project_id -eq $fixtureProjectId -and
+                            $saved.kind -eq 'ASSET_KRITA_RECOVERY_CANDIDATE' -and
+                            $saved.payload.native_workflow_status -eq 'untested' -and
+                            $beforeHash -eq $afterHash
+                        $status = if ($valid) { 'passed' } else { 'failed' }
+                        $reason = if ($valid) { 'RECOVERY_CANDIDATE_RECORDED' } else { 'RECOVERY_CANDIDATE_INVALID' }
+                        $evidenceEligible = $true
+                    }
                     'blender.mesh_validation' {
                         if (-not $script:projectReady) { $status = 'blocked'; $reason = 'PROJECT_BASELINE_MISSING'; break }
                         if (-not $BlendPath) { $status = 'untested'; $reason = 'BLEND_PATH_NOT_SUPPLIED'; break }
@@ -1131,6 +1165,68 @@ try {
                             $status = 'passed'; $reason = 'DECLARED_INDEX_ASSERTIONS_RECORDED'
                         }
                         $evidenceEligible = ($status -ne 'untested')
+                    }
+                    'automation.direct_index_fixture' {
+                        $fixtureRoot = Join-Path $script:ownedFull 'direct-check-project'
+                        $null = [System.IO.Directory]::CreateDirectory($fixtureRoot)
+                        $firstFile = Join-Path $fixtureRoot 'one.txt'
+                        $secondFile = Join-Path $fixtureRoot 'two.txt'
+                        [System.IO.File]::WriteAllText($firstFile, 'first-v1', $utf8)
+                        [System.IO.File]::WriteAllText($secondFile, 'second-v1', $utf8)
+                        $fixtureProjectId = 'VAL-CHECK-' + [Guid]::NewGuid().ToString('N').Substring(0, 12)
+                        $null = Require-Relay 'project.import' @{
+                            id = $fixtureProjectId; name = 'Integrated Direct Check Fixture'; root_path = $fixtureRoot
+                        } $true
+                        $baseline = Require-Relay 'project.index.build' @{ project_id = $fixtureProjectId } $true
+                        $catalog = @{
+                            format_version = 1
+                            checks = @(
+                                @{ id = 'check.one'; roots = @('one.txt'); leaves = @(); dependency_mode = 'direct'; assertion = @{ kind = 'indexed_file_present'; path = 'one.txt' } },
+                                @{ id = 'check.two'; roots = @('two.txt'); leaves = @(); dependency_mode = 'direct'; assertion = @{ kind = 'indexed_file_present'; path = 'two.txt' } }
+                            )
+                        }
+                        $registered = Require-Relay 'project.check_catalog.put' @{
+                            project_id = $fixtureProjectId; expected_revision = 0; catalog = $catalog
+                        } $true
+                        $initial = Require-Relay 'automation.checks.plan' @{
+                            project_id = $fixtureProjectId; after_generation = [long]$baseline.generation
+                        }
+                        if ($initial.mode -ne 'selective' -or $initial.coverage_basis -ne 'declared_direct_paths' -or
+                            @($initial.checks).Count -ne 2 -or $registered.index_generation -ne $baseline.generation) {
+                            $status = 'failed'; $reason = 'DIRECT_BASELINE_PLAN_INVALID'; $evidenceEligible = $true; break
+                        }
+                        $initialRun = Require-Relay 'automation.checks.execute' @{
+                            project_id = $fixtureProjectId; after_generation = [long]$baseline.generation;
+                            plan_id = [string]$initial.plan_id
+                        } $true
+                        if ($initialRun.passed_count -ne 2 -or $initialRun.failed_count -ne 0 -or
+                            $initialRun.untested_count -ne 0 -or @($initialRun.checks | Where-Object { -not $_.result_id }).Count -gt 0) {
+                            $status = 'failed'; $reason = 'DIRECT_BASELINE_RUN_INVALID'; $evidenceEligible = $true; break
+                        }
+                        [System.IO.File]::WriteAllText($firstFile, 'first-v2-changed', $utf8)
+                        $reconciled = Require-Relay 'project.index.reconcile' @{
+                            project_id = $fixtureProjectId; verify_content = $true
+                        } $true
+                        $changed = Require-Relay 'automation.checks.plan' @{
+                            project_id = $fixtureProjectId; after_generation = [long]$baseline.generation
+                        }
+                        if ($reconciled.generation -le $baseline.generation -or $changed.mode -ne 'selective' -or
+                            @($changed.checks).Count -ne 1 -or $changed.checks[0].check_id -ne 'check.one') {
+                            $status = 'failed'; $reason = 'DIRECT_AFFECTED_PLAN_INVALID'; $evidenceEligible = $true; break
+                        }
+                        $changedRun = Require-Relay 'automation.checks.execute' @{
+                            project_id = $fixtureProjectId; after_generation = [long]$baseline.generation;
+                            plan_id = [string]$changed.plan_id
+                        } $true
+                        $saved = Require-Relay 'result.get' @{ result_id = [string]$changedRun.checks[0].result_id }
+                        $valid = $changedRun.passed_count -eq 1 -and $changedRun.failed_count -eq 0 -and
+                            $changedRun.untested_count -eq 0 -and $changedRun.checks[0].check_id -eq 'check.one' -and
+                            $saved.project_id -eq $fixtureProjectId -and
+                            $saved.payload.native_workflow_status -eq 'untested' -and
+                            $saved.payload.index_generation -eq $changedRun.index_generation
+                        $status = if ($valid) { 'passed' } else { 'failed' }
+                        $reason = if ($valid) { 'DIRECT_INDEX_CHECKS_VERIFIED' } else { 'DIRECT_INDEX_RUN_INVALID' }
+                        $evidenceEligible = $true
                     }
                     'gateway.local_discovery_overhead' {
                         $cliDiscovery = Invoke-Relay 'registry.list' @{ surface = 'ai'; prefix = 'registry.'; limit = 8 }

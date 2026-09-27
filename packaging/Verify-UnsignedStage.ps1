@@ -12,6 +12,36 @@ function Get-Hash([string]$Path) {
     (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
+function Assert-WindowsX64([string]$Path) {
+    $stream = [IO.File]::OpenRead($Path)
+    try {
+        $reader = New-Object IO.BinaryReader($stream)
+        if ($reader.ReadUInt16() -ne 0x5a4d) { throw 'Package binary is not a Windows executable' }
+        $stream.Position = 0x3c
+        $offset = $reader.ReadInt32()
+        if ($offset -lt 0x40 -or $offset -gt ($stream.Length - 6)) { throw 'Invalid PE header' }
+        $stream.Position = $offset
+        if ($reader.ReadUInt32() -ne 0x00004550 -or $reader.ReadUInt16() -ne 0x8664) {
+            throw 'Package binary is not Windows x64'
+        }
+    }
+    finally { $stream.Dispose() }
+}
+
+function Assert-NoPersonalPath([string]$Path) {
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    $single = [Text.Encoding]::GetEncoding(28591).GetString($bytes)
+    $wide = [Text.Encoding]::Unicode.GetString($bytes)
+    $needles = @($env:USERPROFILE, $env:USERNAME, 'C:\Users\', 'C:/Users/') |
+        Where-Object { $_ -and $_.Length -ge 3 } | Select-Object -Unique
+    foreach ($needle in $needles) {
+        if ($single.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+            $wide.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            throw 'Package file contains a personal profile path or account identifier'
+        }
+    }
+}
+
 function Assert-Relative([string]$Relative) {
     if (-not $Relative -or $Relative -notmatch '^[A-Za-z0-9._/-]+$' -or
         $Relative.StartsWith('/') -or
@@ -35,10 +65,26 @@ if ($manifest.schema_version -ne 1 -or $manifest.status -ne 'unsigned_unpublishe
     [int]$manifest.storage_schema_max -lt [int]$manifest.storage_schema_min) {
     throw 'Unsupported package manifest'
 }
+$runtimeBinaries = @('relay.exe', 'relayd.exe', 'relay-gateway.exe')
+$runtimeSkillFiles = @(
+    'skills/relay-core/SKILL.md',
+    'skills/relay-core/scripts/relay-core.ps1',
+    'skills/relay-core/references/commands.generated.json'
+)
+$runtimeComponents = @($runtimeBinaries + $runtimeSkillFiles)
+if (@($manifest.runtime_components).Count -ne $runtimeComponents.Count -or
+    (@(Compare-Object -ReferenceObject $runtimeComponents -DifferenceObject @($manifest.runtime_components) -CaseSensitive).Count -ne 0)) {
+    throw 'Runtime component inventory is incomplete or unexpected'
+}
+$archiveName = "relay-$($manifest.version)-windows-x64-unsigned-stage"
+if ([string]$manifest.version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$' -or
+    $archiveName.Length -gt 96) { throw 'Package version makes archive paths invalid' }
+if (@($manifest.files).Count -gt 510) { throw 'Package exceeds archive entry count limit' }
 $expected = @{}
 foreach ($file in $manifest.files) {
     $relative = [string]$file.path
     Assert-Relative $relative
+    if (("$archiveName/$relative").Length -gt 256) { throw 'Package archive entry path is too long' }
     if ($expected.ContainsKey($relative)) { throw 'Duplicate package file in manifest' }
     $segments = $relative.Split('/')
     $current = $root
@@ -62,10 +108,20 @@ foreach ($file in $manifest.files) {
     }
     $expected[$relative] = (Get-Hash $path)
 }
-foreach ($required in @('relay.exe', 'relayd.exe', 'LICENSE', 'NOTICE-RELAY.txt',
-    'Cargo.lock', 'THIRD-PARTY-INVENTORY.json', 'README.txt', 'verify-package.ps1')) {
+foreach ($required in @($runtimeComponents + @('LICENSE', 'NOTICE-RELAY.txt',
+    'Cargo.lock', 'THIRD-PARTY-INVENTORY.json', 'README.txt', 'verify-package.ps1'))) {
     if (-not $expected.ContainsKey($required)) { throw "Required package file missing: $required" }
 }
+foreach ($binaryName in $runtimeBinaries) {
+    $binaryPath = Join-Path $root $binaryName
+    Assert-WindowsX64 $binaryPath
+    Assert-NoPersonalPath $binaryPath
+}
+foreach ($relative in $runtimeSkillFiles) {
+    Assert-NoPersonalPath (Join-Path $root ($relative.Replace('/', '\')))
+}
+$actualSkillFiles = @($manifest.files | ForEach-Object { [string]$_.path } | Where-Object { $_.StartsWith('skills/', [StringComparison]::Ordinal) })
+if ($actualSkillFiles.Count -ne $runtimeSkillFiles.Count) { throw 'Unexpected runtime skill file' }
 if ((Get-Hash (Join-Path $root 'Cargo.lock')) -ne [string]$manifest.cargo_lock_sha256) {
     throw 'Cargo.lock digest mismatch'
 }
@@ -91,9 +147,17 @@ foreach ($line in Get-Content -LiteralPath $sumsPath) {
 if ($seenSums.Count -ne $expected.Count) { throw 'Checksum list is incomplete' }
 $expected['SHA256SUMS.txt'] = Get-Hash $sumsPath
 
-$actual = @(Get-ChildItem -LiteralPath $root -File -Recurse | ForEach-Object {
+$directories = @(Get-ChildItem -LiteralPath $root -Directory -Recurse -Force)
+if (@($directories | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count -gt 0) {
+    throw 'Package contains a redirected directory'
+}
+$actualFiles = @(Get-ChildItem -LiteralPath $root -File -Recurse -Force)
+$actual = @($actualFiles | ForEach-Object {
     $_.FullName.Substring($root.Length + 1).Replace('\', '/')
 })
+if ($actual.Count -gt 512 -or (($actualFiles | Measure-Object -Property Length -Sum).Sum -gt 256MB)) {
+    throw 'Package exceeds archive entry count or expansion limit'
+}
 if ($actual.Count -ne $expected.Count) { throw 'Unexpected or missing package file' }
 foreach ($relative in $actual) {
     if (-not $expected.ContainsKey($relative)) { throw 'Unexpected package file' }

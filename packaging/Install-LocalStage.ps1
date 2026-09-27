@@ -5,6 +5,7 @@ param(
     [ValidatePattern('^[0-9a-fA-F]{64}$')]
     [string]$ExpectedArchiveSha256,
     [string]$InstallRoot,
+    [string]$DataRoot,
     [switch]$AllowUnsignedLocalDevelopment,
     [switch]$FixtureMode,
     [switch]$Activate,
@@ -16,8 +17,16 @@ $ErrorActionPreference = 'Stop'
 if (-not $AllowUnsignedLocalDevelopment) {
     throw 'Unsigned package installation requires -AllowUnsignedLocalDevelopment'
 }
-if ($Activate -and -not $PSBoundParameters.ContainsKey('ObservedStorageSchema')) {
-    throw 'Activation requires an observed storage schema; use 0 only when data is absent'
+if ($DataRoot -and -not $FixtureMode) { throw 'Custom data roots require -FixtureMode' }
+if ($FixtureMode -and $Activate -and -not $DataRoot) {
+    throw 'Fixture activation requires an explicit fixture data root'
+}
+if (-not $FixtureMode -and $Activate -and $env:RELAY_STATE_DIR) {
+    throw 'Local activation cannot infer the data root while RELAY_STATE_DIR is set'
+}
+if (-not $DataRoot) {
+    if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA is required for local activation' }
+    $DataRoot = Join-Path $env:LOCALAPPDATA 'DSI\RELAY'
 }
 if (-not $InstallRoot) {
     $InstallRoot = Join-Path $env:LOCALAPPDATA 'Programs\DSI-RELAY'
@@ -244,11 +253,6 @@ if ($receipt.PSObject.Properties.Name -contains 'manifest_sha256' -and
 
 if ($Activate) {
     Assert-DaemonStopped
-    if ($ObservedStorageSchema -ne 0 -and
-        ($ObservedStorageSchema -lt [int]$receipt.storage_schema_min -or
-            $ObservedStorageSchema -gt [int]$receipt.storage_schema_max)) {
-        throw 'UPDATE_STORAGE_SCHEMA_INCOMPATIBLE'
-    }
     $currentPath = Join-Path $root 'current.json'
     $previousVersion = $null
     if (Test-Path -LiteralPath $currentPath) {
@@ -285,8 +289,19 @@ if ($Activate) {
             throw 'Current version manifest digest does not match its receipt'
         }
     }
-    if ($previousVersion -and $ObservedStorageSchema -eq 0) {
-        throw 'UPDATE_STORAGE_SCHEMA_UNKNOWN: use a positive observed schema when replacing an active version'
+    $observedStorageSchema = & (Join-Path $PSScriptRoot 'Read-StorageSchema.ps1') `
+        -RelaydPath (Join-Path $versionPath 'relayd.exe') -DataRoot $DataRoot
+    if ($PSBoundParameters.ContainsKey('ObservedStorageSchema') -and
+        $ObservedStorageSchema -ne $observedStorageSchema) {
+        throw 'UPDATE_STORAGE_SCHEMA_MISMATCH'
+    }
+    if ($previousVersion -and $observedStorageSchema -eq 0) {
+        throw 'UPDATE_STORAGE_SCHEMA_UNKNOWN: the existing RELAY database is absent'
+    }
+    if ($observedStorageSchema -ne 0 -and
+        ($observedStorageSchema -lt [int]$receipt.storage_schema_min -or
+            $observedStorageSchema -gt [int]$receipt.storage_schema_max)) {
+        throw 'UPDATE_STORAGE_SCHEMA_INCOMPATIBLE'
     }
     Write-JsonAtomic $currentPath ([ordered]@{
         schema_version = 1
@@ -294,7 +309,7 @@ if ($Activate) {
         archive_sha256 = $actualHash
         storage_schema_min = [int]$receipt.storage_schema_min
         storage_schema_max = [int]$receipt.storage_schema_max
-        observed_storage_schema = $ObservedStorageSchema
+        observed_storage_schema = $observedStorageSchema
         channel = 'unsigned_local_development'
         previous_version = $previousVersion
     })

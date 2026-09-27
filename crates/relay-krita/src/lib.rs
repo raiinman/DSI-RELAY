@@ -6,7 +6,7 @@ use std::fs;
 use std::path::Path;
 
 mod export;
-pub use export::{ExportReport, ExportStatus, export_png};
+pub use export::{ExportReport, ExportStatus, RecoveryReport, RecoveryStatus, export_png, inspect_recovery_candidate};
 
 pub const SCHEMA_VERSION: u32 = 1;
 pub const MAX_VISIBLE_ASSETS: usize = 64;

@@ -19,6 +19,7 @@ relay-verse = { path = "../relay-verse" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+rusqlite.workspace = true
 notify = "8.2.0"
 windows-sys = { workspace = true, features = [
   "Win32_Foundation",

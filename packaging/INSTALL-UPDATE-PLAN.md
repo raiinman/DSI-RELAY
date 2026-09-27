@@ -7,6 +7,14 @@ unsigned-development opt-in. Install and rollback additionally require an
 expected archive digest. They do not sign, publish, auto-download, launch the
 daemon, or clear the public release gates.
 
+The unsigned stage contains the CLI, daemon, optional local MCP gateway, and
+the compact `skills/relay-core/` runtime skill files. Its manifest and folder
+verifier require all three Windows x64 binaries and exactly the skill's
+`SKILL.md`, `scripts/relay-core.ps1`, and
+`references/commands.generated.json` under that path. Third-party notices
+follow all three executable dependency graphs. The gateway remains a local
+adapter; staging it does not establish remote client compatibility.
+
 ## Signed release verification contract
 
 A future public package may place all distributable files in one `payload/`
@@ -70,14 +78,20 @@ Microsoft references: [Test-FileCatalog](https://learn.microsoft.com/en-us/power
 6. Atomically replace `current.json`, then launch the new daemon and check
    health. On failure, reactivate the last compatible verified version.
 
-The local development script verifies the staged package and requires a caller
-supplied observed storage schema (0 only for absent data) before activation.
+The local development script verifies the staged package, stops activation if
+`relayd.exe` is running, then invokes the staged binary's bounded read-only
+schema probe against `%LOCALAPPDATA%\DSI\RELAY\relay.sqlite3`. The probe
+does not create or migrate a database and fails on unreadable or damaged data.
+Uncheckpointed WAL/journal sidecars also block activation; the operator must
+recover and cleanly close the database before retrying.
 Schema 0 is accepted only for a first activation with no active version.
-Replacement activation requires a positive observed schema and checks it
-against the target package's declared range. The script does not launch the
-daemon or prove that the observed schema came from the actual database.
-Production must read schema and complete post-activation health verification
-through trusted code before this becomes an updater.
+Replacement activation requires a positive actual schema within the target
+package's declared range. `-ObservedStorageSchema` remains optional and must
+equal the probed value when supplied. Fixture activations require an explicit
+fixture data root. A custom data root is unavailable outside fixture mode;
+activation refuses an ambient `RELAY_STATE_DIR` override. The script does not
+launch or health-check the daemon. Production still needs post-activation
+health verification and a trusted signed delivery path.
 
 ## Rollback and uninstall
 
@@ -85,10 +99,12 @@ through trusted code before this becomes an updater.
   accepts the current data. A downgrade that cannot read the database is
   blocked; it must never silently alter or discard user data.
 - `Rollback-LocalStage.ps1` requires explicit unsigned-development opt-in, the
-  exact immediately previous version, its expected archive SHA-256, and a
-  positive observed current storage schema. It refuses a running daemon,
-  re-verifies the target folder, receipt, and schema range, then atomically
-  switches `current.json`. It never launches the daemon or alters the data
+  exact immediately previous version and its expected archive SHA-256. It
+  refuses a running daemon, re-verifies the active and target folders and
+  receipts, then probes actual storage through the active binary. Rollback
+  requires a positive schema within the target package's declared range;
+  an optional caller schema must match the probe. It then atomically switches
+  `current.json`. It never launches the daemon or alters the data
   root. A failed post-activation health check must be handled by a separate
   operator action until trusted automated launch/health handling exists.
 - Local-development uninstall requires the daemon to be stopped; it does not

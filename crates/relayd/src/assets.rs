@@ -14,7 +14,8 @@ pub fn execute_authorized(
 ) -> Option<Result<Value, ExtensionError>> {
     if !matches!(request.command.as_str(),
         "assets.manifest.validate" | "assets.krita.inspect" | "assets.impact.analyze"
-        | "assets.blender.mesh.validate" | "assets.krita.export") {
+        | "assets.blender.mesh.validate" | "assets.krita.export"
+        | "assets.krita.reconcile") {
         return None;
     }
     let project_id = request.arguments["project_id"]
@@ -69,6 +70,41 @@ pub fn execute_authorized(
                             "PNG was published, but build evidence could not be stored; the output remains in place"));
                     }
                 }
+            }
+            Ok(result)
+        })());
+    }
+    if request.command == "assets.krita.reconcile" {
+        return Some((|| {
+            let root = core.trusted_project_root(project_id)?;
+            let source_relative = request.arguments["source_path"].as_str()
+                .expect("shared registry validates source_path");
+            let export_relative = request.arguments["export_path"].as_str()
+                .expect("shared registry validates export_path");
+            let source = project_existing_file(&root, source_relative, "kra")?;
+            let output = project_existing_file(&root, export_relative, "png")?;
+            let report = relay_krita::inspect_recovery_candidate(&root, &source, &output);
+            let mut result = serde_json::to_value(&report).map_err(|_| {
+                ExtensionError::new("ASSET_SERIALIZATION_FAILED", "Krita recovery result is unavailable")
+            })?;
+            result["record_state"] = json!("not_attempted");
+            result["result_id"] = Value::Null;
+            result["record_replayed"] = json!(false);
+            result["source_identity_sha256"] = Value::Null;
+            result["export_identity_sha256"] = Value::Null;
+            if report.status == relay_krita::RecoveryStatus::Candidate {
+                let source_identity = relative_identity_sha256(source_relative);
+                let export_identity = relative_identity_sha256(export_relative);
+                let (id, replayed) = record_krita_recovery(core, request, runtime, authority,
+                    &source_identity, &export_identity, &report).ok_or_else(|| {
+                    ExtensionError::new("ASSET_RECOVERY_RECORD_FAILED",
+                        "Existing files were measured, but the candidate record could not be stored")
+                })?;
+                result["record_state"] = json!("candidate_stored");
+                result["result_id"] = json!(id);
+                result["record_replayed"] = json!(replayed);
+                result["source_identity_sha256"] = json!(source_identity);
+                result["export_identity_sha256"] = json!(export_identity);
             }
             Ok(result)
         })());
@@ -175,6 +211,59 @@ fn record_krita_build(
     };
     let stored = core.execute_authorized(inner, runtime, authority);
     stored.ok.then(|| stored.result?["id"].as_str().map(str::to_string)).flatten()
+}
+
+fn record_krita_recovery(
+    core: &RelayCore,
+    request: &CommandRequest,
+    runtime: &RuntimeContext,
+    authority: &ExecutionAuthority,
+    source_identity: &str,
+    export_identity: &str,
+    report: &relay_krita::RecoveryReport,
+) -> Option<(String, bool)> {
+    let source_sha256 = report.source_sha256.as_ref()?;
+    let output_sha256 = report.output_sha256.as_ref()?;
+    let output_bytes = report.output_bytes?;
+    let mut hasher = Sha256::new();
+    for part in [
+        "relay-krita-recovery-v1", request.arguments["project_id"].as_str()?,
+        source_identity, export_identity, source_sha256, output_sha256,
+        &authority.actor_id, &authority.client_id,
+    ] {
+        hasher.update(part.as_bytes());
+        hasher.update(b"\0");
+    }
+    if let Some(delegator) = &authority.delegator_id {
+        hasher.update(delegator.as_bytes());
+    }
+    let digest: String = hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect();
+    let inner = CommandRequest {
+        request_id: format!("RECOVERY-{}", &digest[..32]),
+        command: "result.put".to_string(),
+        command_version: Some(1),
+        arguments: json!({
+            "project_id": request.arguments["project_id"],
+            "kind": "ASSET_KRITA_RECOVERY_CANDIDATE",
+            "payload": {
+                "schema_version": 1,
+                "source_identity_sha256": source_identity,
+                "export_identity_sha256": export_identity,
+                "source_sha256": source_sha256,
+                "output_sha256": output_sha256,
+                "output_bytes": output_bytes,
+                "native_origin": "unverified",
+                "native_workflow_status": "untested",
+                "recovery_state": "candidate"
+            }
+        }),
+        idempotency_key: Some(format!("KRITA-RECOVERY-{digest}")),
+        context: request.context.clone(),
+    };
+    let stored = core.execute_authorized(inner, runtime, authority);
+    stored.ok.then(|| {
+        stored.result?.get("id")?.as_str().map(|id| (id.to_string(), stored.replayed))
+    }).flatten()
 }
 
 fn relative_identity_sha256(relative: &str) -> String {
@@ -532,6 +621,101 @@ mod tests {
             item["command"] == "assets.krita.export" && item["state"] == "FAILED"
         }));
         drop(core);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn krita_recovery_stores_only_a_scoped_candidate_and_replays_without_touching_png() {
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let dir = std::env::temp_dir().join(format!("relay-krita-reconcile-{}-{nonce}", std::process::id()));
+        let project_root = dir.join("project");
+        fs::create_dir_all(project_root.join("art")).unwrap();
+        fs::write(project_root.join("art/source.kra"), b"source fixture").unwrap();
+        let mut png = vec![137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13];
+        png.extend_from_slice(b"IHDR");
+        png.extend_from_slice(&1u32.to_be_bytes());
+        png.extend_from_slice(&1u32.to_be_bytes());
+        png.extend_from_slice(&[0; 9]);
+        let output = project_root.join("art/export.png");
+        let core = RelayCore::open(CoreConfig::new(dir.join("state")));
+        let runtime = RuntimeContext::in_process();
+        let registered = core.execute(request("project.register", json!({
+            "id": "PRJ-krita-reconcile", "name": "Recovery", "root_uri": project_root.to_string_lossy()
+        })), &runtime);
+        assert!(registered.ok, "{registered:?}");
+        let arguments = json!({
+            "project_id": "PRJ-krita-reconcile", "source_path": "art/source.kra",
+            "export_path": "art/export.png"
+        });
+        let authority = ExecutionAuthority::local_user("CLIENT-recovery");
+        let run = |arguments: Value| core.execute_authorized_with_extension(
+            request("assets.krita.reconcile", arguments), &runtime, &authority,
+            |request| execute_authorized(&core, request, &runtime, &authority),
+        );
+        let missing = run(arguments.clone());
+        assert_eq!(missing.error.unwrap().code, "ASSET_PATH_INVALID");
+        fs::write(&output, b"not a PNG").unwrap();
+        let mismatch = run(arguments.clone());
+        assert!(mismatch.ok, "{mismatch:?}");
+        assert_eq!(mismatch.result.as_ref().unwrap()["status"], "mismatch");
+        assert_eq!(mismatch.result.as_ref().unwrap()["record_state"], "not_attempted");
+        fs::write(&output, &png).unwrap();
+        let first = run(arguments.clone());
+        assert!(first.ok, "{first:?}");
+        let first = first.result.unwrap();
+        assert_eq!(first["status"], "candidate");
+        assert_eq!(first["native_origin"], "unverified");
+        assert_eq!(first["native_workflow_status"], "untested");
+        assert_eq!(first["record_state"], "candidate_stored");
+        assert_eq!(first["record_replayed"], false);
+        let result_id = first["result_id"].as_str().unwrap();
+        assert_eq!(fs::read(&output).unwrap(), png);
+        let second = run(arguments.clone());
+        assert!(second.ok, "{second:?}");
+        let second = second.result.unwrap();
+        assert_eq!(second["result_id"], result_id);
+        assert_eq!(second["record_replayed"], true);
+        let stored = core.execute_authorized(request("result.get", json!({
+            "result_id": result_id
+        })), &runtime, &authority);
+        assert!(stored.ok, "{stored:?}");
+        let stored = stored.result.unwrap();
+        assert_eq!(stored["kind"], "ASSET_KRITA_RECOVERY_CANDIDATE");
+        assert_eq!(stored["project_id"], "PRJ-krita-reconcile");
+        assert_eq!(stored["payload"]["native_origin"], "unverified");
+        assert_eq!(stored["payload"]["native_workflow_status"], "untested");
+        for encoded in [first.to_string(), stored["payload"].to_string()] {
+            assert!(!encoded.contains("art/source.kra"));
+            assert!(!encoded.contains("art/export.png"));
+            assert!(!encoded.contains(project_root.to_string_lossy().as_ref()));
+        }
+        let escaped = run(json!({
+            "project_id": "PRJ-krita-reconcile", "source_path": "../source.kra",
+            "export_path": "art/export.png"
+        }));
+        assert_eq!(escaped.error.unwrap().code, "ASSET_PATH_INVALID");
+        let mut scoped = ExecutionAuthority::local_user("CLIENT-other");
+        scoped.project_ids = Some(["PRJ-other".to_string()].into_iter().collect());
+        let denied = core.execute_authorized_with_extension(
+            request("assets.krita.reconcile", arguments), &runtime, &scoped,
+            |request| execute_authorized(&core, request, &runtime, &scoped),
+        );
+        assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
+        assert_eq!(fs::read(&output).unwrap(), png);
+        drop(core);
+        let restarted = RelayCore::open(CoreConfig::new(dir.join("state")));
+        let replay = restarted.execute_authorized_with_extension(
+            request("assets.krita.reconcile", json!({
+                "project_id": "PRJ-krita-reconcile", "source_path": "art/source.kra",
+                "export_path": "art/export.png"
+            })), &runtime, &authority,
+            |request| execute_authorized(&restarted, request, &runtime, &authority),
+        );
+        assert!(replay.ok, "{replay:?}");
+        assert_eq!(replay.result.as_ref().unwrap()["result_id"], result_id);
+        assert_eq!(replay.result.as_ref().unwrap()["record_replayed"], true);
+        drop(restarted);
         fs::remove_dir_all(dir).unwrap();
     }
 }

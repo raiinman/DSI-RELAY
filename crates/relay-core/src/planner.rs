@@ -30,6 +30,14 @@ struct CheckDefinition {
     leaves: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     assertion: Option<CheckAssertion>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    dependency_mode: Option<DependencyMode>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum DependencyMode {
+    Direct,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -270,6 +278,10 @@ pub fn plan(snapshot: ProjectPlanSnapshot, after_generation: i64) -> Result<Valu
             config.adapter_version.as_deref()?,
         ))
     });
+    let needs_parser = catalog
+        .checks
+        .iter()
+        .any(|check| check.dependency_mode != Some(DependencyMode::Direct));
     let mut fallback_reason = if state.status != "ready" || state.content_verification_required {
         Some("index_not_ready")
     } else if after_generation < state.baseline_generation {
@@ -278,8 +290,9 @@ pub fn plan(snapshot: ProjectPlanSnapshot, after_generation: i64) -> Result<Valu
         Some("catalog_newer_than_delta")
     } else if snapshot.bounds_exceeded {
         Some("planning_bound_exceeded")
-    } else if configured.is_none()
-        || snapshot.catalog.configuration_revision != configured.map(|(revision, _, _)| revision)
+    } else if needs_parser
+        && (configured.is_none()
+            || snapshot.catalog.configuration_revision != configured.map(|(revision, _, _)| revision))
     {
         Some("parser_configuration_unavailable")
     } else {
@@ -297,9 +310,14 @@ pub fn plan(snapshot: ProjectPlanSnapshot, after_generation: i64) -> Result<Valu
             .flatten()
         })
         .collect();
+    // The first ready baseline is the initial direct input set. The v1 plan
+    // reason remains `changed_input`, meaning changed from no prior index.
+    let initial_baseline = state.generation == state.baseline_generation
+        && after_generation == state.baseline_generation
+        && snapshot.catalog.index_generation == state.generation;
     let mut affected = BTreeSet::new();
     if fallback_reason.is_none() {
-        let (revision, producer_id, producer_version) = configured.expect("checked above");
+        let (revision, producer_id, producer_version) = configured.unwrap_or((0, "", ""));
         let files: BTreeMap<String, String> = snapshot
             .files
             .iter()
@@ -331,6 +349,14 @@ pub fn plan(snapshot: ProjectPlanSnapshot, after_generation: i64) -> Result<Valu
             }
         }
         for check in &catalog.checks {
+            if check.dependency_mode == Some(DependencyMode::Direct) {
+                if initial_baseline
+                    || check.roots.iter().chain(&check.leaves).any(|path| changed.contains(path))
+                {
+                    affected.insert(check.id.clone());
+                }
+                continue;
+            }
             let leaves: BTreeSet<&str> = check.leaves.iter().map(String::as_str).collect();
             let mut visited = BTreeSet::new();
             let mut inputs: BTreeSet<String> = check.leaves.iter().cloned().collect();
@@ -409,7 +435,11 @@ pub fn plan(snapshot: ProjectPlanSnapshot, after_generation: i64) -> Result<Valu
         "after_generation": after_generation,
         "mode": mode,
         "fallback_reason": fallback_reason,
-        "coverage_basis": "declared_catalog_and_guarded_parser_observations",
+        "coverage_basis": if needs_parser {
+            "declared_catalog_and_guarded_parser_observations"
+        } else {
+            "declared_direct_paths"
+        },
         "declared_check_count": catalog.checks.len(),
         "checks": checks,
     }))
@@ -535,6 +565,7 @@ mod tests {
             .is_err()
         );
         assert!(canonical["checks"][0].get("assertion").is_none());
+        assert!(canonical["checks"][0].get("dependency_mode").is_none());
         assert!(
             canonical_catalog(&json!({
                 "format_version": 1,
@@ -556,6 +587,86 @@ mod tests {
             "checks": [{"id":"check.a", "roots":["src/a.txt"], "leaves":[],
                 "assertion":{"kind":"shell_command", "path":"src/a.txt", "command":"echo bad"}}]
         })).is_err());
+        assert!(canonical_catalog(&json!({
+            "format_version": 1,
+            "checks": [{"id":"check.a", "roots":["src/a.txt"], "leaves":[],
+                "dependency_mode":"shell"}]
+        })).is_err());
+    }
+
+    #[test]
+    fn direct_mode_selects_declared_change_without_parser_configuration_or_coverage() {
+        let mut basis = snapshot(false);
+        basis.configuration = None;
+        basis.coverage.clear();
+        basis.catalog.configuration_revision = None;
+        basis.catalog.catalog = canonical_catalog(&json!({
+            "format_version": 1,
+            "checks": [{"id":"check.direct", "roots":["source.txt"], "leaves":["target.txt"],
+                "dependency_mode":"direct",
+                "assertion":{"kind":"indexed_file_digest", "path":"target.txt", "sha256":"d".repeat(64)}}]
+        })).unwrap();
+        let planned = plan(basis.clone(), 1).unwrap();
+        assert_eq!(planned["mode"], "selective");
+        assert_eq!(planned["coverage_basis"], "declared_direct_paths");
+        assert_eq!(planned["checks"].as_array().unwrap().len(), 1);
+        assert_eq!(planned["checks"][0]["check_id"], "check.direct");
+        let evaluated = evaluate_declared_checks(&basis, &planned).unwrap();
+        assert_eq!(evaluated[0].status, "passed");
+    }
+
+    #[test]
+    fn direct_mode_selects_initial_baseline_without_delta_rows() {
+        let mut basis = snapshot(false);
+        basis.state.generation = 1;
+        basis.state.baseline_generation = 1;
+        basis.changes.clear();
+        basis.configuration = None;
+        basis.coverage.clear();
+        basis.catalog.configuration_revision = None;
+        basis.catalog.catalog = canonical_catalog(&json!({
+            "format_version": 1,
+            "checks": [{"id":"check.first", "roots":["source.txt"], "leaves":[],
+                "dependency_mode":"direct",
+                "assertion":{"kind":"indexed_file_present", "path":"source.txt"}}]
+        })).unwrap();
+        let direct = plan(basis.clone(), 1).unwrap();
+        assert_eq!(direct["mode"], "selective");
+        assert_eq!(direct["checks"][0]["check_id"], "check.first");
+        assert_eq!(evaluate_declared_checks(&basis, &direct).unwrap()[0].status, "passed");
+
+        basis.catalog.catalog = canonical_catalog(&json!({
+            "format_version": 1,
+            "checks": [{"id":"check.old", "roots":["source.txt"], "leaves":[]}]
+        })).unwrap();
+        let legacy = plan(basis, 1).unwrap();
+        assert_eq!(legacy["mode"], "full_catalog_fallback");
+        assert_eq!(legacy["fallback_reason"], "parser_configuration_unavailable");
+    }
+
+    #[test]
+    fn mixed_direct_and_legacy_checks_fall_back_when_parser_basis_is_missing() {
+        let mut basis = snapshot(false);
+        basis.configuration = None;
+        basis.coverage.clear();
+        basis.catalog.configuration_revision = None;
+        basis.catalog.catalog = canonical_catalog(&json!({
+            "format_version": 1,
+            "checks": [
+                {"id":"check.direct", "roots":["target.txt"], "leaves":[], "dependency_mode":"direct"},
+                {"id":"check.legacy", "roots":["source.txt"], "leaves":[]}
+            ]
+        })).unwrap();
+        let planned = plan(basis.clone(), 1).unwrap();
+        assert_eq!(planned["mode"], "full_catalog_fallback");
+        assert_eq!(planned["fallback_reason"], "parser_configuration_unavailable");
+        assert_eq!(planned["checks"].as_array().unwrap().len(), 2);
+
+        basis.configuration = snapshot(false).configuration;
+        basis.catalog.configuration_revision = Some(1);
+        let no_coverage = plan(basis, 1).unwrap();
+        assert_eq!(no_coverage["mode"], "full_catalog_fallback");
+        assert_eq!(no_coverage["fallback_reason"], "parser_coverage_incomplete");
     }
 
     #[test]

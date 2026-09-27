@@ -16,11 +16,112 @@ use relay_contracts::{
 use relay_core::policy::ExecutionAuthority;
 use relay_core::service::{CoreConfig, RelayCore, RuntimeContext};
 use serde_json::json;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 const DAEMON_NAME: &str = "relayd";
+
+fn probe_storage_schema(state_dir: &Path) -> Result<i64, &'static str> {
+    if !state_dir.is_absolute() {
+        return Err("STORAGE_PROBE_PATH_INVALID");
+    }
+    match std::fs::symlink_metadata(state_dir) {
+        Ok(metadata) if !metadata.is_dir() || metadata.file_type().is_symlink() => {
+            return Err("STORAGE_PROBE_PATH_INVALID");
+        }
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            return Err("STORAGE_PROBE_UNREADABLE");
+        }
+        _ => {}
+    }
+    let db = state_dir.join("relay.sqlite3");
+    let mut sidecar_present = false;
+    for suffix in ["relay.sqlite3-wal", "relay.sqlite3-shm", "relay.sqlite3-journal"] {
+        match std::fs::symlink_metadata(state_dir.join(suffix)) {
+            Ok(_) => sidecar_present = true,
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err("STORAGE_PROBE_UNREADABLE");
+            }
+            _ => {}
+        }
+    }
+    if sidecar_present {
+        return Err("STORAGE_PROBE_INCOMPLETE");
+    }
+    let metadata = match std::fs::symlink_metadata(&db) {
+        Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => metadata,
+        Ok(_) => return Err("STORAGE_PROBE_PATH_INVALID"),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(_) => return Err("STORAGE_PROBE_UNREADABLE"),
+    };
+    if metadata.len() == 0 {
+        return Err("STORAGE_PROBE_INVALID");
+    }
+    let path = db.to_str().ok_or("STORAGE_PROBE_PATH_INVALID")?;
+    let mut uri = String::from("file:///");
+    for byte in path.replace('\\', "/").bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b':' | b'-' | b'_' | b'.' | b'~') {
+            uri.push(byte as char);
+        } else {
+            uri.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    uri.push_str("?immutable=1");
+    let conn = rusqlite::Connection::open_with_flags(
+        uri,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
+            | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX
+            | rusqlite::OpenFlags::SQLITE_OPEN_URI,
+    )
+    .map_err(|_| "STORAGE_PROBE_UNREADABLE")?;
+    conn.execute_batch("BEGIN")
+        .map_err(|_| "STORAGE_PROBE_UNREADABLE")?;
+    let integrity: String = conn
+        .query_row("PRAGMA quick_check(1)", [], |row| row.get(0))
+        .map_err(|_| "STORAGE_PROBE_INVALID")?;
+    if integrity != "ok" {
+        return Err("STORAGE_PROBE_INVALID");
+    }
+    let (min, max, count): (i64, i64, i64) = conn
+        .query_row(
+            "SELECT COALESCE(MIN(version), 0), COALESCE(MAX(version), 0), COUNT(*) FROM schema_migrations",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .map_err(|_| "STORAGE_PROBE_INVALID")?;
+    if min != 1 || max < 1 || max > 10_000 || count != max {
+        return Err("STORAGE_PROBE_INVALID");
+    }
+    let core_tables: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('projects','results','jobs')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|_| "STORAGE_PROBE_INVALID")?;
+    if core_tables != 3 {
+        return Err("STORAGE_PROBE_INVALID");
+    }
+    Ok(max)
+}
+
+fn run_storage_probe(args: &[String]) -> Result<(), &'static str> {
+    let [mode, option, path] = args else {
+        return Err("STORAGE_PROBE_ARGUMENTS_INVALID");
+    };
+    if mode != "--probe-storage-schema" || option != "--state-dir" {
+        return Err("STORAGE_PROBE_ARGUMENTS_INVALID");
+    }
+    let schema_version = probe_storage_schema(Path::new(path))?;
+    println!("{}", json!({
+        "ok": true,
+        "schema_version": schema_version,
+        "database": if schema_version == 0 { "absent" } else { "present" }
+    }));
+    Ok(())
+}
 
 fn unix_ms() -> u64 {
     SystemTime::now()
@@ -387,6 +488,14 @@ fn run() -> Result<(), String> {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if !args.is_empty() {
+        if let Err(code) = run_storage_probe(&args) {
+            eprintln!("{}", json!({"ok": false, "error": {"code": code}}));
+            std::process::exit(1);
+        }
+        return;
+    }
     if let Err(error) = run() {
         eprintln!(
             "{}",
@@ -400,5 +509,66 @@ fn main() {
             .unwrap_or_else(|_| "{\"ok\":false}".to_string())
         );
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod schema_probe_tests {
+    use super::probe_storage_schema;
+    use relay_core::storage::RelayStorage;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn fixture_dir(label: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("relay-schema-probe-{label}-{}-{nonce}", std::process::id()))
+    }
+
+    #[test]
+    fn absent_database_is_zero_without_creating_a_directory() {
+        let dir = fixture_dir("absent");
+        assert_eq!(probe_storage_schema(&dir), Ok(0));
+        assert!(!dir.exists());
+    }
+
+    #[test]
+    fn existing_database_is_probed_without_migration() {
+        let dir = fixture_dir("existing space");
+        let db = dir.join("relay.sqlite3");
+        let storage = RelayStorage::open(&db).unwrap();
+        let version = storage.schema_version().unwrap();
+        drop(storage);
+        let before: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(probe_storage_schema(&dir), Ok(version));
+        assert_eq!(probe_storage_schema(&dir), Ok(version));
+        let after: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(after, before);
+        std::fs::write(dir.join("relay.sqlite3-wal"), b"uncheckpointed").unwrap();
+        assert_eq!(probe_storage_schema(&dir), Err("STORAGE_PROBE_INCOMPLETE"));
+        std::fs::remove_file(dir.join("relay.sqlite3-wal")).unwrap();
+        let storage = RelayStorage::open(&db).unwrap();
+        assert_eq!(storage.schema_version().unwrap(), version);
+    }
+
+    #[test]
+    fn damaged_database_and_orphaned_journal_fail_closed() {
+        let bad = fixture_dir("bad");
+        std::fs::create_dir_all(&bad).unwrap();
+        std::fs::write(bad.join("relay.sqlite3"), b"not sqlite").unwrap();
+        assert!(probe_storage_schema(&bad).is_err());
+
+        let orphaned = fixture_dir("orphaned");
+        std::fs::create_dir_all(&orphaned).unwrap();
+        std::fs::write(orphaned.join("relay.sqlite3-wal"), b"orphaned").unwrap();
+        assert_eq!(probe_storage_schema(&orphaned), Err("STORAGE_PROBE_INCOMPLETE"));
     }
 }

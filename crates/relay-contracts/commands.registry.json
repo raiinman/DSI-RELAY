@@ -582,6 +582,45 @@
       "errors": ["PROJECT_NOT_FOUND", "PROJECT_ROOT_UNAVAILABLE", "STORAGE_UNAVAILABLE", "ASSET_PATH_INVALID", "ASSET_SERIALIZATION_FAILED", "ASSET_BUILD_RECORD_FAILED", "INTEGRATION_UNAVAILABLE"]
     },
     {
+      "id": "assets.krita.reconcile",
+      "version": 1,
+      "stability": "phase8",
+      "summary": "Measure an existing project-local KRA/PNG pair and store a recovery candidate. Existing files cannot prove Krita origin; native export stays untested.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed",
+      "surfaces": ["cli"],
+      "arguments_schema": {
+        "type": "object", "required": ["project_id", "source_path", "export_path"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "source_path": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "export_path": { "type": "string", "minLength": 1, "maxLength": 512 }
+        }, "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["status", "native_workflow_status", "native_origin", "scope", "message", "output_bytes", "source_sha256", "output_sha256", "elapsed_ms", "record_state", "result_id", "record_replayed", "source_identity_sha256", "export_identity_sha256"],
+        "properties": {
+          "status": { "type": "string", "enum": ["candidate", "unavailable", "mismatch"] },
+          "native_workflow_status": { "type": "string", "const": "untested" },
+          "native_origin": { "type": "string", "const": "unverified" },
+          "scope": { "type": "string", "const": "existing_kra_png_pair" },
+          "message": { "type": "string", "maxLength": 180 },
+          "output_bytes": { "type": ["integer", "null"], "minimum": 0, "maximum": 536870912 },
+          "source_sha256": { "type": ["string", "null"], "minLength": 64, "maxLength": 64 },
+          "output_sha256": { "type": ["string", "null"], "minLength": 64, "maxLength": 64 },
+          "elapsed_ms": { "type": "integer", "minimum": 0 },
+          "record_state": { "type": "string", "enum": ["not_attempted", "candidate_stored"] },
+          "result_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+          "record_replayed": { "type": "boolean" },
+          "source_identity_sha256": { "type": ["string", "null"], "minLength": 64, "maxLength": 64 },
+          "export_identity_sha256": { "type": ["string", "null"], "minLength": 64, "maxLength": 64 }
+        }, "additionalProperties": false
+      },
+      "errors": ["PROJECT_NOT_FOUND", "PROJECT_ROOT_UNAVAILABLE", "STORAGE_UNAVAILABLE", "ASSET_PATH_INVALID", "ASSET_SERIALIZATION_FAILED", "ASSET_RECOVERY_RECORD_FAILED", "INTEGRATION_UNAVAILABLE"]
+    },
+    {
       "id": "assets.krita.inspect",
       "version": 1,
       "stability": "phase8",

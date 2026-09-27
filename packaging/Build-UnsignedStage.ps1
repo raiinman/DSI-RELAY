@@ -20,12 +20,19 @@ if (-not $OutputDirectory) { $OutputDirectory = Join-Path $PSScriptRoot 'out' }
 $binaryRoot = [IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($BinaryDirectory))
 $outputRoot = [IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory))
 $name = "relay-$Version-windows-x64-unsigned-stage"
+if ($name.Length -gt 96) { throw 'Version makes archive entry paths too long' }
 $finalFolder = Join-Path $outputRoot $name
 $finalArchive = Join-Path $outputRoot "$name.zip"
 $archiveHashFile = "$finalArchive.sha256"
 $stageName = '.relay-stage-' + [Guid]::NewGuid().ToString('N')
 $stageRoot = Join-Path $outputRoot $stageName
 $payloadRoot = Join-Path $stageRoot $name
+$runtimeBinaries = @('relay.exe', 'relayd.exe', 'relay-gateway.exe')
+$runtimeSkillFiles = @(
+    'skills/relay-core/SKILL.md',
+    'skills/relay-core/scripts/relay-core.ps1',
+    'skills/relay-core/references/commands.generated.json'
+)
 
 function Get-Hash([string]$Path) {
     (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -74,8 +81,8 @@ function Assert-NoPersonalPath([string]$Path) {
 }
 
 function Get-RuntimePackages($Metadata) {
-    $roots = @($Metadata.packages | Where-Object { $_.name -in @('relay', 'relayd') } | ForEach-Object { $_.id })
-    if ($roots.Count -ne 2) { throw 'Could not identify CLI and daemon dependency roots' }
+    $roots = @($Metadata.packages | Where-Object { $_.name -in @('relay', 'relayd', 'relay-gateway') } | ForEach-Object { $_.id })
+    if ($roots.Count -ne 3) { throw 'Could not identify CLI, daemon, and gateway dependency roots' }
     $nodes = @{}
     foreach ($node in $Metadata.resolve.nodes) { $nodes[[string]$node.id] = $node }
     $seen = @{}
@@ -117,10 +124,21 @@ function Get-LicenseSources($Package) {
 if (-not (Test-Path -LiteralPath $binaryRoot -PathType Container)) { throw 'Binary directory does not exist' }
 $binaryItem = Get-Item -LiteralPath $binaryRoot -Force
 if ($binaryItem.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Binary directory is a reparse point' }
-foreach ($binaryName in @('relay.exe', 'relayd.exe')) {
+foreach ($binaryName in $runtimeBinaries) {
     $path = Join-Path $binaryRoot $binaryName
     Assert-RegularFile $path
     Assert-WindowsX64 $path
+    Assert-NoPersonalPath $path
+}
+foreach ($relativeDirectory in @('skills', 'skills\relay-core', 'skills\relay-core\scripts', 'skills\relay-core\references')) {
+    $directory = Get-Item -LiteralPath (Join-Path $repoRoot $relativeDirectory) -Force -ErrorAction Stop
+    if (-not $directory.PSIsContainer -or ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'Runtime skill source directory is redirected'
+    }
+}
+foreach ($relative in $runtimeSkillFiles) {
+    $path = Join-Path $repoRoot ($relative.Replace('/', '\'))
+    Assert-RegularFile $path
     Assert-NoPersonalPath $path
 }
 foreach ($source in @('LICENSE', 'NOTICE-RELAY.txt', 'Cargo.lock')) {
@@ -164,12 +182,22 @@ $null = New-Item -ItemType Directory -Path $payloadRoot
 foreach ($nameToCopy in @('LICENSE', 'NOTICE-RELAY.txt', 'Cargo.lock')) {
     Copy-Item -LiteralPath (Join-Path $repoRoot $nameToCopy) -Destination (Join-Path $payloadRoot $nameToCopy)
 }
-foreach ($binaryName in @('relay.exe', 'relayd.exe')) {
+foreach ($binaryName in $runtimeBinaries) {
     $source = Join-Path $binaryRoot $binaryName
     $before = Get-Hash $source
     Copy-Item -LiteralPath $source -Destination (Join-Path $payloadRoot $binaryName)
     if ((Get-Hash $source) -ne $before -or (Get-Hash (Join-Path $payloadRoot $binaryName)) -ne $before) {
         throw 'Release binary changed during assembly'
+    }
+}
+foreach ($relative in $runtimeSkillFiles) {
+    $source = Join-Path $repoRoot ($relative.Replace('/', '\'))
+    $destination = Join-Path $payloadRoot ($relative.Replace('/', '\'))
+    $before = Get-Hash $source
+    $null = New-Item -ItemType Directory -Path (Split-Path $destination -Parent) -Force
+    Copy-Item -LiteralPath $source -Destination $destination
+    if ((Get-Hash $source) -ne $before -or (Get-Hash $destination) -ne $before) {
+        throw 'Runtime skill file changed during assembly'
     }
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Verify-UnsignedStage.ps1') -Destination (Join-Path $payloadRoot 'verify-package.ps1')
@@ -210,7 +238,14 @@ and third-party/. Their legal completeness must be reviewed for this exact graph
 
 This package has not been signed, installed, live-tested, or approved for public
 distribution. It does not contain an installer or updater. Do not run it as a
-published product. The two executables are staged for local integration work.
+published product. relay.exe, relayd.exe, and relay-gateway.exe are staged for
+local integration work. The compact local coding-agent skill is in
+skills/relay-core/; its script calls the staged relay CLI through the shared
+command system. The gateway is an optional local MCP adapter; it is not a
+public or remote endpoint.
+
+When using the staged skill from this folder, pass -RelayPath .\relay.exe to
+its scripts/relay-core.ps1 wrapper (or point it to an installed RELAY CLI).
 
 Verify the folder before use:
   powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-package.ps1
@@ -241,6 +276,7 @@ $manifest = [ordered]@{
     source_binary_provenance = 'Supplied release binaries; binary-to-source correspondence not independently attested'
     cargo_lock_sha256 = Get-Hash (Join-Path $payloadRoot 'Cargo.lock')
     third_party_crate_count = $packages.Count
+    runtime_components = @($runtimeBinaries + $runtimeSkillFiles)
     unresolved_checks = @($unresolved | Sort-Object -Unique)
     files = $files
 }
@@ -251,6 +287,15 @@ $sums = @(Get-ChildItem -LiteralPath $payloadRoot -File -Recurse | ForEach-Objec
 } | Sort-Object)
 Write-Utf8Lf (Join-Path $payloadRoot 'SHA256SUMS.txt') (($sums -join "`n") + "`n")
 
+$archiveFiles = @(Get-ChildItem -LiteralPath $payloadRoot -File -Recurse | Sort-Object FullName)
+if ($archiveFiles.Count -gt 512 -or (($archiveFiles | Measure-Object -Property Length -Sum).Sum -gt 256MB)) {
+    throw 'Staged archive exceeds entry count or expansion limit'
+}
+foreach ($file in $archiveFiles) {
+    $relative = $file.FullName.Substring($payloadRoot.Length + 1).Replace('\', '/')
+    if (("$name/$relative").Length -gt 256) { throw 'Staged archive entry path is too long' }
+}
+
 & (Join-Path $PSScriptRoot 'Verify-UnsignedStage.ps1') -PackageDirectory $payloadRoot
 if ($LASTEXITCODE -ne 0) { throw 'Staged folder verification failed' }
 
@@ -260,7 +305,7 @@ $stream = [IO.File]::Open($zipPath, [IO.FileMode]::CreateNew)
 try {
     $zip = New-Object IO.Compression.ZipArchive($stream, [IO.Compression.ZipArchiveMode]::Create, $false)
     try {
-        foreach ($file in @(Get-ChildItem -LiteralPath $payloadRoot -File -Recurse | Sort-Object FullName)) {
+        foreach ($file in $archiveFiles) {
             $relative = $file.FullName.Substring($payloadRoot.Length + 1).Replace('\', '/')
             $entry = $zip.CreateEntry("$name/$relative", [IO.Compression.CompressionLevel]::Optimal)
             $entry.LastWriteTime = [DateTimeOffset]::Parse('2000-01-01T00:00:00+00:00')

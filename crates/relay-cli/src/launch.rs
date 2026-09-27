@@ -13,6 +13,9 @@ use windows_sys::Win32::UI::Shell::ShellExecuteW;
 use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+const EXISTING_HOST_RETRY: Duration = Duration::from_secs(3);
+const AUTH_MISMATCH: &str = "RELAY's local connection has a mismatched session key";
+const DASHBOARD_NOT_READY: &str = "RELAY's app window is not ready yet";
 
 fn validated_url(url: &str) -> bool {
     let Some(rest) = url.strip_prefix("http://127.0.0.1:") else {
@@ -48,6 +51,7 @@ pub fn live_dashboard_url() -> Result<Option<String>, String> {
     );
     match status {
         Err(error) if error == "HOST_UNAVAILABLE" => return Ok(None),
+        Err(error) if error == "UNAUTHORIZED" => return Err(AUTH_MISMATCH.to_string()),
         Err(error) => return Err(format!("RELAY engine is unreachable: {error}")),
         Ok(response) if !response.ok => {
             return Err("RELAY engine rejected its health check".to_string());
@@ -57,7 +61,9 @@ pub fn live_dashboard_url() -> Result<Option<String>, String> {
     let path = client::state_dir().join("dashboard.json");
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(DASHBOARD_NOT_READY.to_string());
+        }
         Err(_) => return Err("RELAY app link could not be read".to_string()),
     };
     let info: Value =
@@ -67,6 +73,23 @@ pub fn live_dashboard_url() -> Result<Option<String>, String> {
         return Err("RELAY app link is invalid".to_string());
     }
     Ok(Some(url.to_string()))
+}
+
+fn existing_dashboard_url() -> Result<Option<String>, String> {
+    let deadline = Instant::now() + EXISTING_HOST_RETRY;
+    loop {
+        match live_dashboard_url() {
+            Err(error) if error == AUTH_MISMATCH || error == DASHBOARD_NOT_READY => {
+                if Instant::now() >= deadline {
+                    return Err(format!(
+                        "{error}. Close running RELAY engines and open RELAY again; if this continues, restart Windows"
+                    ));
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+            result => return result,
+        }
+    }
 }
 
 fn spawn_engine() -> Result<Child, String> {
@@ -127,13 +150,13 @@ fn open_browser(url: &str) -> Result<(), String> {
 }
 
 pub fn launch() -> Result<(), String> {
-    if let Some(url) = live_dashboard_url()? {
+    if let Some(url) = existing_dashboard_url()? {
         return open_browser(&url);
     }
     let mut child = spawn_engine()?;
     let deadline = Instant::now() + STARTUP_TIMEOUT;
     while Instant::now() < deadline {
-        if let Some(url) = live_dashboard_url()? {
+        if let Some(url) = existing_dashboard_url()? {
             return open_browser(&url);
         }
         if child
@@ -141,9 +164,7 @@ pub fn launch() -> Result<(), String> {
             .map_err(|_| "RELAY engine status could not be checked")?
             .is_some()
         {
-            return Err(
-                "RELAY engine stopped during startup; run `relay doctor` for details".to_string(),
-            );
+            return Err("RELAY engine stopped during startup. Another RELAY engine may already be running; close it and try again, or run `relay doctor` for details".to_string());
         }
         thread::sleep(Duration::from_millis(100));
     }

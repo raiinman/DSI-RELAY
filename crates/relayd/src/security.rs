@@ -298,4 +298,18 @@ mod tests {
         assert!(verification.current_user_full_control);
         assert_eq!(verification.ace_count, 1);
     }
+
+    #[test]
+    fn second_daemon_cannot_claim_the_same_pipe() {
+        let security = current_user_pipe_security().expect("security descriptor");
+        let pipe_name = format!(
+            r"\\.\pipe\relay-rust-single-instance-test-{}-{}",
+            std::process::id(),
+            random_hex(4).expect("suffix")
+        );
+        let first = crate::pipe::create_server(&pipe_name, &security).expect("first pipe");
+        assert!(crate::pipe::create_server(&pipe_name, &security).is_err());
+        drop(first);
+        assert!(crate::pipe::create_server(&pipe_name, &security).is_ok());
+    }
 }

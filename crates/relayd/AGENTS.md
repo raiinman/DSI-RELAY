@@ -11,6 +11,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 
 - Normal signed-in-user process; no Session 0 service default.
 - Windows named pipe is current-user protected and still requires a per-start application token.
+- The first named-pipe instance is exclusive for each user/`RELAY_INSTANCE` name; a second daemon must fail before replacing host or dashboard state.
 - `host.json` contains that token. Create it with an explicit protected current-user ACL, verify the kernel owner and DACL before writing token bytes, and publish it from a same-directory temporary file.
 - Protocol/version negotiation fails closed.
 - Host state distinguishes process health from Core recovery health.
@@ -49,6 +50,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 - graceful and hard-kill restart recovery with durable project/result/job verification.
 - damaged operational storage starts Degraded without replacement.
 - current-user pipe security verification.
+- A second daemon cannot claim the same named pipe while the first holds it; the name is reusable after the first exits.
 - Synthetic Phase 3 two-project import, baseline, reconciliation, privacy, resource, graceful-restart, and hard-restart coverage through `tests/phase3_first_slice.rs`.
 - Synthetic Phase 3 change-delta, dependency-edge, provisional hint-update, stale-state, isolation, and hard-restart coverage through `tests/phase3_second_slice.rs`.
 - Explicit full-content verification after a metadata-invisible edit through `tests/phase3_second_slice.rs`.

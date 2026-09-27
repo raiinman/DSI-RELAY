@@ -5,9 +5,13 @@ try {
     if (-not (Test-Path -LiteralPath $relayPath -PathType Leaf)) {
         throw 'The RELAY program file is missing.'
     }
-    & $relayPath launch
+    $launchOutput = & $relayPath launch 2>&1
     if ($LASTEXITCODE -ne 0) {
-        throw 'RELAY could not start. Open RELAY from a terminal for more details.'
+        $detail = (($launchOutput | ForEach-Object { [string]$_ }) -join ' ').Trim()
+        $detail = ($detail -replace '[\x00-\x1F]', ' ').Trim()
+        if ($detail.Length -gt 400) { $detail = $detail.Substring(0, 400) }
+        if (-not $detail) { $detail = 'Run relay.exe launch from the RELAY installation folder for details.' }
+        throw "RELAY could not start: $detail"
     }
 }
 catch {

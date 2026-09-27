@@ -1,5 +1,7 @@
 # DSI RELAY
 
+Created by **RAiiNMAN**. First-party RELAY source and documentation are licensed under [MIT](LICENSE); see the [creator credit](NOTICE-RELAY.txt).
+
 DSI RELAY is a planned model-independent development control and observability layer for game projects and creative toolchains.
 
 The product exists to make AI-assisted development cheaper, more reliable, and easier to use. RELAY should do deterministic work locally, keep large results out of chat, expose a clean headless CLI, provide a plain-language dashboard, and let multiple AI clients work through the same verified project state.
@@ -82,4 +84,4 @@ Start with docs/PHASE1_START_HERE.md.
 
 ## Public-release posture
 
-Public release is a design constraint from the beginning, not a promise of immediate release. RELAY must avoid personal paths, private credentials, user-specific defaults, and single-project assumptions. Licensing, packaging, update distribution, and contribution policy remain open decisions.
+Public release is a design constraint from the beginning, not a promise of immediate release. RELAY must avoid personal paths, private credentials, user-specific defaults, and single-project assumptions. MIT and RAiiNMAN attribution are selected for first-party source and documentation. Packaging, update distribution, companion licenses, and contribution policy remain open decisions.

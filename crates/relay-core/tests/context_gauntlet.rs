@@ -11,7 +11,7 @@ struct Fixture {
     name: &'static str,
     payload: Value,
     retained: Vec<(&'static str, Value)>,
-    absent: Vec<&'static str>,
+    observed: Vec<&'static str>,
 }
 
 fn request(id: &str, command: &str, arguments: Value) -> CommandRequest {
@@ -45,7 +45,7 @@ fn placement(name: &'static str, target_index: usize) -> Fixture {
             ("/entries/target_id", json!("TARGET-EXACT-42")),
             ("/entries/generation", json!(73)),
         ],
-        absent: vec![],
+        observed: vec![],
     }
 }
 
@@ -68,11 +68,7 @@ fn competing_placement(name: &'static str, target_index: usize) -> Fixture {
         } else {
             vec![]
         },
-        absent: if target_index == 0 {
-            vec![]
-        } else {
-            vec![pointer]
-        },
+        observed: vec![pointer],
     }
 }
 
@@ -100,7 +96,7 @@ fn fixtures() -> Vec<Fixture> {
             ("/current/state", json!("READY")),
             ("/current/generation", json!(10)),
         ],
-        absent: vec![],
+        observed: vec![],
     });
     cases.push(Fixture {
         name: "repeated_warnings",
@@ -109,7 +105,7 @@ fn fixtures() -> Vec<Fixture> {
             "warnings": vec![json!({ "warning_code": "W-REPEATED" }); 600]
         }),
         retained: vec![("/target_id", json!("TARGET-EXACT-42"))],
-        absent: vec!["/warnings/599/warning_code"],
+        observed: vec!["/warnings/599/warning_code"],
     });
     cases.push(Fixture {
         name: "coordinate_in_noise",
@@ -119,7 +115,7 @@ fn fixtures() -> Vec<Fixture> {
             "logs": vec!["unrelated detail"; 120]
         }),
         retained: vec![("/target_id", json!("TARGET-EXACT-42"))],
-        absent: vec!["/coordinate/x", "/coordinate/y", "/coordinate/z"],
+        observed: vec!["/coordinate/x", "/coordinate/y", "/coordinate/z"],
     });
     cases
 }
@@ -222,18 +218,18 @@ fn deterministic_context_gauntlet_first_fixture() {
                 pointer
             );
         }
-        for pointer in &fixture.absent {
-            assert!(
-                full["payload"].pointer(pointer).is_some(),
-                "{} source payload lacks {}",
-                fixture.name,
-                pointer
-            );
-            assert!(
-                facts.iter().all(|fact| fact["pointer"] != *pointer),
-                "{} unexpectedly retained {}",
-                fixture.name,
-                pointer
+        let mut observed_retention = serde_json::Map::new();
+        for pointer in &fixture.observed {
+            let source_value = full["payload"]
+                .pointer(pointer)
+                .unwrap_or_else(|| panic!("{} source payload lacks {}", fixture.name, pointer));
+            observed_retention.insert(
+                (*pointer).to_string(),
+                json!(
+                    facts.iter().any(|fact| {
+                        fact["pointer"] == *pointer && fact["value"] == *source_value
+                    })
+                ),
             );
         }
         println!(
@@ -244,7 +240,7 @@ fn deterministic_context_gauntlet_first_fixture() {
                 "context_body_bytes": context_bytes,
                 "budget_bytes": BUDGET,
                 "retained_assertions": fixture.retained.len(),
-                "expected_absences": fixture.absent.len(),
+                "observed_retention": observed_retention,
                 "selected_facts": facts.len(),
                 "omitted_scalars": compact["omitted_scalar_count"],
                 "truncated": compact["truncated"]

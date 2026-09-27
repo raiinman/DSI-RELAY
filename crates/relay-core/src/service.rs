@@ -96,6 +96,8 @@ pub struct RelayCore {
     diagnostics: Option<Mutex<JsonlDiagnostics>>,
     diagnostics_fallback: DiagnosticHealth,
     producer: Producer,
+    automation_available: std::sync::atomic::AtomicBool,
+    automation_paused: std::sync::atomic::AtomicBool,
 }
 
 /// Trusted daemon input only. Canonical roots and indexed source identities never enter
@@ -132,7 +134,7 @@ impl RelayCore {
         project_id: &str,
     ) -> Result<ReadyIndexSnapshot, ExtensionError> {
         self.with_storage(|storage| {
-            if storage.get_project(project_id)?.is_none() {
+            if !storage.get_project(project_id)?.is_some_and(|project| project.lifecycle_state == "active") {
                 return Ok(None);
             }
             let state = storage.get_project_index_state(project_id)?;
@@ -170,18 +172,24 @@ impl RelayCore {
                 ExtensionError::new("STORAGE_UNAVAILABLE", "project registry is unavailable")
             })?
             .ok_or_else(|| ExtensionError::new("PROJECT_NOT_FOUND", "project not found"))?;
+        if project.lifecycle_state != "active" {
+            return Err(ExtensionError::new("PROJECT_NOT_FOUND", "project is not active"));
+        }
         indexing::canonical_project_root(&project.root_uri).map_err(|_| {
             ExtensionError::new("PROJECT_ROOT_UNAVAILABLE", "project root is unavailable")
         })
     }
 
     pub fn require_registered_project(&self, project_id: &str) -> Result<(), ExtensionError> {
-        self.with_storage(|storage| storage.get_project(project_id))
+        let project = self.with_storage(|storage| storage.get_project(project_id))
             .map_err(|_| {
                 ExtensionError::new("STORAGE_UNAVAILABLE", "project registry is unavailable")
             })?
-            .map(|_| ())
-            .ok_or_else(|| ExtensionError::new("PROJECT_NOT_FOUND", "project not found"))
+            .ok_or_else(|| ExtensionError::new("PROJECT_NOT_FOUND", "project not found"))?;
+        if project.lifecycle_state != "active" {
+            return Err(ExtensionError::new("PROJECT_NOT_FOUND", "project is not active"));
+        }
+        Ok(())
     }
 
     /// Local host health input; exposes no project roots or source paths.
@@ -275,6 +283,7 @@ impl RelayCore {
         expected_generation: i64,
     ) -> Result<Option<Vec<indexing::IndexedFileSnapshot>>, String> {
         self.with_storage(|storage| {
+            storage.get_active_project(project_id)?;
             let Some(state) = storage.get_project_index_state(project_id)? else {
                 return Ok(None);
             };
@@ -298,6 +307,7 @@ impl RelayCore {
         expected_generation: i64,
     ) -> Result<Option<BTreeSet<String>>, String> {
         self.with_storage(|storage| {
+            storage.get_active_project(project_id)?;
             let Some(state) = storage.get_project_index_state(project_id)? else {
                 return Ok(None);
             };
@@ -335,6 +345,7 @@ impl RelayCore {
         source_sha256: &str,
     ) -> bool {
         self.with_storage(|storage| {
+            storage.get_active_project(project_id)?;
             let state = storage.get_project_index_state(project_id)?;
             let configuration = storage.get_project_configuration(project_id)?;
             let indexed_sha256 = storage.project_file_sha256(project_id, source_path)?;
@@ -375,7 +386,10 @@ impl RelayCore {
         &self,
         project_id: &str,
     ) -> Result<Option<crate::storage::ProjectIndexState>, String> {
-        self.with_storage(|storage| storage.get_project_index_state(project_id))
+        self.with_storage(|storage| {
+            storage.get_active_project(project_id)?;
+            storage.get_project_index_state(project_id)
+        })
             .map_err(|error| error.message)
     }
 
@@ -435,6 +449,32 @@ impl RelayCore {
                 name: "relay-core".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
             },
+            automation_available: std::sync::atomic::AtomicBool::new(false),
+            automation_paused: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    /// Trusted host signal; a failed or stopped watcher cannot claim it is running.
+    pub fn set_automation_available(&self, available: bool) {
+        self.automation_available
+            .store(available, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn automation_paused(&self) -> bool {
+        self.automation_paused
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    fn automation_mode(&self) -> &'static str {
+        if !self
+            .automation_available
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            "unavailable"
+        } else if self.automation_paused() {
+            "paused"
+        } else {
+            "running"
         }
     }
 
@@ -1060,6 +1100,8 @@ impl RelayCore {
             "system.status" => self.status(runtime),
             "system.doctor" => self.doctor(runtime),
             "diagnostics.summary" => self.diagnostics_summary(),
+            "automation.pause" => self.set_automation_paused(true),
+            "automation.resume" => self.set_automation_paused(false),
             "system.echo" => Ok(json!({
                 "echo": request.arguments
             })),
@@ -1079,7 +1121,10 @@ impl RelayCore {
             }
             "project.register" => self.project_register(&request.arguments),
             "project.import" => self.project_import(&request.arguments),
-            "project.list" => self.project_list(authority),
+            "project.list" => self.project_list(&request.arguments, authority),
+            "project.archive" => self.project_lifecycle(&request.arguments, "archived"),
+            "project.restore" => self.project_lifecycle(&request.arguments, "active"),
+            "project.remove" => self.project_lifecycle(&request.arguments, "removed"),
             "project.configuration.put" => self.project_configuration_put(&request.arguments),
             "project.configuration.get" => self.project_configuration_get(&request.arguments),
             "project.index.build" => self.project_index_build(&request.arguments),
@@ -1094,8 +1139,10 @@ impl RelayCore {
             "result.list" => self.result_list(&request.arguments, authority),
             "result.describe" => self.result_describe(&request.arguments, authority),
             "result.context" => self.result_context(&request.arguments, authority),
+            "context.compile" => self.context_compile(&request.arguments, authority),
             "job.checkpoint" => self.job_checkpoint(request),
             "job.get" => self.job_get(&request.arguments, authority),
+            "job.list" => self.job_list(&request.arguments, authority),
             "transaction.list" => self.transaction_list(&request.arguments, authority),
             "usage.summary" => self.usage_summary(),
             "policy.egress.check" => self.policy_egress_check(request, authority),
@@ -1104,6 +1151,21 @@ impl RelayCore {
                 format!("command {other}@{command_version} is not implemented"),
             )),
         }
+    }
+
+    fn set_automation_paused(&self, paused: bool) -> Result<Value, CoreCommandError> {
+        if !self
+            .automation_available
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(CoreCommandError::new(
+                "AUTOMATION_UNAVAILABLE",
+                "background reconciliation is unavailable",
+            ));
+        }
+        self.automation_paused
+            .store(paused, std::sync::atomic::Ordering::SeqCst);
+        Ok(json!({ "mode": self.automation_mode() }))
     }
 
     fn diagnostics_summary(&self) -> Result<Value, CoreCommandError> {
@@ -1140,6 +1202,7 @@ impl RelayCore {
             },
             "events": events,
             "error_code": error_code,
+            "automation_mode": self.automation_mode(),
         }))
     }
 
@@ -1167,6 +1230,7 @@ impl RelayCore {
             "storage": storage,
             "diagnostics": diagnostics,
             "host_components": runtime.host_components,
+            "automation_mode": self.automation_mode(),
             "uptime_ms": runtime.uptime_ms
         }))
     }
@@ -1326,8 +1390,9 @@ impl RelayCore {
         }))
     }
 
-    fn project_list(&self, authority: &ExecutionAuthority) -> Result<Value, CoreCommandError> {
-        let mut projects = self.with_storage(|storage| storage.list_projects())?;
+    fn project_list(&self, arguments: &Value, authority: &ExecutionAuthority) -> Result<Value, CoreCommandError> {
+        let include_inactive = arguments.get("include_inactive").and_then(Value::as_bool).unwrap_or(false);
+        let mut projects = self.with_storage(|storage| storage.list_projects_with_inactive(include_inactive))?;
         if let Some(allowed) = &authority.project_ids {
             projects.retain(|project| allowed.contains(&project.id));
         }
@@ -1337,6 +1402,19 @@ impl RelayCore {
             }
         }
         Ok(json!({ "projects": projects }))
+    }
+
+    fn project_lifecycle(&self, arguments: &Value, target: &str) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"].as_str().expect("registry validation requires project_id");
+        if target == "removed" && arguments["confirm_project_id"].as_str() != Some(project_id) {
+            return Err(CoreCommandError::new("VALIDATION_FAILED", "confirmation must match the project ID"));
+        }
+        let (project, changed) = self.with_storage(|storage| storage.set_project_lifecycle(project_id, target))?;
+        Ok(json!({
+            "project_id": project.id,
+            "lifecycle_state": project.lifecycle_state,
+            "changed": changed
+        }))
     }
 
     fn project_configuration_put(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
@@ -1420,8 +1498,7 @@ impl RelayCore {
             .as_str()
             .expect("registry validation requires project_id");
         let project = self
-            .with_storage(|storage| storage.get_project(project_id))?
-            .ok_or_else(|| CoreCommandError::new("PROJECT_NOT_FOUND", "project not found"))?;
+            .with_storage(|storage| storage.get_active_project(project_id))?;
         let root = indexing::canonical_project_root(&project.root_uri)
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
         let plan = indexing::build_baseline(&root)
@@ -1466,9 +1543,7 @@ impl RelayCore {
         let hints = indexing::validate_hints(&raw_hints)
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
         let (project, index_state, previous) = self.with_storage(|storage| {
-            let project = storage
-                .get_project(project_id)?
-                .ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
+            let project = storage.get_active_project(project_id)?;
             let state = storage
                 .get_project_index_state(project_id)?
                 .ok_or_else(|| {
@@ -1546,9 +1621,7 @@ impl RelayCore {
             .unwrap_or(false);
 
         let (project, index_state, previous) = self.with_storage(|storage| {
-            let project = storage
-                .get_project(project_id)?
-                .ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
+            let project = storage.get_active_project(project_id)?;
             let state = storage
                 .get_project_index_state(project_id)?
                 .ok_or_else(|| {
@@ -1615,9 +1688,7 @@ impl RelayCore {
             .as_str()
             .expect("registry validation requires project_id");
         let (project, state) = self.with_storage(|storage| {
-            let project = storage
-                .get_project(project_id)?
-                .ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
+            let project = storage.get_active_project(project_id)?;
             let state = storage.get_project_index_state(project_id)?;
             Ok((project, state))
         })?;
@@ -2103,6 +2174,65 @@ impl RelayCore {
                 "CONTEXT_FACT_UNAVAILABLE",
                 "a required context fact is unavailable",
             )),
+            Err(context::CompileError::SourceTooLarge) => Err(CoreCommandError::new(
+                "CONTEXT_SOURCE_TOO_LARGE", "stored source exceeds the bounded context compiler input")),
+        }
+    }
+    fn context_compile(
+        &self,
+        arguments: &Value,
+        authority: &ExecutionAuthority,
+    ) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"].as_str().expect("registry validates project_id");
+        authority.require_project(Some(project_id))
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        let result_ids: Vec<&str> = arguments["result_ids"].as_array().expect("registry validates result_ids")
+            .iter().map(|value| value.as_str().expect("registry validates result ID strings")).collect();
+        if result_ids.is_empty() || result_ids.len() > 8
+            || result_ids.iter().collect::<BTreeSet<_>>().len() != result_ids.len()
+        {
+            return Err(CoreCommandError::new("VALIDATION_FAILED", "result_ids must contain 1-8 unique IDs"));
+        }
+        let required: Vec<(&str, &str)> = arguments.get("required_pointers")
+            .and_then(Value::as_array).map(|items| items.iter().map(|item| {
+                (item["result_id"].as_str().expect("registry validates result ID"),
+                 item["pointer"].as_str().expect("registry validates pointer"))
+            }).collect()).unwrap_or_default();
+        if required.len() > 16 || required.iter().collect::<BTreeSet<_>>().len() != required.len()
+            || required.iter().any(|(id, pointer)| !result_ids.contains(id) || !context::valid_required_pointer(pointer))
+        {
+            return Err(CoreCommandError::new("VALIDATION_FAILED", "required_pointers must name unique eligible source pointers"));
+        }
+        let focus_terms: Vec<&str> = arguments.get("focus_terms")
+            .and_then(Value::as_array).map(|items| items.iter().map(|item| item.as_str().expect("registry validates focus terms")).collect())
+            .unwrap_or_default();
+        if focus_terms.len() > 8 || focus_terms.iter().collect::<BTreeSet<_>>().len() != focus_terms.len()
+            || focus_terms.iter().any(|term| !context::valid_focus_term(term))
+        {
+            return Err(CoreCommandError::new("VALIDATION_FAILED", "focus_terms must contain at most 8 unique bounded terms"));
+        }
+        let max_bytes = arguments["max_bytes"].as_u64().expect("registry validates max_bytes") as usize;
+        let mut records = self.with_storage(|storage| {
+            let mut records = Vec::with_capacity(result_ids.len());
+            for id in &result_ids {
+                let record = storage.get_result(id)?
+                    .ok_or_else(|| StorageError::new("RESULT_NOT_FOUND", "result not found in project"))?;
+                if record.project_id.as_deref() != Some(project_id) {
+                    return Err(StorageError::new("RESULT_NOT_FOUND", "result not found in project"));
+                }
+                records.push(record);
+            }
+            Ok(records)
+        })?;
+        records.sort_by(|left, right| left.id.cmp(&right.id));
+        match context::compile_project_results(project_id, &records, max_bytes, &required, &focus_terms) {
+            Ok(view) => Ok(view),
+            Err(context::CompileError::BudgetTooSmall) => Err(CoreCommandError::new(
+                "CONTEXT_BUDGET_TOO_SMALL", "byte budget cannot hold source metadata, conflicts, and required facts")),
+            Err(context::CompileError::RequiredFactUnavailable) => Err(CoreCommandError::new(
+                "CONTEXT_FACT_UNAVAILABLE", "a required exact source fact is unavailable")),
+            Err(context::CompileError::SourceTooLarge) => Err(CoreCommandError::new(
+                "CONTEXT_SOURCE_TOO_LARGE", "selected stored results exceed the bounded compiler input")),
         }
     }
     fn job_checkpoint(&self, request: &CommandRequest) -> Result<Value, CoreCommandError> {
@@ -2159,6 +2289,30 @@ impl RelayCore {
             }
             None => Err(CoreCommandError::new("JOB_NOT_FOUND", "job not found")),
         }
+    }
+
+    fn job_list(
+        &self,
+        arguments: &Value,
+        authority: &ExecutionAuthority,
+    ) -> Result<Value, CoreCommandError> {
+        let project_id = arguments.get("project_id").and_then(Value::as_str);
+        if let Some(project_id) = project_id {
+            authority.require_project(Some(project_id)).map_err(|error| {
+                CoreCommandError::new(error.code, error.message)
+            })?;
+        } else if authority.project_ids.is_some() {
+            return Err(CoreCommandError::new(
+                "PROJECT_SCOPE_REQUIRED",
+                "a project ID is required for scoped job listing",
+            ));
+        }
+        let limit = arguments.get("limit").and_then(Value::as_u64)
+            .unwrap_or(20).clamp(1, 100) as usize;
+        let jobs = self.with_storage(|storage| {
+            storage.list_job_descriptions(project_id, limit)
+        })?;
+        Ok(json!({ "jobs": jobs }))
     }
 
     fn transaction_list(
@@ -3161,6 +3315,39 @@ mod tests {
     }
 
     #[test]
+    fn job_list_exposes_metadata_only_and_requires_scope() {
+        let dir = temp_dir("job-list-scope");
+        let core = RelayCore::open(CoreConfig::new(&dir));
+        let project_id = register_project(&core);
+        let mut checkpoint = request("REQ-list-job-put", "job.checkpoint", json!({
+            "project_id": project_id, "command": "fixture.work", "state": "CHECKPOINTED",
+            "checkpoint": { "secret": "PRIVATE-JOB-CHECKPOINT" }
+        }));
+        checkpoint.idempotency_key = Some("IDEMP-list-job-put".to_string());
+        assert!(core.execute(checkpoint, &runtime()).ok);
+        let listed = core.execute(request("REQ-list-jobs", "job.list", json!({
+            "project_id": project_id
+        })), &runtime());
+        assert!(listed.ok, "{listed:?}");
+        let body = listed.result.unwrap();
+        assert_eq!(body["jobs"].as_array().unwrap().len(), 1);
+        let serialized = body.to_string();
+        assert!(!serialized.contains("PRIVATE-JOB-CHECKPOINT"));
+        assert!(!serialized.contains("provenance"));
+        let mut scoped = ExecutionAuthority::local_user("CLIENT-scoped");
+        scoped.project_ids = Some(["PRJ-other".to_string()].into_iter().collect());
+        let denied = core.execute_authorized(request("REQ-job-list-denied", "job.list", json!({
+            "project_id": project_id
+        })), &runtime(), &scoped);
+        assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
+        let required = core.execute_authorized(request("REQ-job-list-required", "job.list", json!({})),
+            &runtime(), &scoped);
+        assert_eq!(required.error.unwrap().code, "PROJECT_SCOPE_REQUIRED");
+        drop(core);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn diagnostic_summary_excludes_command_arguments_and_raw_history() {
         let dir = temp_dir("diagnostic-summary");
         let core = RelayCore::open(CoreConfig::new(&dir));
@@ -3184,6 +3371,33 @@ mod tests {
         assert!(body.contains("by_severity"));
         assert!(!body.contains(secret));
         assert!(!body.contains("raw_history"));
+        drop(core);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn automation_pause_is_visible_and_does_not_block_ordinary_commands() {
+        let dir = temp_dir("automation-pause");
+        let core = RelayCore::open(CoreConfig::new(&dir));
+        let unavailable = core.execute(
+            request("REQ-pause-unavailable", "automation.pause", json!({})),
+            &runtime(),
+        );
+        assert_eq!(unavailable.error.unwrap().code, "AUTOMATION_UNAVAILABLE");
+        core.set_automation_available(true);
+        let paused = core.execute(request("REQ-pause", "automation.pause", json!({})), &runtime());
+        assert!(paused.ok, "{:?}", paused.error);
+        assert_eq!(paused.result.unwrap()["mode"], "paused");
+        assert!(core.automation_paused());
+        let status = core.execute(request("REQ-paused-status", "system.status", json!({})), &runtime());
+        assert_eq!(status.result.unwrap()["automation_mode"], "paused");
+        let diagnostics = core.execute(request("REQ-paused-diag", "diagnostics.summary", json!({})), &runtime());
+        assert_eq!(diagnostics.result.unwrap()["automation_mode"], "paused");
+        assert!(core.execute(request("REQ-paused-echo", "system.echo", json!({ "ok": true })), &runtime()).ok);
+        let resumed = core.execute(request("REQ-resume", "automation.resume", json!({})), &runtime());
+        assert!(resumed.ok, "{:?}", resumed.error);
+        assert_eq!(resumed.result.unwrap()["mode"], "running");
+        assert!(!core.automation_paused());
         drop(core);
         fs::remove_dir_all(dir).unwrap();
     }
@@ -3886,6 +4100,117 @@ mod tests {
         assert!(!serialized.contains("secret"));
         assert!(!serialized.contains("token"));
 
+        drop(core);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn context_compiler_uses_only_authorized_project_results() {
+        let dir = temp_dir("context-compiler");
+        let core = RelayCore::open(CoreConfig::new(&dir));
+        let runtime = runtime();
+        for project_id in ["PRJ-a", "PRJ-b"] {
+            let mut register = request(&format!("REQ-register-{project_id}"), "project.register",
+                json!({ "id": project_id, "name": project_id, "root_uri": format!("file:///{project_id}") }));
+            register.idempotency_key = Some(format!("IDEMP-register-{project_id}"));
+            assert!(core.execute(register, &runtime).ok);
+        }
+        let mut ids = Vec::new();
+        for (index, project_id, status) in [(0, "PRJ-a", "OLD"), (1, "PRJ-a", "NEW"), (2, "PRJ-b", "OTHER")] {
+            let mut put = request(&format!("REQ-context-source-{index}"), "result.put",
+                json!({ "project_id": project_id, "kind": "TEST", "payload": { "status": status, "failure_count": index } }));
+            put.idempotency_key = Some(format!("IDEMP-context-source-{index}"));
+            let response = core.execute(put, &runtime);
+            assert!(response.ok);
+            ids.push(response.result.unwrap()["id"].as_str().unwrap().to_string());
+        }
+        let args = json!({ "project_id": "PRJ-a", "result_ids": [&ids[0], &ids[1]],
+            "max_bytes": 4096, "required_pointers": [{ "result_id": ids[0], "pointer": "/status" }] });
+        let view = core.execute(request("REQ-compile", "context.compile", args.clone()), &runtime);
+        assert!(view.ok, "{view:?}");
+        let output = view.result.unwrap();
+        assert_eq!(output["conflict_count"], 2);
+        assert_eq!(output["sources"].as_array().unwrap().len(), 2);
+        assert_eq!(output["freshness_basis"], "stored_source_timestamps_only");
+        assert!(serde_json::to_vec(&output).unwrap().len() <= 4096);
+
+        let mut foreign = args.clone();
+        foreign["result_ids"] = json!([ids[0], ids[2]]);
+        let denial = core.execute(request("REQ-compile-foreign", "context.compile", foreign), &runtime);
+        assert_eq!(denial.error.unwrap().code, "RESULT_NOT_FOUND");
+        let mut scoped = ExecutionAuthority::local_user("CLIENT-b");
+        scoped.project_ids = Some(["PRJ-b".to_string()].into_iter().collect());
+        let denial = core.execute_authorized(request("REQ-compile-denied", "context.compile", args), &runtime, &scoped);
+        assert_eq!(denial.error.unwrap().code, "PROJECT_SCOPE_DENIED");
+        drop(core);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn project_lifecycle_hides_active_discovery_and_preserves_history() {
+        let dir = temp_dir("project-lifecycle");
+        let core = RelayCore::open(CoreConfig::new(&dir));
+        let runtime = runtime();
+        let mut register = request(
+            "REQ-lifecycle-register", "project.register",
+            json!({ "id": "PRJ-life", "name": "Fixture", "root_uri": "file:///fixture" }),
+        );
+        register.idempotency_key = Some("IDEMP-lifecycle-register".to_string());
+        assert!(core.execute(register, &runtime).ok);
+
+        let mut put = request(
+            "REQ-lifecycle-result", "result.put",
+            json!({ "project_id": "PRJ-life", "kind": "TEST", "payload": { "value": 7 } }),
+        );
+        put.idempotency_key = Some("IDEMP-lifecycle-result".to_string());
+        let result = core.execute(put, &runtime);
+        assert!(result.ok);
+        let result_id = result.result.unwrap()["id"].as_str().unwrap().to_string();
+
+        let mut scoped = ExecutionAuthority::local_user("CLIENT-other");
+        scoped.project_ids = Some(["PRJ-other".to_string()].into_iter().collect());
+        let denied = core.execute_authorized(
+            request("REQ-life-denied", "project.archive", json!({ "project_id": "PRJ-life" })),
+            &runtime, &scoped,
+        );
+        assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
+
+        let mut archive = request(
+            "REQ-lifecycle-archive", "project.archive", json!({ "project_id": "PRJ-life" }),
+        );
+        archive.idempotency_key = Some("IDEMP-lifecycle-archive".to_string());
+        let archived = core.execute(archive, &runtime);
+        assert!(archived.ok, "{archived:?}");
+        assert_eq!(archived.result.unwrap()["lifecycle_state"], "archived");
+        assert!(core.execute(request("REQ-life-list", "project.list", json!({})), &runtime)
+            .result.unwrap()["projects"].as_array().unwrap().is_empty());
+        let all = core.execute(request("REQ-life-all", "project.list", json!({ "include_inactive": true })), &runtime);
+        assert_eq!(all.result.unwrap()["projects"][0]["lifecycle_state"], "archived");
+        assert!(core.execute(request("REQ-life-read", "result.get", json!({ "result_id": result_id })), &runtime).ok);
+
+        let mut restore = request("REQ-life-restore", "project.restore", json!({ "project_id": "PRJ-life" }));
+        restore.idempotency_key = Some("IDEMP-lifecycle-restore".to_string());
+        assert_eq!(core.execute(restore, &runtime).result.unwrap()["lifecycle_state"], "active");
+
+        let mismatch = core.execute(request(
+            "REQ-life-mismatch", "project.remove",
+            json!({ "project_id": "PRJ-life", "confirm_project_id": "PRJ-other" }),
+        ), &runtime);
+        assert_eq!(mismatch.error.unwrap().code, "VALIDATION_FAILED");
+        let mut remove = request(
+            "REQ-life-remove", "project.remove",
+            json!({ "project_id": "PRJ-life", "confirm_project_id": "PRJ-life" }),
+        );
+        remove.idempotency_key = Some("IDEMP-lifecycle-remove".to_string());
+        assert_eq!(core.execute(remove, &runtime).result.unwrap()["lifecycle_state"], "removed");
+        assert!(core.execute(request("REQ-life-history", "result.get", json!({ "result_id": result_id })), &runtime).ok);
+        let mut reuse = request(
+            "REQ-life-reuse", "project.register",
+            json!({ "id": "PRJ-life", "name": "Different", "root_uri": "file:///different" }),
+        );
+        reuse.idempotency_key = Some("IDEMP-lifecycle-reuse".to_string());
+        assert_eq!(core.execute(reuse, &runtime).error.unwrap().code, "PROJECT_INACTIVE");
+        assert_eq!(core.execute(request("REQ-life-restore-removed", "project.restore", json!({ "project_id": "PRJ-life" })), &runtime).error.unwrap().code, "PROJECT_REMOVED");
         drop(core);
         fs::remove_dir_all(dir).unwrap();
     }

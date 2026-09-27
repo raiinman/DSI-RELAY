@@ -13,6 +13,7 @@ Own the versioned report model for one integrated end-of-build RELAY validation 
 - Missing UEFN, creator app, or required hardware availability yields `untested`. A synthetic observation cannot pass an integrated workflow.
 - Preserve explicit reason codes, component versions, timing, resource use, opaque log references, and reproducible scenario identifiers. Never include raw logs, local paths, secrets, or free-form diagnostic text in the report.
 - Unknown environment availability, absent observations, and missing live evidence remain visible rather than being counted as passed.
+- The serialized integrated report can be deserialized for bounded local support-summary extraction; deserialization does not establish evidence authenticity.
 
 # Work Guidance
 

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const STORAGE_SCHEMA_VERSION: i64 = 7;
+pub const STORAGE_SCHEMA_VERSION: i64 = 8;
 static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,6 +66,7 @@ pub struct ProjectRecord {
     pub root_uri: String,
     pub created_at: String,
     pub updated_at: String,
+    pub lifecycle_state: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -179,6 +180,18 @@ pub struct JobRecord {
     pub checkpoint: Value,
     pub result_id: Option<String>,
     pub provenance: Value,
+    pub trust: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobDescription {
+    pub id: String,
+    pub project_id: Option<String>,
+    pub command: String,
+    pub state: String,
+    pub result_id: Option<String>,
     pub trust: String,
     pub created_at: String,
     pub updated_at: String,
@@ -442,6 +455,9 @@ impl RelayStorage {
         }
         if self.schema_version()? < 7 {
             self.apply_schema_seven()?;
+        }
+        if self.schema_version()? < 8 {
+            self.apply_schema_eight()?;
         }
         Ok(())
     }
@@ -787,6 +803,22 @@ impl RelayStorage {
             .map_err(|error| StorageError::sqlite("commit schema migration 7", error))
     }
 
+    fn apply_schema_eight(&mut self) -> Result<(), StorageError> {
+        let applied_at = sqlite_now(&self.conn)?;
+        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| StorageError::sqlite("begin schema-8 migration", error))?;
+        tx.execute_batch(
+            "ALTER TABLE projects ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'active'
+               CHECK(lifecycle_state IN ('active', 'archived', 'removed'));
+             CREATE INDEX projects_lifecycle_state ON projects(lifecycle_state, created_at, id);",
+        ).map_err(|error| StorageError::sqlite("add project lifecycle state", error))?;
+        tx.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
+            params![8i64, applied_at],
+        ).map_err(|error| StorageError::sqlite("record schema migration 8", error))?;
+        tx.commit().map_err(|error| StorageError::sqlite("commit schema migration 8", error))
+    }
+
     pub fn db_path(&self) -> &Path {
         &self.db_path
     }
@@ -833,6 +865,14 @@ impl RelayStorage {
             .map(str::to_string)
             .unwrap_or_else(|| opaque_id("PRJ"));
         let now = sqlite_now(&self.conn)?;
+        if let Some(existing) = self.get_project(&id)? {
+            if existing.lifecycle_state != "active" {
+                return Err(StorageError::new(
+                    "PROJECT_INACTIVE",
+                    "archived or removed project IDs cannot be registered again",
+                ));
+            }
+        }
         self.conn
             .execute(
                 "INSERT INTO projects(
@@ -851,7 +891,7 @@ impl RelayStorage {
     pub fn get_project(&self, id: &str) -> Result<Option<ProjectRecord>, StorageError> {
         self.conn
             .query_row(
-                "SELECT id, name, root_uri, created_at, updated_at
+                "SELECT id, name, root_uri, created_at, updated_at, lifecycle_state
                  FROM projects WHERE id = ?1",
                 [id],
                 |row| {
@@ -861,6 +901,7 @@ impl RelayStorage {
                         root_uri: row.get(2)?,
                         created_at: row.get(3)?,
                         updated_at: row.get(4)?,
+                        lifecycle_state: row.get(5)?,
                     })
                 },
             )
@@ -869,21 +910,27 @@ impl RelayStorage {
     }
 
     pub fn list_projects(&self) -> Result<Vec<ProjectRecord>, StorageError> {
+        self.list_projects_with_inactive(false)
+    }
+
+    pub fn list_projects_with_inactive(&self, include_inactive: bool) -> Result<Vec<ProjectRecord>, StorageError> {
         let mut statement = self
             .conn
             .prepare(
-                "SELECT id, name, root_uri, created_at, updated_at
-                 FROM projects ORDER BY created_at, id",
+                "SELECT id, name, root_uri, created_at, updated_at, lifecycle_state
+                 FROM projects WHERE lifecycle_state = 'active' OR ?1
+                 ORDER BY created_at, id",
             )
             .map_err(|error| StorageError::sqlite("prepare project list", error))?;
         let rows = statement
-            .query_map([], |row| {
+            .query_map([include_inactive], |row| {
                 Ok(ProjectRecord {
                     id: row.get(0)?,
                     name: row.get(1)?,
                     root_uri: row.get(2)?,
                     created_at: row.get(3)?,
                     updated_at: row.get(4)?,
+                    lifecycle_state: row.get(5)?,
                 })
             })
             .map_err(|error| StorageError::sqlite("query project list", error))?;
@@ -893,6 +940,53 @@ impl RelayStorage {
             projects.push(row.map_err(|error| StorageError::sqlite("decode project row", error))?);
         }
         Ok(projects)
+    }
+
+    pub fn get_active_project(&self, id: &str) -> Result<ProjectRecord, StorageError> {
+        let project = self.get_project(id)?
+            .ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
+        if project.lifecycle_state != "active" {
+            return Err(StorageError::new("PROJECT_NOT_FOUND", "project is not active"));
+        }
+        Ok(project)
+    }
+
+    pub fn set_project_lifecycle(&self, id: &str, target: &str) -> Result<(ProjectRecord, bool), StorageError> {
+        if !matches!(target, "active" | "archived" | "removed") {
+            return Err(StorageError::new("VALIDATION_FAILED", "unsupported lifecycle state"));
+        }
+        let tx = self.conn.unchecked_transaction()
+            .map_err(|error| StorageError::sqlite("begin project lifecycle change", error))?;
+        let current: Option<String> = tx.query_row(
+            "SELECT lifecycle_state FROM projects WHERE id = ?1", [id], |row| row.get(0),
+        ).optional().map_err(|error| StorageError::sqlite("read project lifecycle state", error))?;
+        let current = current.ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
+        if current == "removed" && target != "removed" {
+            return Err(StorageError::new("PROJECT_REMOVED", "removed project cannot be restored or archived"));
+        }
+        if target == "active" && !matches!(current.as_str(), "active" | "archived") {
+            return Err(StorageError::new("PROJECT_NOT_ARCHIVED", "only archived projects can be restored"));
+        }
+        let changed = current != target;
+        if changed {
+            let now = sqlite_now(&tx)?;
+            if target == "active" {
+                tx.execute(
+                    "UPDATE project_index_state
+                     SET status = 'stale', content_verification_required = 1, updated_at = ?2
+                     WHERE project_id = ?1",
+                    params![id, now],
+                ).map_err(|error| StorageError::sqlite("invalidate restored project index", error))?;
+            }
+            tx.execute(
+                "UPDATE projects SET lifecycle_state = ?2, updated_at = ?3 WHERE id = ?1",
+                params![id, target, now],
+            ).map_err(|error| StorageError::sqlite("change project lifecycle state", error))?;
+        }
+        tx.commit().map_err(|error| StorageError::sqlite("commit project lifecycle change", error))?;
+        let project = self.get_project(id)?
+            .ok_or_else(|| StorageError::new("STORAGE_ERROR", "project disappeared after lifecycle change"))?;
+        Ok((project, changed))
     }
 
     pub fn get_project_configuration(
@@ -929,6 +1023,7 @@ impl RelayStorage {
         adapter_id: Option<&str>,
         adapter_version: Option<&str>,
     ) -> Result<ProjectConfiguration, StorageError> {
+        self.get_active_project(project_id)?;
         let now = sqlite_now(&self.conn)?;
         let tx = self
             .conn
@@ -1035,6 +1130,7 @@ impl RelayStorage {
     }
 
     pub fn mark_project_index_stale(&self, project_id: &str) -> Result<(), StorageError> {
+        self.get_active_project(project_id)?;
         let now = sqlite_now(&self.conn)?;
         self.conn
             .execute(
@@ -1131,6 +1227,7 @@ impl RelayStorage {
         files: &[IndexedFileSnapshot],
         total_bytes: u64,
     ) -> Result<ProjectIndexState, StorageError> {
+        self.get_active_project(project_id)?;
         let now = sqlite_now(&self.conn)?;
         let tx = self
             .conn
@@ -1241,6 +1338,7 @@ impl RelayStorage {
             mode,
             content_verified,
         } = commit;
+        self.get_active_project(project_id)?;
         let status = match mode {
             IndexCommitMode::Authoritative => "ready",
             IndexCommitMode::HintsOnly => "stale",
@@ -1505,6 +1603,7 @@ impl RelayStorage {
         &self,
         replacement: DependencyReplacement<'_>,
     ) -> Result<usize, StorageError> {
+        self.get_active_project(replacement.project_id)?;
         let DependencyReplacement {
             project_id,
             expected_generation,
@@ -1688,6 +1787,9 @@ impl RelayStorage {
         provenance: &Value,
         trust: &str,
     ) -> Result<ResultRecord, StorageError> {
+        if let Some(project_id) = project_id {
+            self.get_active_project(project_id)?;
+        }
         let id = opaque_id("RES");
         let payload_json = json_text(payload)?;
         let payload_sha256 = sha256_hex(payload_json.as_bytes());
@@ -1822,6 +1924,15 @@ impl RelayStorage {
         provenance: &Value,
         trust: &str,
     ) -> Result<JobRecord, StorageError> {
+        if let Some(project_id) = project_id {
+            self.get_active_project(project_id)?;
+        }
+        if let Some(id) = id
+            && let Some(existing) = self.get_job(id)?
+            && let Some(project_id) = existing.project_id.as_deref()
+        {
+            self.get_active_project(project_id)?;
+        }
         let id = id
             .filter(|value| !value.is_empty())
             .map(str::to_string)
@@ -1893,6 +2004,27 @@ impl RelayStorage {
             )
             .optional()
             .map_err(|error| StorageError::sqlite("read job", error))
+    }
+
+    pub fn list_job_descriptions(
+        &self,
+        project_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<JobDescription>, StorageError> {
+        let mut statement = self.conn.prepare(
+            "SELECT id, project_id, command, state, result_id, trust, created_at, updated_at
+             FROM jobs WHERE (?1 IS NULL OR project_id = ?1)
+             ORDER BY updated_at DESC, id DESC LIMIT ?2",
+        ).map_err(|error| StorageError::sqlite("prepare job list", error))?;
+        let rows = statement.query_map(params![project_id, limit as i64], |row| {
+            Ok(JobDescription {
+                id: row.get(0)?, project_id: row.get(1)?, command: row.get(2)?,
+                state: row.get(3)?, result_id: row.get(4)?, trust: row.get(5)?,
+                created_at: row.get(6)?, updated_at: row.get(7)?,
+            })
+        }).map_err(|error| StorageError::sqlite("query job list", error))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| StorageError::sqlite("decode job list", error))
     }
 
     pub fn get_idempotency(&self, key: &str) -> Result<Option<IdempotencyRecord>, StorageError> {
@@ -2514,12 +2646,59 @@ mod tests {
     }
 
     #[test]
-    fn fresh_store_uses_schema_seven_and_typed_records() {
+    fn restoring_archived_project_requires_full_content_verification() {
+        let dir = temp_dir("lifecycle-restore-index");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("relay.sqlite3");
+        let storage = RelayStorage::open(&path).unwrap();
+        storage.register_project(Some("PRJ-life"), "Fixture", "file:///fixture").unwrap();
+        assert_eq!(storage.replace_project_baseline("PRJ-life", &[], 0).unwrap().status, "ready");
+        storage.set_project_lifecycle("PRJ-life", "archived").unwrap();
+        storage.set_project_lifecycle("PRJ-life", "active").unwrap();
+        let state = storage.get_project_index_state("PRJ-life").unwrap().unwrap();
+        assert_eq!(state.status, "stale");
+        assert!(state.content_verification_required);
+        drop(storage);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn lifecycle_tombstone_preserves_result_and_job_links_across_restart() {
+        let dir = temp_dir("lifecycle-history");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("relay.sqlite3");
+        let storage = RelayStorage::open(&path).unwrap();
+        storage.register_project(Some("PRJ-life"), "Fixture", "file:///fixture").unwrap();
+        let result = storage.put_result(
+            Some("PRJ-life"), "TEST", &json!({ "value": 7 }), "0.1.0", &json!({}), "local",
+        ).unwrap();
+        let job = storage.checkpoint_job(
+            Some("JOB-life"), Some("PRJ-life"), "fixture.work", "DONE",
+            &json!({ "step": 1 }), Some(&result.id), &json!({}), "local",
+        ).unwrap();
+        assert_eq!(storage.set_project_lifecycle("PRJ-life", "removed").unwrap().1, true);
+        assert_eq!(storage.set_project_lifecycle("PRJ-life", "removed").unwrap().1, false);
+        assert!(storage.list_projects().unwrap().is_empty());
+        assert_eq!(storage.get_result(&result.id).unwrap().unwrap().project_id.as_deref(), Some("PRJ-life"));
+        assert_eq!(storage.get_job(&job.id).unwrap().unwrap().result_id.as_deref(), Some(result.id.as_str()));
+        assert_eq!(storage.put_result(Some("PRJ-life"), "TEST", &json!({}), "0.1.0", &json!({}), "local").unwrap_err().code, "PROJECT_NOT_FOUND");
+        drop(storage);
+
+        let reopened = RelayStorage::open(&path).unwrap();
+        assert_eq!(reopened.schema_version().unwrap(), 8);
+        assert_eq!(reopened.get_project("PRJ-life").unwrap().unwrap().lifecycle_state, "removed");
+        assert_eq!(reopened.get_job(&job.id).unwrap().unwrap().project_id.as_deref(), Some("PRJ-life"));
+        drop(reopened);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn fresh_store_uses_schema_eight_and_typed_records() {
         let dir = temp_dir("fresh");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 7);
+        assert_eq!(storage.schema_version().unwrap(), 8);
         let project = storage
             .register_project(
                 Some("PRJ-production"),
@@ -2572,7 +2751,7 @@ mod tests {
         create_schema_one_fixture(&path);
 
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 7);
+        assert_eq!(storage.schema_version().unwrap(), 8);
         let project = storage.get_project("PRJ-phase1").unwrap().unwrap();
         assert_eq!(project.name, "Phase 1 Fixture");
 
@@ -2596,7 +2775,7 @@ mod tests {
         create_schema_two_fixture(&path);
 
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 7);
+        assert_eq!(storage.schema_version().unwrap(), 8);
         let result = storage.get_result("RES-phase1").unwrap().unwrap();
         assert_eq!(result.payload["value"], 42);
         assert_eq!(result.trust, "local");
@@ -2703,7 +2882,7 @@ mod tests {
         drop(schema_three);
 
         let migrated = RelayStorage::open(&path).unwrap();
-        assert_eq!(migrated.schema_version().unwrap(), 7);
+        assert_eq!(migrated.schema_version().unwrap(), 8);
         assert_eq!(
             migrated.get_project("PRJ-phase1").unwrap().unwrap().name,
             "Phase 1 Fixture"
@@ -2815,7 +2994,7 @@ mod tests {
         drop(schema_four);
 
         let migrated = RelayStorage::open(&path).unwrap();
-        assert_eq!(migrated.schema_version().unwrap(), 7);
+        assert_eq!(migrated.schema_version().unwrap(), 8);
         let state = migrated
             .get_project_index_state("PRJ-schema4")
             .unwrap()
@@ -2882,7 +3061,7 @@ mod tests {
         drop(schema_five);
 
         let migrated = RelayStorage::open(&path).unwrap();
-        assert_eq!(migrated.schema_version().unwrap(), 7);
+        assert_eq!(migrated.schema_version().unwrap(), 8);
         let state = migrated
             .get_project_index_state("PRJ-schema5")
             .unwrap()
@@ -2937,7 +3116,7 @@ mod tests {
         drop(schema_six);
 
         let migrated = RelayStorage::open(&path).unwrap();
-        assert_eq!(migrated.schema_version().unwrap(), 7);
+        assert_eq!(migrated.schema_version().unwrap(), 8);
         assert!(
             migrated
                 .get_project_configuration("PRJ-schema6")
@@ -3051,7 +3230,7 @@ mod tests {
 
         drop(storage);
         let reopened = RelayStorage::open(&path).unwrap();
-        assert_eq!(reopened.schema_version().unwrap(), 7);
+        assert_eq!(reopened.schema_version().unwrap(), 8);
         assert_eq!(
             reopened
                 .get_project_index_state("PRJ-index-a")

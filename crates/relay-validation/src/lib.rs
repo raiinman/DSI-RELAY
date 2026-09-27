@@ -142,13 +142,13 @@ pub struct WorkflowObservation {
     pub reproduction: Option<Reproduction>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequirementState {
     pub requirement: Requirement,
     pub availability: Availability,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowResult {
     pub workflow_id: String,
     pub phase: u8,
@@ -163,7 +163,7 @@ pub struct WorkflowResult {
     pub reproduction: Option<Reproduction>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutcomeCounts {
     pub passed: usize,
     pub failed: usize,
@@ -171,7 +171,7 @@ pub struct OutcomeCounts {
     pub untested: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IntegratedReport {
     pub schema_version: u32,
     pub run_id: String,

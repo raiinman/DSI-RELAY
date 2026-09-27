@@ -167,6 +167,7 @@ fn run_worker(
     let mut roots = BTreeMap::new();
     let mut watched_paths = BTreeSet::new();
     refresh_roots(&core, &mut watcher, &mut roots, &mut watched_paths);
+    core.set_automation_available(true);
     let mut last_refresh = Instant::now();
     let mut pending: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut last_flush = Instant::now();
@@ -200,11 +201,16 @@ fn run_worker(
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
-        if last_flush.elapsed() >= BATCH_INTERVAL && !foreground_active.load(Ordering::SeqCst) {
+        if last_flush.elapsed() >= BATCH_INTERVAL
+            && !foreground_active.load(Ordering::SeqCst)
+            && !core.automation_paused()
+        {
             flush_hints(&core, &runtime, started_at_unix_ms, &mut pending);
             last_flush = Instant::now();
         }
-        if last_recovery_poll.elapsed() >= RECOVERY_POLL_INTERVAL {
+        if last_recovery_poll.elapsed() >= RECOVERY_POLL_INTERVAL
+            && !core.automation_paused()
+        {
             recover_one_stale_project(
                 &core,
                 &roots,
@@ -218,6 +224,7 @@ fn run_worker(
             last_recovery_poll = Instant::now();
         }
     }
+    core.set_automation_available(false);
 }
 
 fn recovery_idle_threshold() -> Duration {
@@ -269,6 +276,7 @@ fn recover_one_stale_project(
     let idle_threshold = recovery_idle_threshold();
     let safe_to_scan = || {
         !foreground_active.load(Ordering::SeqCst)
+            && !core.automation_paused()
             && last_event.elapsed() >= RECOVERY_QUIET_PERIOD
             && user_idle_duration().is_some_and(|idle| idle >= idle_threshold)
     };
@@ -400,6 +408,10 @@ fn flush_hints(
     let authority = ExecutionAuthority::local_user("relayd-watcher".to_string());
     for (project_id, paths) in std::mem::take(pending) {
         if paths.is_empty() {
+            continue;
+        }
+        if core.automation_paused() {
+            let _ = core.mark_index_stale(&project_id);
             continue;
         }
         let sequence = EVENT_ID.fetch_add(1, Ordering::Relaxed);

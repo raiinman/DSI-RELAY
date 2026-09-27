@@ -5,13 +5,15 @@
 //! command arguments, or arbitrary diagnostic messages.
 
 use serde::Serialize;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use relay_validation::{EvidenceSource, IntegratedReport, WorkflowStatus};
 
 pub const BUNDLE_SCHEMA_VERSION: u32 = 1;
 pub const MAX_BUNDLE_BYTES: usize = 64 * 1024;
 pub const MAX_COMPONENT_VERSIONS: usize = 32;
 pub const MAX_DIAGNOSTIC_CODES: usize = 64;
 pub const MAX_OUTCOME_REASONS: usize = 64;
+pub const MAX_INTEGRATED_REPORT_BYTES: usize = 256 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BundleError {
@@ -179,6 +181,117 @@ pub fn bundle_json(input: SupportInput) -> Result<Vec<u8>, BundleError> {
         return Err(error("BUNDLE_TOO_LARGE"));
     }
     Ok(bytes)
+}
+
+/// Extract only bounded counts and resource totals from a completed report.
+/// This is a summary of the supplied report, not independent attestation of
+/// its observations or a substitute for the report's local evidence journal.
+pub fn summarize_integrated_report(bytes: &[u8]) -> Result<IntegratedRunSummary, BundleError> {
+    if bytes.is_empty() || bytes.len() > MAX_INTEGRATED_REPORT_BYTES {
+        return Err(error("INVALID_RUN_REPORT"));
+    }
+    let report: IntegratedReport =
+        serde_json::from_slice(bytes).map_err(|_| error("INVALID_RUN_REPORT"))?;
+    if report.schema_version != relay_validation::REPORT_SCHEMA_VERSION
+        || !safe_ref(&report.run_id)
+        || report.workflows.is_empty()
+        || report.workflows.len() > relay_validation::MAX_WORKFLOWS
+        || report.completed_unix_ms < report.started_unix_ms
+        || report.duration_ms != report.completed_unix_ms - report.started_unix_ms
+    {
+        return Err(error("INVALID_RUN_REPORT"));
+    }
+    let mut seen = BTreeSet::new();
+    let mut counts = ValidationCounts { passed: 0, failed: 0, blocked: 0, untested: 0 };
+    let mut reasons = BTreeMap::<String, u64>::new();
+    let mut peak_rss = None::<u64>;
+    let mut cpu_ms = None::<u64>;
+    let mut io_read = None::<u64>;
+    let mut io_write = None::<u64>;
+    let mut peak_gpu = None::<u64>;
+    for workflow in &report.workflows {
+        if !safe_ref(&workflow.workflow_id)
+            || !seen.insert(&workflow.workflow_id)
+            || workflow.phase > 11
+            || !safe_code(&workflow.reason_code)
+            || (workflow.status == WorkflowStatus::Passed
+                && (!matches!(workflow.evidence, EvidenceSource::Observed { .. })
+                    || workflow.requirements.iter().any(|item| {
+                        item.availability != relay_validation::Availability::Available
+                    })))
+        {
+            return Err(error("INVALID_RUN_REPORT"));
+        }
+        match workflow.status {
+            WorkflowStatus::Passed => counts.passed += 1,
+            WorkflowStatus::Failed => counts.failed += 1,
+            WorkflowStatus::Blocked => counts.blocked += 1,
+            WorkflowStatus::Untested => counts.untested += 1,
+        }
+        *reasons.entry(workflow.reason_code.clone()).or_default() += 1;
+        if let Some(resources) = &workflow.resource_use {
+            peak_rss = max_option(peak_rss, resources.peak_rss_bytes);
+            peak_gpu = max_option(peak_gpu, resources.peak_gpu_bytes);
+            cpu_ms = sum_option(cpu_ms, resources.cpu_ms)?;
+            io_read = sum_option(io_read, resources.io_read_bytes)?;
+            io_write = sum_option(io_write, resources.io_write_bytes)?;
+        }
+    }
+    if reasons.len() > MAX_OUTCOME_REASONS
+        || report.counts.passed != counts.passed as usize
+        || report.counts.failed != counts.failed as usize
+        || report.counts.blocked != counts.blocked as usize
+        || report.counts.untested != counts.untested as usize
+    {
+        return Err(error("INCONSISTENT_RUN_STATUS"));
+    }
+    let overall_status = match report.overall_status {
+        WorkflowStatus::Passed => ValidationStatus::Passed,
+        WorkflowStatus::Failed => ValidationStatus::Failed,
+        WorkflowStatus::Blocked => ValidationStatus::Blocked,
+        WorkflowStatus::Untested => ValidationStatus::Untested,
+    };
+    if !status_matches_counts(overall_status, &counts) {
+        return Err(error("INCONSISTENT_RUN_STATUS"));
+    }
+    let outcome_reasons = reasons.into_iter().map(|(code, count)| CodeCount { code, count }).collect();
+    let resources = if [peak_rss, cpu_ms, io_read, io_write, peak_gpu].iter().all(Option::is_none) {
+        None
+    } else {
+        Some(RunResources {
+            peak_rss_bytes: peak_rss,
+            total_cpu_ms: cpu_ms,
+            io_read_bytes: io_read,
+            io_write_bytes: io_write,
+            peak_gpu_bytes: peak_gpu,
+        })
+    };
+    Ok(IntegratedRunSummary {
+        report_schema_version: report.schema_version,
+        run_ref: report.run_id,
+        completed_unix_ms: report.completed_unix_ms,
+        duration_ms: report.duration_ms,
+        overall_status,
+        counts,
+        resources,
+        outcome_reasons,
+    })
+}
+
+fn max_option(left: Option<u64>, right: Option<u64>) -> Option<u64> {
+    match (left, right) {
+        (Some(a), Some(b)) => Some(a.max(b)),
+        (Some(value), None) | (None, Some(value)) => Some(value),
+        (None, None) => None,
+    }
+}
+
+fn sum_option(left: Option<u64>, right: Option<u64>) -> Result<Option<u64>, BundleError> {
+    match (left, right) {
+        (Some(a), Some(b)) => a.checked_add(b).map(Some).ok_or_else(|| error("RUN_RESOURCE_OVERFLOW")),
+        (Some(value), None) | (None, Some(value)) => Ok(Some(value)),
+        (None, None) => Ok(None),
+    }
 }
 
 fn validate_input(input: &SupportInput) -> Result<(), BundleError> {
@@ -383,5 +496,35 @@ mod tests {
             bundle_json(input).unwrap_err().code,
             "INCONSISTENT_RUN_STATUS"
         );
+    }
+
+    #[test]
+    fn extracts_only_consistent_private_safe_run_totals() {
+        let report = serde_json::json!({
+            "schema_version": 1, "run_id": "RUN-42", "relay_version": "0.1.0",
+            "started_unix_ms": 100, "completed_unix_ms": 150, "duration_ms": 50,
+            "overall_status": "untested",
+            "counts": {"passed": 1, "failed": 0, "blocked": 0, "untested": 1},
+            "workflows": [
+                {"workflow_id":"host.health", "phase":2, "status":"passed", "reason_code":"HEALTHY",
+                 "requirements":[], "evidence":{"kind":"observed", "source_id":"runner", "log_ref":"sha256:abc"},
+                 "diagnostic_codes":[], "component_versions":[], "timing":null,
+                 "resource_use":{"peak_rss_bytes":1024,"cpu_ms":10,"io_read_bytes":null,"io_write_bytes":null,"peak_gpu_bytes":null},
+                 "reproduction":null},
+                {"workflow_id":"uefn.runtime", "phase":7, "status":"untested", "reason_code":"REQUIRED_ENVIRONMENT_UNAVAILABLE",
+                 "requirements":[{"requirement":{"kind":"uefn"},"availability":"unavailable"}],
+                 "evidence":{"kind":"none"}, "diagnostic_codes":[], "component_versions":[],
+                 "timing":null, "resource_use":null, "reproduction":null}
+            ]
+        });
+        let input = serde_json::to_vec(&report).unwrap();
+        let summary = summarize_integrated_report(&input).unwrap();
+        assert_eq!(summary.counts.untested, 1);
+        assert_eq!(summary.resources.unwrap().peak_rss_bytes, Some(1024));
+        assert_eq!(summary.outcome_reasons[1].code, "REQUIRED_ENVIRONMENT_UNAVAILABLE");
+        let mut false_green = report;
+        false_green["overall_status"] = serde_json::json!("passed");
+        assert_eq!(summarize_integrated_report(&serde_json::to_vec(&false_green).unwrap()).unwrap_err().code,
+            "INCONSISTENT_RUN_STATUS");
     }
 }

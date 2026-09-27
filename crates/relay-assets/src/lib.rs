@@ -4,7 +4,7 @@
 //! Blender, Krita, UEFN, or validate the contents of asset files.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -14,6 +14,7 @@ pub const MAX_MANIFEST_BYTES: usize = 1_048_576;
 pub const MAX_ASSETS: usize = 1_024;
 pub const MAX_FINDINGS: usize = 2_048;
 pub const MAX_TRACKED_FILE_BYTES: u64 = 16 * 1024 * 1024 * 1024;
+pub const MAX_CHANGED_PATHS: usize = 256;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -389,6 +390,196 @@ pub fn validate_manifest(
     Ok(report)
 }
 
+/// An impact reason names a manifest relationship, never a path or file content.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ImpactReasonKind {
+    SourceChanged,
+    ExportChanged,
+    ProjectTargetChanged,
+    RelatedDependency,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ImpactReason {
+    pub kind: ImpactReasonKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub via_asset_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AssetImpact {
+    pub asset_id: String,
+    pub reasons: Vec<ImpactReason>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ImpactReport {
+    pub schema_version: u32,
+    pub changed_path_count: usize,
+    pub affected_asset_count: usize,
+    pub creator_app_execution: ExternalExecutionStatus,
+    pub assets: Vec<AssetImpact>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImpactError {
+    UnsupportedSchema,
+    BoundsExceeded,
+    InvalidManifest,
+    UnsafeChangedPath,
+}
+
+impl fmt::Display for ImpactError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let message = match self {
+            Self::UnsupportedSchema => "asset manifest schema version is unsupported",
+            Self::BoundsExceeded => "asset impact input exceeds a count or byte limit",
+            Self::InvalidManifest => "asset manifest relationships are invalid",
+            Self::UnsafeChangedPath => "changed project-relative path is unsafe",
+        };
+        f.write_str(message)
+    }
+}
+
+impl std::error::Error for ImpactError {}
+
+/// Determine assets touched by project-relative path changes. Related links are
+/// treated conservatively as undirected dependencies and propagated transitively.
+/// The manifest may refer to missing or stale local files; this rechecks
+/// structure and relationships without touching the filesystem.
+pub fn analyze_impact(
+    manifest: &Manifest,
+    changed_paths: &[String],
+) -> Result<ImpactReport, ImpactError> {
+    if manifest.schema_version != SCHEMA_VERSION {
+        return Err(ImpactError::UnsupportedSchema);
+    }
+    check_field_bounds(manifest).map_err(|_| ImpactError::BoundsExceeded)?;
+    if serde_json::to_vec(manifest)
+        .map_err(|_| ImpactError::BoundsExceeded)?
+        .len()
+        > MAX_MANIFEST_BYTES
+        || changed_paths.len() > MAX_CHANGED_PATHS
+    {
+        return Err(ImpactError::BoundsExceeded);
+    }
+    if changed_paths.iter().any(|path| !valid_relative_path(path)) {
+        return Err(ImpactError::UnsafeChangedPath);
+    }
+    let changed: HashSet<_> = changed_paths
+        .iter()
+        .map(|path| path.to_lowercase())
+        .collect();
+
+    let mut by_id = HashMap::new();
+    let mut exports = HashSet::new();
+    let mut targets = HashSet::new();
+    for (index, asset) in manifest.assets.iter().enumerate() {
+        if !valid_token(&asset.id, 128)
+            || !valid_relative_path(&asset.source)
+            || !valid_relative_path(&asset.export)
+            || asset.source.eq_ignore_ascii_case(&asset.export)
+            || !exports.insert(asset.export.to_lowercase())
+            || asset.project_target.as_ref().is_some_and(|target| {
+                !valid_relative_path(target) || !targets.insert(target.to_lowercase())
+            })
+            || by_id.insert(asset.id.to_lowercase(), index).is_some()
+        {
+            return Err(ImpactError::InvalidManifest);
+        }
+    }
+
+    let mut neighbors = vec![Vec::new(); manifest.assets.len()];
+    for (index, asset) in manifest.assets.iter().enumerate() {
+        let mut seen = HashSet::new();
+        for related in &asset.related_asset_ids {
+            let key = related.to_lowercase();
+            let Some(&other) = by_id.get(&key) else {
+                return Err(ImpactError::InvalidManifest);
+            };
+            if !valid_token(related, 128) || other == index || !seen.insert(key) {
+                return Err(ImpactError::InvalidManifest);
+            }
+            neighbors[index].push(other);
+            neighbors[other].push(index);
+        }
+    }
+    for entries in &mut neighbors {
+        entries.sort_unstable_by(|a, b| {
+            manifest.assets[*a]
+                .id
+                .to_lowercase()
+                .cmp(&manifest.assets[*b].id.to_lowercase())
+        });
+        entries.dedup();
+    }
+
+    let mut reasons = vec![Vec::new(); manifest.assets.len()];
+    let mut queue = VecDeque::new();
+    let mut order: Vec<_> = (0..manifest.assets.len()).collect();
+    order.sort_unstable_by(|a, b| {
+        manifest.assets[*a]
+            .id
+            .to_lowercase()
+            .cmp(&manifest.assets[*b].id.to_lowercase())
+    });
+    for &index in &order {
+        let asset = &manifest.assets[index];
+        for (path, kind) in [
+            (&asset.source, ImpactReasonKind::SourceChanged),
+            (&asset.export, ImpactReasonKind::ExportChanged),
+        ] {
+            if changed.contains(&path.to_lowercase()) {
+                reasons[index].push(ImpactReason {
+                    kind,
+                    via_asset_id: None,
+                });
+            }
+        }
+        if asset
+            .project_target
+            .as_ref()
+            .is_some_and(|target| changed.contains(&target.to_lowercase()))
+        {
+            reasons[index].push(ImpactReason {
+                kind: ImpactReasonKind::ProjectTargetChanged,
+                via_asset_id: None,
+            });
+        }
+        if !reasons[index].is_empty() {
+            queue.push_back(index);
+        }
+    }
+    while let Some(index) = queue.pop_front() {
+        for &other in &neighbors[index] {
+            if reasons[other].is_empty() {
+                reasons[other].push(ImpactReason {
+                    kind: ImpactReasonKind::RelatedDependency,
+                    via_asset_id: Some(manifest.assets[index].id.clone()),
+                });
+                queue.push_back(other);
+            }
+        }
+    }
+    let mut assets = Vec::new();
+    for index in order {
+        if !reasons[index].is_empty() {
+            assets.push(AssetImpact {
+                asset_id: manifest.assets[index].id.clone(),
+                reasons: std::mem::take(&mut reasons[index]),
+            });
+        }
+    }
+    Ok(ImpactReport {
+        schema_version: SCHEMA_VERSION,
+        changed_path_count: changed.len(),
+        affected_asset_count: assets.len(),
+        creator_app_execution: ExternalExecutionStatus::NotChecked,
+        assets,
+    })
+}
+
 fn valid_token(value: &str, max_len: usize) -> bool {
     !value.is_empty()
         && value.len() <= max_len
@@ -595,5 +786,91 @@ mod tests {
     fn rejects_oversized_manifest_before_parsing() {
         let bytes = vec![b' '; MAX_MANIFEST_BYTES + 1];
         assert_eq!(parse_manifest(&bytes).unwrap_err(), ManifestError::TooLarge);
+    }
+
+    fn impact_asset(id: &str, related: &[&str]) -> AssetRecord {
+        AssetRecord {
+            id: id.into(),
+            creator_tool: "blender".into(),
+            kind: AssetKind::Mesh,
+            source: format!("Source/{id}.blend"),
+            export: format!("Export/{id}.fbx"),
+            project_target: Some(format!("Target/{id}.uasset")),
+            source_revision: Some("rev1".into()),
+            export_built_from_revision: Some("rev1".into()),
+            related_asset_ids: related.iter().map(|id| (*id).into()).collect(),
+            validation_result_ids: vec![],
+        }
+    }
+
+    #[test]
+    fn impact_is_deterministic_and_propagates_related_dependencies() {
+        let manifest = Manifest {
+            schema_version: SCHEMA_VERSION,
+            project_id: "sample".into(),
+            assets: vec![
+                impact_asset("c", &[]),
+                impact_asset("a", &["b"]),
+                impact_asset("b", &["c"]),
+                impact_asset("unrelated", &[]),
+            ],
+        };
+        let paths = vec!["source/A.blend".into(), "Source/a.blend".into()];
+        let report = analyze_impact(&manifest, &paths).unwrap();
+        assert_eq!(report.changed_path_count, 1);
+        assert_eq!(report.affected_asset_count, 3);
+        assert_eq!(
+            report
+                .assets
+                .iter()
+                .map(|a| a.asset_id.as_str())
+                .collect::<Vec<_>>(),
+            ["a", "b", "c"]
+        );
+        assert_eq!(
+            report.assets[0].reasons[0].kind,
+            ImpactReasonKind::SourceChanged
+        );
+        assert_eq!(
+            report.assets[1].reasons[0].via_asset_id.as_deref(),
+            Some("a")
+        );
+        assert_eq!(
+            report.assets[2].reasons[0].via_asset_id.as_deref(),
+            Some("b")
+        );
+        assert_eq!(
+            report.creator_app_execution,
+            ExternalExecutionStatus::NotChecked
+        );
+        let serialized = serde_json::to_string(&report).unwrap();
+        assert!(!serialized.contains("Source/a.blend"));
+    }
+
+    #[test]
+    fn impact_rejects_unsafe_paths_and_excess_work() {
+        let manifest = Manifest {
+            schema_version: SCHEMA_VERSION,
+            project_id: "sample".into(),
+            assets: vec![impact_asset("a", &[])],
+        };
+        assert_eq!(
+            analyze_impact(&manifest, &["../outside".into()]).unwrap_err(),
+            ImpactError::UnsafeChangedPath
+        );
+        assert_eq!(
+            analyze_impact(
+                &manifest,
+                &vec!["Source/a.blend".into(); MAX_CHANGED_PATHS + 1]
+            )
+            .unwrap_err(),
+            ImpactError::BoundsExceeded
+        );
+        let mut bad = manifest;
+        bad.assets[0].related_asset_ids.push("missing".into());
+        assert_eq!(
+            analyze_impact(&bad, &[]).unwrap_err(),
+            ImpactError::InvalidManifest
+        );
     }
 }

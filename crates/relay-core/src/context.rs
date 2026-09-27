@@ -1,6 +1,6 @@
 use crate::storage::ResultRecord;
 use serde_json::{Value, json};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 struct Fact {
     pointer: String,
@@ -13,6 +13,7 @@ struct Fact {
 pub(crate) enum CompileError {
     BudgetTooSmall,
     RequiredFactUnavailable,
+    SourceTooLarge,
 }
 
 /// Accept only non-root JSON Pointers with RFC 6901 escape sequences.
@@ -346,6 +347,137 @@ fn serialized_len(value: &Value) -> Result<usize, CompileError> {
         .map_err(|_| CompileError::BudgetTooSmall)
 }
 
+/// Compile multiple authorized results into one exact-fact package. The caller
+/// has already checked project scope and bounded/unique source IDs. Conflicting
+/// values at the same pointer are emitted together before optional facts; no
+/// observation is silently promoted to a winner.
+pub(crate) fn compile_project_results(
+    project_id: &str,
+    records: &[ResultRecord],
+    max_bytes: usize,
+    required_pointers: &[(&str, &str)],
+    focus_terms: &[&str],
+) -> Result<Value, CompileError> {
+    let mut ordered: Vec<&ResultRecord> = records.iter().collect();
+    ordered.sort_by(|left, right| left.id.cmp(&right.id));
+    let latest_created_at = ordered.iter().map(|record| record.created_at.as_str()).max().unwrap_or("");
+    let mut sources = Vec::with_capacity(records.len());
+    let mut candidates = Vec::new();
+    let mut kinds = BTreeMap::new();
+    let mut total_scalars = 0u64;
+    let mut total_payload_bytes = 0usize;
+    for record in ordered {
+        kinds.insert(record.id.as_str(), record.kind.as_str());
+        let payload_bytes = serde_json::to_vec(&record.payload)
+            .map_err(|_| CompileError::BudgetTooSmall)?.len();
+        total_payload_bytes = total_payload_bytes.saturating_add(payload_bytes);
+        if total_payload_bytes > 2 * 1024 * 1024 {
+            return Err(CompileError::SourceTooLarge);
+        }
+        sources.push(json!({
+            "result_id": record.id,
+            "kind": record.kind,
+            "payload_sha256": record.payload_sha256,
+            "payload_bytes": payload_bytes,
+            "source_created_at": record.created_at,
+            "older_than_latest_source": record.created_at.as_str() < latest_created_at,
+            "source_trust": record.trust,
+            "producer_version": record.producer_version,
+            "schema_version": record.schema_version
+        }));
+        let mut facts = Vec::new();
+        collect(&record.payload, "", "", false, &mut total_scalars, &mut facts, focus_terms);
+        candidates.extend(facts.into_iter().map(|fact| (record.id.as_str(), fact)));
+        if candidates.len() > 8192 {
+            return Err(CompileError::SourceTooLarge);
+        }
+    }
+    if required_pointers.iter().any(|(result_id, pointer)| {
+        !candidates.iter().any(|(id, fact)| id == result_id && fact.pointer == *pointer)
+    }) {
+        return Err(CompileError::RequiredFactUnavailable);
+    }
+
+    let mut by_pointer: BTreeMap<(&str, &str), Vec<(&str, &Value)>> = BTreeMap::new();
+    for (result_id, fact) in &candidates {
+        let kind = kinds.get(result_id).copied().ok_or(CompileError::BudgetTooSmall)?;
+        by_pointer.entry((kind, &fact.pointer)).or_default().push((result_id, &fact.value));
+    }
+    let mut conflicts = Vec::new();
+    let mut conflicted_pointers = BTreeSet::new();
+    let mut selected_observations = 0u64;
+    for ((kind, pointer), observations) in by_pointer {
+        let distinct: BTreeSet<String> = observations.iter()
+            .map(|(_, value)| serde_json::to_string(value).unwrap_or_default()).collect();
+        if distinct.len() < 2 {
+            continue;
+        }
+        conflicted_pointers.insert((kind.to_string(), pointer.to_string()));
+        selected_observations += observations.len() as u64;
+        conflicts.push(json!({
+            "kind": kind,
+            "pointer": pointer,
+            "observations": observations.into_iter().map(|(result_id, value)| {
+                json!({ "result_id": result_id, "value": value })
+            }).collect::<Vec<_>>()
+        }));
+    }
+    let conflict_count = conflicts.len();
+    let mut output = json!({
+        "context_version": 1,
+        "project_id": project_id,
+        "freshness_basis": "stored_source_timestamps_only",
+        "latest_source_created_at": latest_created_at,
+        "full_result_command": "result.get",
+        "sources": sources,
+        "conflicts": conflicts,
+        "conflict_count": conflict_count,
+        "facts": [],
+        "omitted_scalar_count": total_scalars.saturating_sub(selected_observations),
+        "truncated": selected_observations < total_scalars
+    });
+    if serialized_len(&output)? > max_bytes {
+        return Err(CompileError::BudgetTooSmall);
+    }
+
+    candidates.sort_by(|(left_id, left), (right_id, right)| {
+        let left_required = required_pointers.iter().position(|(id, pointer)| *id == *left_id && *pointer == left.pointer);
+        let right_required = required_pointers.iter().position(|(id, pointer)| *id == *right_id && *pointer == right.pointer);
+        left_required.unwrap_or(usize::MAX).cmp(&right_required.unwrap_or(usize::MAX))
+            .then_with(|| right.relevance.cmp(&left.relevance))
+            .then_with(|| left.priority.cmp(&right.priority))
+            .then_with(|| left.pointer.cmp(&right.pointer))
+            .then_with(|| left_id.cmp(right_id))
+    });
+    let mut seen = HashSet::new();
+    for (result_id, fact) in candidates {
+        let kind = kinds.get(result_id).copied().ok_or(CompileError::BudgetTooSmall)?;
+        if conflicted_pointers.contains(&(kind.to_string(), fact.pointer.clone())) {
+            continue;
+        }
+        let required = required_pointers.iter().any(|(id, pointer)| *id == result_id && *pointer == fact.pointer);
+        let duplicate = format!("{result_id}:{}", duplicate_key(&fact.pointer, &fact.value));
+        if !required && !seen.insert(duplicate) {
+            continue;
+        }
+        output["facts"].as_array_mut().ok_or(CompileError::BudgetTooSmall)?
+            .push(json!({ "result_id": result_id, "pointer": fact.pointer, "value": fact.value }));
+        selected_observations += 1;
+        output["omitted_scalar_count"] = json!(total_scalars.saturating_sub(selected_observations));
+        output["truncated"] = json!(selected_observations < total_scalars);
+        if serialized_len(&output)? > max_bytes {
+            output["facts"].as_array_mut().ok_or(CompileError::BudgetTooSmall)?.pop();
+            selected_observations -= 1;
+            output["omitted_scalar_count"] = json!(total_scalars.saturating_sub(selected_observations));
+            output["truncated"] = json!(selected_observations < total_scalars);
+            if required {
+                return Err(CompileError::BudgetTooSmall);
+            }
+        }
+    }
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -363,6 +495,71 @@ mod tests {
             trust: "local-attributed".to_string(),
             created_at: "2026-09-26T00:00:00Z".to_string(),
         }
+    }
+
+    #[test]
+    fn project_compiler_reports_exact_conflicts_and_source_age_without_raw_data() {
+        let mut old = record(json!({
+            "status": "OLD", "failure_count": 1,
+            "api_token": "SECRET-value", "project_path": "C:/private"
+        }));
+        old.id = "RES-a".to_string();
+        old.created_at = "2026-09-25T00:00:00.000Z".to_string();
+        let mut newer = record(json!({ "status": "NEW", "failure_count": 2, "ok": false }));
+        newer.id = "RES-b".to_string();
+        newer.created_at = "2026-09-26T00:00:00.000Z".to_string();
+        let result = compile_project_results(
+            "PRJ-fixture", &[newer.clone(), old.clone()], 4096,
+            &[("RES-b", "/failure_count")], &[],
+        ).unwrap();
+        assert_eq!(result, compile_project_results("PRJ-fixture", &[old, newer], 4096,
+            &[("RES-b", "/failure_count")], &[]).unwrap());
+        assert_eq!(result["conflict_count"], 2);
+        assert_eq!(result["sources"][0]["result_id"], "RES-a");
+        assert_eq!(result["sources"][0]["older_than_latest_source"], true);
+        assert_eq!(result["sources"][1]["older_than_latest_source"], false);
+        assert!(result["facts"].as_array().unwrap().iter().all(|fact| fact["pointer"] != "/status"));
+        let conflict = result["conflicts"].as_array().unwrap().iter()
+            .find(|item| item["pointer"] == "/status").unwrap();
+        assert_eq!(conflict["kind"], "TEST");
+        assert_eq!(conflict["observations"].as_array().unwrap().len(), 2);
+        let serialized = serde_json::to_string(&result).unwrap();
+        assert!(!serialized.contains("SECRET-value"));
+        assert!(!serialized.contains("C:/private"));
+        assert!(serialized.len() <= 4096);
+    }
+
+    #[test]
+    fn project_compiler_fails_closed_when_conflicts_or_required_facts_do_not_fit() {
+        let mut first = record(json!({ "status": "OLD", "failure_count": 1 }));
+        first.id = "RES-a".to_string();
+        let mut second = record(json!({ "status": "NEW", "failure_count": 2 }));
+        second.id = "RES-b".to_string();
+        assert_eq!(compile_project_results("PRJ-fixture", &[first.clone(), second.clone()],
+            512, &[], &[]).unwrap_err(), CompileError::BudgetTooSmall);
+        assert_eq!(compile_project_results("PRJ-fixture", &[first.clone(), second.clone()],
+            4096, &[("RES-a", "/secret")], &[]).unwrap_err(), CompileError::RequiredFactUnavailable);
+        assert_eq!(compile_project_results("PRJ-fixture", &[first, second],
+            4096, &[("RES-a", "/status")], &[]).unwrap()["conflict_count"], 2);
+        assert_eq!(compile_project_results("PRJ-fixture", &[record(json!({
+            "message": "x".repeat(2 * 1024 * 1024)
+        }))], 4096, &[], &[]).unwrap_err(), CompileError::SourceTooLarge);
+    }
+
+    #[test]
+    fn project_compiler_scopes_conflicts_to_result_kind() {
+        let mut build = record(json!({ "failure_count": 2, "status": "FAILED" }));
+        build.id = "RES-build".to_string();
+        build.kind = "BUILD".to_string();
+        let mut runtime = record(json!({ "failure_count": 5, "status": "READY" }));
+        runtime.id = "RES-runtime".to_string();
+        runtime.kind = "RUNTIME".to_string();
+        let view = compile_project_results("PRJ-fixture", &[build, runtime], 4096, &[], &[]).unwrap();
+        assert_eq!(view["conflict_count"], 0);
+        assert_eq!(view["sources"][0]["kind"], "BUILD");
+        assert_eq!(view["sources"][1]["kind"], "RUNTIME");
+        assert_eq!(view["facts"].as_array().unwrap().iter()
+            .filter(|fact| fact["pointer"] == "/failure_count").count(), 2);
     }
 
     #[test]

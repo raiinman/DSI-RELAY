@@ -7,5 +7,6 @@ rust-version = "1.97"
 publish = false
 
 [dependencies]
+relay-validation = { path = "../relay-validation" }
 serde.workspace = true
 serde_json.workspace = true

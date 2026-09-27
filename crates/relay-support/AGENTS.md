@@ -12,6 +12,7 @@ Own bounded, privacy-safe support bundle assembly for RELAY.
 - Emit a versioned JSON bundle with diagnostic health/counts, component versions, integrated outcome counts, and stable reason-code counts.
 - Reject paths, command arguments, secrets, raw log text, malformed codes, oversized input, and oversized output. Do not include arbitrary user text or raw event history.
 - If the integrated run has not happened, report that as absent; do not fabricate a pass or substitute synthetic evidence.
+- A supplied integrated report is parsed under a byte limit and reduced to checked outcome counts, reason-code counts, and resource totals; it is a summary of that file, not independent attestation of its observations.
 
 # Work Guidance
 
@@ -20,7 +21,7 @@ Own bounded, privacy-safe support bundle assembly for RELAY.
 
 # Verification
 
-- Run focused crate tests for privacy and output bounds.
+- Run focused crate tests for privacy, report consistency, and output bounds.
 
 # Child DOX Index
 

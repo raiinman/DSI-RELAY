@@ -46,7 +46,7 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `PHASE2_THIRD_SLICE_EVIDENCE.md` — accepted third-slice adapter lifecycle, sandbox, concurrency, and resource evidence.
 - `PHASE2_PROMOTION_LEDGER.md` — maps Phase 1 evidence to deliberate Phase 2 production promotion gates.
 - `PHASE2_CLOSURE_REVIEW.md` — final Phase 2 exit-criteria review and production-foundation closure record.
-- `PHASE3_START_HERE.md` — active Phase 3 project discovery/indexing implementation authority.
+- `PHASE3_START_HERE.md` — Phase 3 project discovery/indexing foundations and current construction handoff; `ROADMAP.md` owns cross-phase order.
 - `PHASE3_FIRST_SLICE.md` — acceptance contract for the first generic multi-project discovery/baseline/changed-only indexing vertical.
 - `PHASE3_FIRST_SLICE_EVIDENCE.md` — accepted synthetic two-project verification, migration, restart, isolation, and resource evidence.
 - `PHASE3_SECOND_SLICE_EVIDENCE.md` — accepted schema-5 change-delta, dependency-edge, migration, isolation, and restart evidence.

@@ -40,11 +40,13 @@ Own production Rust implementation promoted from Phase 1 evidence.
 - `relay-core/AGENTS.md` — owns deterministic service logic, SQLite state, durable project/result/job records, idempotency, provenance/trust, and diagnostics.
 - `relay-adapter/AGENTS.md` — owns generic adapter manifests, broker lifecycle, and qualified Windows worker isolation.
 - `relay-uefn/AGENTS.md` — owns UEFN-specific static project inspection from generic indexed metadata, with live editor/runtime capability kept explicit.
-- `relay-uefn-mcp/AGENTS.md` — owns bounded localhost UEFN MCP discovery and version handling; live editor behavior requires UEFN validation.
+- `relay-uefn-mcp/AGENTS.md` — owns bounded localhost UEFN MCP discovery, version handling, and private schema-guarded tool invocation; live editor behavior requires UEFN validation.
 - `relay-verse/AGENTS.md` — owns bounded structured Verse telemetry normalization and local assertion evaluation with explicit session and evidence quality.
 - `relay-assets/AGENTS.md` — owns deterministic, project-relative asset manifest validation and normalized asset records.
 - `relay-blender/AGENTS.md` — owns bounded Blender discovery and fixed headless mesh checks with explicit unavailable or incomplete outcomes.
 - `relay-krita/AGENTS.md` — owns bounded Krita binary discovery and project-local source/export inspection without native execution.
+- `relay-gateway/AGENTS.md` — owns the authenticated loopback registry-discovery gateway prototype and its HTTP security boundary.
+- `relay-runtime/AGENTS.md` — owns bounded runtime session/probe state and evidence eligibility without asserting live UEFN verification.
 - `relay-support/AGENTS.md` — owns bounded privacy-safe support bundle assembly from health and final-run summaries.
 - `relay-validation/AGENTS.md` — owns the privacy-safe outcome model for one end-of-build integrated validation report.
 - `relay-cli/AGENTS.md` — owns the canonical human/machine CLI client.

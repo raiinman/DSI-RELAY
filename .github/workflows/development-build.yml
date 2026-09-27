@@ -1,0 +1,39 @@
+name: Development build
+
+on:
+  push:
+    branches:
+      - development/relay-v0.1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Select Windows Rust toolchain
+        run: |
+          $ErrorActionPreference = 'Stop'
+          rustup toolchain install stable-x86_64-pc-windows-msvc --profile minimal
+          if ($LASTEXITCODE -ne 0) { throw 'Rust toolchain installation failed' }
+          rustup default stable-x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { throw 'Rust toolchain selection failed' }
+      - name: Check workspace contracts and binaries
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo check --workspace --locked
+          if ($LASTEXITCODE -ne 0) { throw 'Workspace build check failed' }
+      - name: Check dashboard rendering
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node --test crates/relayd/dashboard/app.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Dashboard check failed' }

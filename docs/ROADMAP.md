@@ -209,7 +209,7 @@ Exit criteria:
 
 ## Phase 3 — Project discovery and indexing
 
-Status: Active — the generic two-project baseline, schema-5 bounded delta/dependency-edge foundation, provisional targeted hint-update path, schema-6 continuity recovery and idle scheduler, bounded Windows OS watcher, schema-7 project configuration, installed sandboxed parser dispatch, and live parser health have synthetic fixture evidence. The development line also includes an offline parser installer draft. `PHASE3_CLOSURE_REVIEW.md` remains NOT READY. Supported-tier budgets, prolonged creator-app interference, live parser installation and real-adapter proof remain open. The synthetic measurement preview is held and unpublished.
+Status: Active — the generic two-project baseline, schema-5 bounded delta/dependency-edge foundation, provisional targeted hint-update path, schema-6 continuity recovery and idle scheduler, bounded Windows OS watcher, schema-7 project configuration, installed sandboxed parser dispatch, and live parser health have synthetic fixture evidence. The development line also includes an offline parser installer draft and schema-8 reversible archive/irreversible removal tombstones that retain history and leave project files alone. `PHASE3_CLOSURE_REVIEW.md` remains NOT READY. Supported-tier budgets, prolonged creator-app interference, live parser installation and real-adapter proof remain open. The synthetic measurement preview is held and unpublished.
 
 Build:
 
@@ -236,7 +236,7 @@ Exit criteria:
 
 ## Phase 4 — Context and cost engine
 
-Status: Active early foundation — `result.describe` provides a project-scoped metadata-only lookup, and `result.context` selects exact scalar facts from an authorized durable result within a requested byte budget. Callers can require bounded, already eligible facts by JSON Pointer or receive an explicit failure. A deterministic Context Gauntlet fixture measures exact retention and serialized bytes for stored results. The full Context Compiler, model/client cost benchmarks, and Phase 4 exit criteria remain open. Evidence: `PHASE4_RESULT_DESCRIPTION_EVIDENCE.md`, `PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md`, and `PHASE4_CONTEXT_GAUNTLET_FIRST_FIXTURE.md`.
+Status: Active foundation — `result.describe` provides a project-scoped metadata-only lookup, and `result.context` selects exact scalar facts from an authorized durable result within a requested byte budget. `context.compile` combines up to eight authorized results for one project, preserves each source ID and freshness metadata, and reports same-kind exact-fact conflicts without choosing a winner. Required facts or conflicts that do not fit fail explicitly. A deterministic Context Gauntlet fixture measures exact retention and serialized bytes for stored results. Full task/state/decision compilation, model/client cost benchmarks, and Phase 4 exit criteria remain open. Earlier evidence: `PHASE4_RESULT_DESCRIPTION_EVIDENCE.md`, `PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md`, and `PHASE4_CONTEXT_GAUNTLET_FIRST_FIXTURE.md`.
 
 Build:
 
@@ -261,7 +261,7 @@ Exit criteria:
 
 ## Phase 5 — Dashboard
 
-Status: Active early foundation — the production daemon serves a local read-only health/project view, Diagnostics/Debug summary, stored result descriptions, recent transaction activity, aggregate usage, and a static UEFN project inspection action through the same command system as the CLI. Keyboard/status/error-state accessibility improvements are present. Manual assistive-technology review, jobs/approvals/assets/test views, write actions, and integrated security review remain open.
+Status: Active foundation — the production daemon serves local health, project lifecycle and index actions, Diagnostics/Debug summary, stored result and job descriptions, recent transaction activity, aggregate usage, static UEFN inspection, asset-manifest checks, and imported Verse analysis metadata through the same command system as the CLI. Project add/archive/restore/remove and bounded manifest checks have browser controls; shared pause/resume commands and CLI now control optional watcher work, with mode visible in status/diagnostics. Dashboard pause controls remain open. Live UEFN and native creator-app outcomes remain UNTESTED. Keyboard/status/error-state accessibility improvements are present. Manual assistive-technology review, approval workflows, full test execution, and integrated security review remain open.
 
 Build first usable dashboard:
 
@@ -289,7 +289,7 @@ Exit criteria:
 
 ## Phase 6 — UEFN static/editor adapter
 
-Status: Active early foundation — a read-only static inspector classifies a registered project's ready index for top-level `.uefnproject` markers, Verse source names, and Unreal asset/map counts through one shared CLI/dashboard command. `relay uefn-audit` can store that static observation by durable result ID through the shared result command. A bounded discovery-only client can probe Epic's documented localhost UEFN MCP endpoint and count advertised tools without invoking them. Editor identity, entity/device/spawn state, native audit, capture, and all live workflow acceptance remain open.
+Status: Active early foundation — a read-only static inspector classifies a registered project's ready index for top-level `.uefnproject` markers, Verse source names, and Unreal asset/map counts through one shared CLI/dashboard command. `relay uefn-audit` can store that static observation by durable result ID through the shared result command. A bounded localhost MCP client summarizes advertised toolsets and parameter shapes. A private invocation primitive validates a freshly advertised tool schema, exact caller arguments, and a declared effect before dispatch; it is not exposed as an authorized host command. Editor identity, entity/device/spawn state, native audit, capture, and all live workflow acceptance remain open.
 
 Build:
 
@@ -311,7 +311,7 @@ Exit criteria:
 
 ## Phase 7 — Fortnite runtime bridge
 
-Status: Active early foundation — a bounded parser normalizes structured Verse log fragments and evaluates project-defined local event-count assertions through a shared command. Caller-declared UEFN log provenance is not verified; live UEFN assertion status remains UNTESTED. Runtime acquisition, session binding, probes, visual capture, and durable gameplay-test results remain open.
+Status: Active early foundation — a bounded parser normalizes structured Verse log fragments and evaluates project-defined local event-count assertions through a shared command. Imported analysis can be recorded by result ID. A project-installable Verse logging template emits session boundaries and one device-ready probe using documented Epic APIs, but has not been compiled or run in UEFN. An isolated runtime model tracks session transitions, probe eligibility, and capture completeness without promoting caller-declared provenance. It is not yet connected to a live creator-app session. Live UEFN assertion status remains UNTESTED; trusted runtime acquisition, visual capture, and durable live gameplay-test results remain open.
 
 Build:
 
@@ -332,7 +332,7 @@ Exit criteria:
 
 ## Phase 8 — Asset adapters
 
-Status: Active early foundation — a local asset manifest validator checks bounded source/export links and lineage through CLI/dashboard. Krita declared formats can be inspected through the same paths; a bounded Blender headless mesh checker exists in an isolated crate but is not yet routed through the shared host authority. Native Krita and UEFN execution, export/build automation, and integrated acceptance remain open.
+Status: Active early foundation — a local asset manifest validator checks bounded source/export links and lineage through CLI/dashboard. The dashboard accepts a bounded local manifest and presents compact findings and lineage counts. Shared `assets.impact.analyze` maps changed project-relative paths to affected declared assets and related dependencies without exposing paths, including files now missing or stale. Krita declared formats can be inspected through the same paths. The bounded Blender headless mesh checker is routed through an authorized shared command and CLI for project-relative `.blend` files; native Blender workflow remains untested until a real installation and file are exercised. Native Krita and UEFN execution, export/build automation, and integrated acceptance remain open.
 
 Build:
 
@@ -352,7 +352,7 @@ Exit criteria:
 
 ## Phase 9 — Skills and remote clients
 
-Status: Active early foundation — a compact local `relay-core` skill, command reference generated from the shared registry, and version/capability-checking PowerShell wrapper exist. A live coding-agent workflow, remote gateway, ChatGPT-compatible client, and context-overhead comparison remain open.
+Status: Active early foundation — a compact local `relay-core` skill, command reference generated from the shared registry, and version/capability-checking PowerShell wrapper exist. A runnable authenticated loopback gateway forwards only bounded registry discovery, with a protected per-user token and local probe/list/describe commands. A live coding-agent workflow, public remote access, ChatGPT-compatible client, and context-overhead comparison remain open.
 
 Build:
 
@@ -373,7 +373,7 @@ Exit criteria:
 
 ## Phase 10 — Automation and recovery
 
-Status: Active early foundation — `relay discover` performs a bounded read-only first-run scan for nearby project markers and candidate tool installations while labeling every live integration untested. `relay onboard <project-folder>` imports the selected folder and builds its first index through shared commands, with partial-import errors explicit. `relay support-bundle` exports bounded health/count summaries, leaving the integrated-run field empty until a real run occurs. Guided UI, reconnection, and automation remain open.
+Status: Active foundation — `relay discover` performs a bounded read-only first-run scan for nearby project markers and candidate tool installations while labeling every live integration untested. `relay onboard <project-folder>` imports the selected folder and builds its first index through shared commands, with partial-import errors explicit. The dashboard guides add → select → capability check → local index build and gives bounded recovery guidance. Shared `automation.pause`/`automation.resume` commands and `relay pause`/`relay resume` suspend or resume optional watcher work for one daemon run; status and diagnostics expose the mode. `relay support-bundle` exports bounded health/count summaries and can reduce a supplied integrated report to checked counts and resource totals; without a real run, that field stays empty. Automatic tool onboarding, reconnection, and affected-only automation remain open.
 
 Build:
 
@@ -396,7 +396,7 @@ Exit criteria:
 
 ## Phase 11 — Public hardening
 
-Status: Open — MIT license and RAiiNMAN credit are selected in the development line; the public binary remains an unpublished draft. A bounded integrated-report model exists, but no full integrated run or public acceptance has occurred.
+Status: Open — MIT license and RAiiNMAN credit are selected in the development line; the public binary remains an unpublished draft. Unsigned local staging and guarded fixture-only install/update/uninstall scripts exist, with signing, trusted schema discovery, actual per-user installation, and clean-account installation still open. A bounded integrated-report model exists, but no full integrated run or public acceptance has occurred.
 
 Before public beta:
 

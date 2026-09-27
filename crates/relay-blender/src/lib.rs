@@ -11,6 +11,11 @@ use std::time::{Duration, Instant};
 
 const MAX_BLEND_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_OUTPUT_BYTES: usize = 64 * 1024;
+const MAX_INSPECTED_MESHES: usize = 64;
+const MAX_REPORTED_MESHES: usize = 4096;
+const MAX_SCANNED_ELEMENTS: usize = 200_000;
+const MAX_REPORTED_ELEMENTS: usize = 50_000_000;
+const MAX_EXAMPLES: usize = 16;
 const TIMEOUT: Duration = Duration::from_secs(30);
 const RESULT_PREFIX: &str = "RELAY_MESH_JSON:";
 
@@ -46,7 +51,7 @@ for mesh_index, mesh in enumerate(itertools.islice(bpy.data.meshes, limit_meshes
             if len(examples) < 16:
                 examples.append({'mesh_index': mesh_index, 'code': 'degenerate_face'})
     found.append({'mesh_index': mesh_index, 'vertices': vertex_count, 'edges': edge_count, 'faces': face_count})
-result = {'format_version': 1, 'blender_version': bpy.app.version_string,
+result = {'format_version': 1, 'blender_version': '.'.join(str(part) for part in bpy.app.version),
           'total_meshes': len(bpy.data.meshes), 'inspected_meshes': found,
           'issue_count': issue_count, 'examples': examples, 'incomplete': incomplete}
 print('RELAY_MESH_JSON:' + json.dumps(result, separators=(',', ':')), flush=True)
@@ -92,6 +97,7 @@ pub struct ValidationReport {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct MeshSummary {
     pub mesh_index: usize,
     pub vertices: usize,
@@ -100,6 +106,7 @@ pub struct MeshSummary {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct MeshIssue {
     pub mesh_index: usize,
     pub code: String,
@@ -177,11 +184,7 @@ fn capability(path: Option<PathBuf>, source: &'static str) -> ToolCapability {
             ToolStatus::Unavailable
         },
         executable: path,
-        source: if detected {
-            Some(source)
-        } else {
-            None
-        },
+        source: if detected { Some(source) } else { None },
         workflow_status: "untested",
     }
 }
@@ -283,29 +286,29 @@ pub fn validate_blend(file: &Path, explicit_blender: Option<&Path>) -> Validatio
         report.message = "Blender exited before inspection completed.".to_string();
         return report;
     }
-    let text = String::from_utf8_lossy(&output);
-    let Some(payload) = text
-        .lines()
-        .rev()
-        .find_map(|line| line.strip_prefix(RESULT_PREFIX))
-    else {
-        report.status = ValidationStatus::ToolError;
-        report.message = "Blender did not return a RELAY mesh result.".to_string();
-        return report;
-    };
-    let Ok(native) = serde_json::from_str::<NativeObservation>(payload) else {
+    let Ok(text) = std::str::from_utf8(&output) else {
         report.status = ValidationStatus::ToolError;
         report.message = "Blender returned an invalid mesh result.".to_string();
         return report;
     };
-    if native.format_version != 1
-        || native.inspected_meshes.len() > 64
-        || native.examples.len() > 16
-    {
+    let mut payloads = text
+        .lines()
+        .filter_map(|line| line.strip_prefix(RESULT_PREFIX));
+    let Some(payload) = payloads.next() else {
         report.status = ValidationStatus::ToolError;
-        report.message = "Blender returned an incompatible mesh result.".to_string();
+        report.message = "Blender did not return a RELAY mesh result.".to_string();
+        return report;
+    };
+    if payloads.next().is_some() {
+        report.status = ValidationStatus::ToolError;
+        report.message = "Blender returned multiple mesh results.".to_string();
         return report;
     }
+    let Ok(native) = parse_native_observation(payload) else {
+        report.status = ValidationStatus::ToolError;
+        report.message = "Blender returned an invalid mesh result.".to_string();
+        return report;
+    };
     report.blender_version = Some(native.blender_version);
     report.total_meshes = Some(native.total_meshes);
     report.inspected_meshes = native.inspected_meshes;
@@ -313,6 +316,8 @@ pub fn validate_blend(file: &Path, explicit_blender: Option<&Path>) -> Validatio
     report.examples = native.examples;
     report.status = if native.incomplete {
         ValidationStatus::Incomplete
+    } else if native.total_meshes == 0 {
+        ValidationStatus::Failed
     } else if native.issue_count > 0 {
         ValidationStatus::Failed
     } else {
@@ -322,10 +327,70 @@ pub fn validate_blend(file: &Path, explicit_blender: Option<&Path>) -> Validatio
         ValidationStatus::Incomplete => {
             "The bounded geometry check did not cover every mesh element.".to_string()
         }
+        ValidationStatus::Failed if native.total_meshes == 0 => {
+            "The file contains no mesh data to inspect.".to_string()
+        }
         ValidationStatus::Failed => "The bounded geometry check found mesh issues.".to_string(),
         _ => "The bounded read-only geometry checks passed.".to_string(),
     };
     report
+}
+
+fn parse_native_observation(payload: &str) -> Result<NativeObservation, ()> {
+    let native: NativeObservation = serde_json::from_str(payload).map_err(|_| ())?;
+    if native.format_version != 1
+        || !valid_numeric_version(&native.blender_version)
+        || native.total_meshes > MAX_REPORTED_MESHES
+        || native.inspected_meshes.len() != native.total_meshes.min(MAX_INSPECTED_MESHES)
+        || native.examples.len() > MAX_EXAMPLES
+        || native.examples.len() != native.issue_count.min(MAX_EXAMPLES)
+        || native.issue_count > MAX_INSPECTED_MESHES * MAX_SCANNED_ELEMENTS * 3
+    {
+        return Err(());
+    }
+    let mut scan_limit_hit = native.total_meshes > MAX_INSPECTED_MESHES;
+    let mut max_possible_issues = 0usize;
+    for (expected_index, mesh) in native.inspected_meshes.iter().enumerate() {
+        if mesh.mesh_index != expected_index
+            || [mesh.vertices, mesh.edges, mesh.faces]
+                .into_iter()
+                .any(|count| count > MAX_REPORTED_ELEMENTS)
+        {
+            return Err(());
+        }
+        scan_limit_hit |= [mesh.vertices, mesh.edges, mesh.faces]
+            .into_iter()
+            .any(|count| count > MAX_SCANNED_ELEMENTS);
+        max_possible_issues += [mesh.vertices, mesh.edges, mesh.faces]
+            .into_iter()
+            .map(|count| count.min(MAX_SCANNED_ELEMENTS))
+            .sum::<usize>();
+    }
+    if native.incomplete != scan_limit_hit || native.issue_count > max_possible_issues {
+        return Err(());
+    }
+    for issue in &native.examples {
+        if issue.mesh_index >= native.inspected_meshes.len()
+            || !matches!(
+                issue.code.as_str(),
+                "non_finite_vertex" | "self_edge" | "degenerate_face"
+            )
+        {
+            return Err(());
+        }
+    }
+    Ok(native)
+}
+
+fn valid_numeric_version(version: &str) -> bool {
+    if version.len() > 11 {
+        return false;
+    }
+    let parts: Vec<_> = version.split('.').collect();
+    parts.len() == 3
+        && parts.iter().all(|part| {
+            !part.is_empty() && part.len() <= 3 && part.bytes().all(|byte| byte.is_ascii_digit())
+        })
 }
 
 fn empty_report() -> ValidationReport {
@@ -379,5 +444,51 @@ mod tests {
     fn rejects_non_blend_input_before_tool_discovery() {
         let report = validate_blend(Path::new("mesh.py"), None);
         assert_eq!(report.status, ValidationStatus::InvalidInput);
+    }
+
+    #[test]
+    fn external_observation_rejects_paths_and_inconsistent_counts() {
+        let valid = serde_json::json!({
+            "format_version": 1,
+            "blender_version": "4.5.3",
+            "total_meshes": 1,
+            "inspected_meshes": [{"mesh_index": 0, "vertices": 3, "edges": 3, "faces": 1}],
+            "issue_count": 0,
+            "examples": [],
+            "incomplete": false
+        });
+        assert!(parse_native_observation(&valid.to_string()).is_ok());
+
+        let mut cases = Vec::new();
+        let mut path_version = valid.clone();
+        path_version["blender_version"] = serde_json::json!("C:\\private\\4.5.3");
+        cases.push(path_version);
+        let mut text_version = valid.clone();
+        text_version["blender_version"] = serde_json::json!("4.5.3 private details");
+        cases.push(text_version);
+        let mut path_issue = valid.clone();
+        path_issue["issue_count"] = serde_json::json!(1);
+        path_issue["examples"] = serde_json::json!([{"mesh_index":0,"code":"C:\\private\\error"}]);
+        cases.push(path_issue);
+        let mut false_complete = valid.clone();
+        false_complete["inspected_meshes"][0]["vertices"] = serde_json::json!(200001);
+        cases.push(false_complete);
+        let mut wrong_index = valid.clone();
+        wrong_index["inspected_meshes"][0]["mesh_index"] = serde_json::json!(9);
+        cases.push(wrong_index);
+        let mut impossible_issue_count = valid.clone();
+        impossible_issue_count["issue_count"] = serde_json::json!(8);
+        impossible_issue_count["examples"] =
+            serde_json::json!([{"mesh_index":0,"code":"self_edge"}]);
+        cases.push(impossible_issue_count);
+        let mut too_many_meshes = valid.clone();
+        too_many_meshes["total_meshes"] = serde_json::json!(4097);
+        cases.push(too_many_meshes);
+        let mut extra_text = valid;
+        extra_text["inspected_meshes"][0]["private_path"] = serde_json::json!("secret");
+        cases.push(extra_text);
+        for value in cases {
+            assert!(parse_native_observation(&value.to_string()).is_err());
+        }
     }
 }

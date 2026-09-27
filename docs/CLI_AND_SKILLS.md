@@ -201,6 +201,8 @@ D-154 makes this concrete: the built-in Phase 1 registry is plain JSON using a b
 
 A cloud-only client cannot be assumed to run local shell commands.
 
+As of the current platform review, ChatGPT connects to remote MCP servers rather than directly to a local MCP listener, and plugin/app availability depends on the user's plan, region, and account controls. The loopback discovery gateway is therefore a local transport prototype, not proof that ordinary or free ChatGPT can use RELAY. A supported remote connection or published plugin, its eligibility, and end-to-end account testing remain Phase 9 work. Recheck [OpenAI's MCP app guidance](https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt) and [plugin availability guidance](https://help.openai.com/en/articles/20001256-plugins-in-chatgpt-and-codex) before setting a public support promise.
+
 Path:
 
 ~~~

@@ -329,6 +329,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "relay-gateway"
+version = "0.1.0"
+dependencies = [
+ "relay",
+ "relay-contracts",
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "relay-krita"
 version = "0.1.0"
 dependencies = [
@@ -337,9 +348,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "relay-runtime"
+version = "0.1.0"
+dependencies = [
+ "relay-verse",
+ "serde",
+]
+
+[[package]]
 name = "relay-support"
 version = "0.1.0"
 dependencies = [
+ "relay-validation",
  "serde",
  "serde_json",
 ]
@@ -382,6 +402,7 @@ dependencies = [
  "relay",
  "relay-adapter",
  "relay-assets",
+ "relay-blender",
  "relay-contracts",
  "relay-core",
  "relay-krita",

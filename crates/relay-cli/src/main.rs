@@ -118,6 +118,10 @@ fn print_status(response: &CommandResponse) {
             "degraded"
         }
     );
+    println!(
+        "Background automation: {}",
+        result["automation_mode"].as_str().unwrap_or("unavailable")
+    );
 }
 
 fn print_doctor(response: &CommandResponse) {
@@ -182,16 +186,33 @@ fn execute_human(request: CommandRequest, json_output: bool, view: &str) -> Resu
 fn run(args: &[String]) -> Result<i32, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Err(
-            "usage: relay <status|doctor|diagnostics|support-bundle|discover|onboard|dashboard-url|commands|project-list|project-register|uefn-inspect|uefn-audit|uefn-discover|verse-analyze|asset-validate|krita-inspect|parser-install|result-list|result-get|job-get|shutdown|exec>"
+            "usage: relay <status|doctor|diagnostics|pause|resume|support-bundle|discover|onboard|dashboard-url|commands|project-list|project-register|project-archive|project-restore|project-remove|context-compile|uefn-inspect|uefn-audit|uefn-discover|uefn-toolsets|uefn-describe|verse-analyze|verse-record|asset-validate|asset-impact|blender-mesh-check|krita-inspect|parser-install|result-list|result-get|job-list|job-get|shutdown|exec>"
                 .to_string(),
         );
     };
 
     match command {
         "support-bundle" => {
-            if args.len() != 2 || args[1].starts_with("--") {
-                return Err("usage: relay support-bundle <new-output.json>".to_string());
+            if !matches!(args.len(), 2 | 4) || args[1].starts_with("--")
+                || (args.len() == 4 && (args[2] != "--integrated-report" || args[3].starts_with("--"))) {
+                return Err("usage: relay support-bundle <new-output.json> [--integrated-report <report.json>]".to_string());
             }
+            let integrated_run = if args.len() == 4 {
+                let metadata = fs::symlink_metadata(&args[3])
+                    .map_err(|_| "integrated report is unavailable".to_string())?;
+                if !metadata.is_file() || metadata.file_type().is_symlink()
+                    || metadata.len() > relay_support::MAX_INTEGRATED_REPORT_BYTES as u64 {
+                    return Err("integrated report is invalid or too large".to_string());
+                }
+                let mut report = Vec::new();
+                fs::File::open(&args[3])
+                    .map_err(|_| "integrated report could not be read".to_string())?
+                    .take((relay_support::MAX_INTEGRATED_REPORT_BYTES + 1) as u64)
+                    .read_to_end(&mut report)
+                    .map_err(|_| "integrated report could not be read".to_string())?;
+                Some(relay_support::summarize_integrated_report(&report)
+                    .map_err(|error| format!("integrated report rejected: {}", error.code))?)
+            } else { None };
             let status = invoke(&make_request("system.status", json!({}), None))?;
             let summary = invoke(&make_request("diagnostics.summary", json!({}), None))?;
             if !status.ok || !summary.ok {
@@ -229,12 +250,12 @@ fn run(args: &[String]) -> Result<i32, String> {
                     retention_evicted_events: safe_count(&health["evicted_events"]),
                     by_code: Vec::new(),
                 },
-                integrated_run: None,
+                integrated_run,
             }).map_err(|error| format!("support bundle unavailable: {}", error.code))?;
             let mut output = fs::OpenOptions::new().write(true).create_new(true)
                 .open(&args[1]).map_err(|_| "output file already exists or cannot be created".to_string())?;
             output.write_all(&bundle).map_err(|_| "support bundle could not be written".to_string())?;
-            println!("Privacy-safe support bundle saved: {} bytes. Integrated run: not yet recorded.", bundle.len());
+            println!("Privacy-safe support bundle saved: {} bytes.", bundle.len());
             Ok(0)
         }
         "discover" => {
@@ -360,11 +381,48 @@ fn run(args: &[String]) -> Result<i32, String> {
             has_json_flag(args),
             "default",
         ),
-        "project-list" => execute_human(
-            make_request("project.list", json!({}), None),
-            has_json_flag(args),
-            "default",
-        ),
+        "pause" | "resume" => {
+            if args.iter().skip(1).any(|arg| arg != "--json") {
+                return Err(format!("usage: relay {command} [--json]"));
+            }
+            execute_human(
+                make_request(format!("automation.{command}"), json!({}), None),
+                has_json_flag(args),
+                "default",
+            )
+        }
+        "project-list" => {
+            if args.iter().skip(1).any(|arg| arg != "--json" && arg != "--all") {
+                return Err("usage: relay project-list [--all] [--json]".to_string());
+            }
+            execute_human(
+                make_request("project.list", json!({ "include_inactive": args.iter().any(|arg| arg == "--all") }), None),
+                has_json_flag(args),
+                "default",
+            )
+        }
+        "project-archive" | "project-restore" | "project-remove" => {
+            let project_id = args.get(1).filter(|arg| !arg.starts_with("--"))
+                .ok_or_else(|| format!("usage: relay {command} <project-id> [--json]"))?;
+            if args.iter().skip(2).any(|arg| arg != "--json") {
+                return Err(format!("usage: relay {command} <project-id> [--json]"));
+            }
+            let operation = command.strip_prefix("project-").unwrap();
+            let arguments = if operation == "remove" {
+                json!({ "project_id": project_id, "confirm_project_id": project_id })
+            } else {
+                json!({ "project_id": project_id })
+            };
+            let req_id = request_id();
+            execute_human(CommandRequest {
+                request_id: req_id.clone(),
+                command: format!("project.{operation}"),
+                command_version: Some(1),
+                arguments,
+                idempotency_key: Some(format!("CLI-{req_id}")),
+                context: RequestContext::default(),
+            }, has_json_flag(args), "default")
+        }
         "uefn-inspect" => {
             let project_id = args
                 .get(1)
@@ -408,7 +466,19 @@ fn run(args: &[String]) -> Result<i32, String> {
             if has_json_flag(args) { print_machine(&recorded); } else { print_human(&recorded); }
             Ok(if recorded.ok { 0 } else { 2 })
         }
-        "uefn-discover" => {
+        "uefn-describe" => {
+            let name = args.get(1).filter(|value| !value.starts_with("--"))
+                .ok_or_else(|| "usage: relay uefn-describe <toolset-name> [port] [--json]".to_string())?;
+            let port = match args.get(2) {
+                Some(value) if value != "--json" => value.parse::<u16>().ok().filter(|port| *port > 0)
+                    .ok_or_else(|| "UEFN MCP port must be between 1 and 65535".to_string())?,
+                _ => 8000,
+            };
+            execute_human(make_request("uefn.mcp.describe_toolset", json!({
+                "toolset_name": name, "port": port
+            }), None), has_json_flag(args), "default")
+        }
+        "uefn-discover" | "uefn-toolsets" => {
             let port = match args.get(1) {
                 Some(value) if value != "--json" => value
                     .parse::<u16>()
@@ -418,14 +488,14 @@ fn run(args: &[String]) -> Result<i32, String> {
                 _ => 8000,
             };
             execute_human(
-                make_request("uefn.mcp.discover", json!({ "port": port }), None),
+                make_request(if command == "uefn-toolsets" { "uefn.mcp.toolsets" } else { "uefn.mcp.discover" }, json!({ "port": port }), None),
                 has_json_flag(args),
                 "default",
             )
         }
-        "verse-analyze" => {
+        "verse-analyze" | "verse-record" => {
             if args.len() < 4 || args.len() > 6 {
-                return Err("usage: relay verse-analyze <project-id> <session-id> <capture-file> [assertions.json] [--json]".to_string());
+                return Err("usage: relay <verse-analyze|verse-record> <project-id> <session-id> <capture-file> [assertions.json] [--json]".to_string());
             }
             let capture_text = fs::read_to_string(&args[3])
                 .map_err(|_| "Verse capture could not be read".to_string())?;
@@ -443,8 +513,7 @@ fn run(args: &[String]) -> Result<i32, String> {
             } else {
                 json!([])
             };
-            execute_human(
-                make_request(
+            let analysis = invoke(&make_request(
                     "runtime.capture.analyze",
                     json!({
                         "project_id": args[1],
@@ -456,10 +525,28 @@ fn run(args: &[String]) -> Result<i32, String> {
                         "assertions": assertions
                     }),
                     None,
-                ),
-                has_json_flag(args),
-                "default",
-            )
+                ))?;
+            if command == "verse-analyze" || !analysis.ok {
+                if has_json_flag(args) { print_machine(&analysis); } else { print_human(&analysis); }
+                return Ok(if analysis.ok { 0 } else { 2 });
+            }
+            let payload = analysis.result
+                .ok_or_else(|| "Verse analysis returned no result".to_string())?;
+            let req_id = request_id();
+            let recorded = invoke(&CommandRequest {
+                request_id: req_id.clone(),
+                command: "result.put".to_string(),
+                command_version: Some(1),
+                arguments: json!({
+                    "project_id": args[1],
+                    "kind": "IMPORTED_VERSE_CAPTURE_ANALYSIS",
+                    "payload": payload
+                }),
+                idempotency_key: Some(format!("CLI-{req_id}")),
+                context: RequestContext::default(),
+            })?;
+            if has_json_flag(args) { print_machine(&recorded); } else { print_human(&recorded); }
+            Ok(if recorded.ok { 0 } else { 2 })
         }
         "asset-validate" | "krita-inspect" => {
             let project_id = args.get(1).ok_or_else(|| {
@@ -484,6 +571,49 @@ fn run(args: &[String]) -> Result<i32, String> {
                 ),
                 has_json_flag(args),
                 "default",
+            )
+        }
+        "asset-impact" => {
+            let usage = "usage: relay asset-impact <project-id> <manifest-file> <changed-project-relative-path>... [--json]";
+            let project_id = args.get(1).filter(|value| !value.starts_with("--"))
+                .ok_or_else(|| usage.to_string())?;
+            let manifest_path = args.get(2).filter(|value| !value.starts_with("--"))
+                .ok_or_else(|| usage.to_string())?;
+            let changed_paths: Vec<&str> = args.iter().skip(3)
+                .filter(|value| value.as_str() != "--json")
+                .map(String::as_str).collect();
+            if changed_paths.is_empty() || changed_paths.len() > 256
+                || changed_paths.iter().any(|value| value.starts_with("--")) {
+                return Err(usage.to_string());
+            }
+            let manifest_json = fs::read_to_string(manifest_path)
+                .map_err(|_| "asset manifest could not be read".to_string())?;
+            if manifest_json.len() > 32768 {
+                return Err("asset manifest exceeds the local command size limit".to_string());
+            }
+            execute_human(
+                make_request("assets.impact.analyze", json!({
+                    "project_id": project_id,
+                    "manifest_json": manifest_json,
+                    "changed_paths": changed_paths
+                }), None),
+                has_json_flag(args), "default",
+            )
+        }
+        "blender-mesh-check" => {
+            let usage = "usage: relay blender-mesh-check <project-id> <project-relative.blend> [--json]";
+            let project_id = args.get(1).filter(|value| !value.starts_with("--"))
+                .ok_or_else(|| usage.to_string())?;
+            let blend_path = args.get(2).filter(|value| !value.starts_with("--"))
+                .ok_or_else(|| usage.to_string())?;
+            if args.iter().skip(3).any(|value| value != "--json") {
+                return Err(usage.to_string());
+            }
+            execute_human(
+                make_request("assets.blender.mesh.validate", json!({
+                    "project_id": project_id, "blend_path": blend_path
+                }), None),
+                has_json_flag(args), "default",
             )
         }
         "parser-install" => {
@@ -521,6 +651,53 @@ fn run(args: &[String]) -> Result<i32, String> {
                 has_json_flag(args),
                 "default",
             )
+        }
+        "context-compile" => {
+            let usage = "usage: relay context-compile <project-id> <max-bytes> <result-id,...> [--require result-id=/pointer] [--focus term] [--json]";
+            let project_id = args.get(1).filter(|value| !value.starts_with("--"))
+                .ok_or_else(|| usage.to_string())?;
+            let max_bytes: u64 = args.get(2).ok_or_else(|| usage.to_string())?
+                .parse().map_err(|_| usage.to_string())?;
+            let result_ids: Vec<&str> = args.get(3).ok_or_else(|| usage.to_string())?
+                .split(',').collect();
+            if result_ids.is_empty() || result_ids.iter().any(|id| id.is_empty()) {
+                return Err(usage.to_string());
+            }
+            let mut required = Vec::new();
+            let mut focus_terms = Vec::new();
+            let mut position = 4;
+            while position < args.len() {
+                match args[position].as_str() {
+                    "--json" => position += 1,
+                    "--require" => {
+                        let value = args.get(position + 1).ok_or_else(|| usage.to_string())?;
+                        let (result_id, pointer) = value.split_once('=').ok_or_else(|| usage.to_string())?;
+                        if result_id.is_empty() || pointer.is_empty() { return Err(usage.to_string()); }
+                        required.push(json!({ "result_id": result_id, "pointer": pointer }));
+                        position += 2;
+                    }
+                    "--focus" => {
+                        focus_terms.push(args.get(position + 1).ok_or_else(|| usage.to_string())?.as_str());
+                        position += 2;
+                    }
+                    _ => return Err(usage.to_string()),
+                }
+            }
+            execute_human(make_request("context.compile", json!({
+                "project_id": project_id,
+                "result_ids": result_ids,
+                "max_bytes": max_bytes,
+                "required_pointers": required,
+                "focus_terms": focus_terms
+            }), None), has_json_flag(args), "default")
+        }
+        "job-list" => {
+            let project_id = args.get(1).filter(|value| !value.starts_with("--"));
+            let arguments = match project_id {
+                Some(project_id) => json!({ "project_id": project_id, "limit": 20 }),
+                None => json!({ "limit": 20 }),
+            };
+            execute_human(make_request("job.list", arguments, None), has_json_flag(args), "default")
         }
         "job-get" => {
             let id = args

@@ -201,14 +201,24 @@ fn allowed_command(command: &str) -> bool {
             | "system.doctor"
             | "diagnostics.summary"
             | "project.list"
+            | "project.import"
+            | "project.index.build"
+            | "project.archive"
+            | "project.restore"
+            | "project.remove"
             | "project.capabilities"
             | "uefn.static.inspect"
             | "uefn.mcp.discover"
+            | "uefn.mcp.toolsets"
             | "assets.manifest.validate"
+            | "assets.impact.analyze"
             | "assets.krita.inspect"
+            | "automation.pause"
+            | "automation.resume"
             | "usage.summary"
             | "transaction.list"
             | "result.list"
+            | "job.list"
     ) && relay_contracts::registry::is_surface_exposed(command, "dashboard")
 }
 
@@ -276,7 +286,18 @@ fn handle_request(
                 command: command.to_string(),
                 command_version: Some(1),
                 arguments,
-                idempotency_key: None,
+                idempotency_key: if matches!(
+                    command,
+                    "project.import"
+                        | "project.index.build"
+                        | "project.archive"
+                        | "project.restore"
+                        | "project.remove"
+                ) {
+                    Some(format!("DASH-{}-{now}", std::process::id()))
+                } else {
+                    None
+                },
                 context: RequestContext::default(),
             };
             let runtime = runtime_context(
@@ -342,11 +363,22 @@ mod tests {
     }
 
     #[test]
-    fn dashboard_command_allowlist_is_read_only() {
+    fn dashboard_command_allowlist_limits_writes_to_project_workflows() {
         assert!(allowed_command("system.status"));
         assert!(allowed_command("project.list"));
+        assert!(allowed_command("project.import"));
+        assert!(allowed_command("project.index.build"));
+        assert!(allowed_command("project.archive"));
+        assert!(allowed_command("project.restore"));
+        assert!(allowed_command("project.remove"));
+        assert!(allowed_command("assets.manifest.validate"));
+        assert!(allowed_command("assets.impact.analyze"));
+        assert!(allowed_command("assets.krita.inspect"));
+        assert!(allowed_command("automation.pause"));
+        assert!(allowed_command("automation.resume"));
         assert!(!allowed_command("system.shutdown"));
         assert!(!allowed_command("project.register"));
+        assert!(!allowed_command("project.index.apply_hints"));
         assert!(!allowed_command("result.put"));
     }
 
@@ -358,7 +390,7 @@ mod tests {
     }
 
     #[test]
-    fn live_dashboard_rejects_wrong_token_cross_origin_and_writes() {
+    fn live_dashboard_rejects_unauthorized_requests_and_runs_scoped_project_writes() {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -412,6 +444,100 @@ mod tests {
         );
         assert!(status.starts_with("HTTP/1.1 200"));
         assert!(status.contains("\"recovery_state\""));
+        let project_root = dir.join("fixture-project");
+        std::fs::create_dir_all(&project_root).unwrap();
+        std::fs::write(project_root.join("sample.txt"), b"fixture").unwrap();
+        let import_body = json!({
+            "command": "project.import",
+            "arguments": { "name": "Fixture", "root_path": project_root.to_string_lossy() }
+        })
+        .to_string();
+        let unauthorized_import = http(port, "POST", "/api/execute", None, None, &import_body);
+        assert!(unauthorized_import.starts_with("HTTP/1.1 401"));
+        let imported = http(
+            port,
+            "POST",
+            "/api/execute",
+            Some(&server.token),
+            None,
+            &import_body,
+        );
+        let imported: Value =
+            serde_json::from_str(imported.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        assert_eq!(imported["ok"], true);
+        assert_eq!(imported["result"]["root_canonicalized"], true);
+        let project_id = imported["result"]["id"].as_str().unwrap();
+        let build_body = json!({
+            "command": "project.index.build",
+            "arguments": { "project_id": project_id }
+        })
+        .to_string();
+        let built = http(
+            port,
+            "POST",
+            "/api/execute",
+            Some(&server.token),
+            None,
+            &build_body,
+        );
+        let built: Value = serde_json::from_str(built.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        assert_eq!(built["ok"], true);
+        assert_eq!(built["result"]["file_count"], 1);
+        for (command, arguments, expected) in [
+            (
+                "project.archive",
+                json!({ "project_id": project_id }),
+                "archived",
+            ),
+            (
+                "project.restore",
+                json!({ "project_id": project_id }),
+                "active",
+            ),
+            (
+                "project.archive",
+                json!({ "project_id": project_id }),
+                "archived",
+            ),
+            (
+                "project.remove",
+                json!({ "project_id": project_id, "confirm_project_id": project_id }),
+                "removed",
+            ),
+        ] {
+            let body = json!({ "command": command, "arguments": arguments }).to_string();
+            let raw = http(
+                port,
+                "POST",
+                "/api/execute",
+                Some(&server.token),
+                None,
+                &body,
+            );
+            let result: Value =
+                serde_json::from_str(raw.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+            assert_eq!(result["ok"], true);
+            assert_eq!(result["result"]["lifecycle_state"], expected);
+        }
+        let list_body = json!({
+            "command": "project.list",
+            "arguments": { "include_inactive": true }
+        })
+        .to_string();
+        let listed = http(
+            port,
+            "POST",
+            "/api/execute",
+            Some(&server.token),
+            None,
+            &list_body,
+        );
+        let listed: Value = serde_json::from_str(listed.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        assert_eq!(listed["ok"], true);
+        assert_eq!(
+            listed["result"]["projects"][0]["lifecycle_state"],
+            "removed"
+        );
         server.stop();
         drop(core);
         std::fs::remove_dir_all(dir).unwrap();

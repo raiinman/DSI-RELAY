@@ -12,6 +12,12 @@ main { max-width: 66rem; margin: 2rem auto; padding: 0 1.25rem; }
 main:focus-visible { outline: 3px solid #146b53; outline-offset: 3px; }
 .status, .card, details { border: 1px solid #d6e2dc; border-radius: .9rem; background: white; padding: 1.5rem; box-shadow: 0 2px 16px #153d3809; }
 .status { margin-bottom: 1rem; }
+.setup { margin-bottom: 1rem; }
+#setup-progress { color: #53645e; font-weight: 700; }
+#setup-next { font-weight: 700; }
+.action-link { display: inline-block; background: #d7f3e5; color: #143d39; border-radius: .5rem; padding: .65rem 1rem; font-weight: 700; text-decoration: none; }
+.action-link[hidden] { display: none; }
+#setup-handoff { margin: 1rem 0 0; }
 #status-message { font-size: 1.3rem; margin-bottom: 0; color: #146b53; }
 #status-message[data-state="Degraded"] { color: #a74428; }
 #status-message[data-state="Checking"] { color: #374b45; }
@@ -29,6 +35,17 @@ li { border-top: 1px solid #e3ece7; padding: .7rem 0; }
 #projects li { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
 #projects li strong { margin-right: auto; }
 #projects button { flex: none; font-size: .8rem; }
+#project-add-form { display: grid; gap: .5rem; margin: 1rem 0; }
+#project-add-form label { font-weight: 700; }
+#project-add-form input { width: 100%; border: 1px solid #879e93; border-radius: .5rem; padding: .65rem; font: inherit; }
+#project-add-form input:focus-visible { outline: 3px solid #efb03c; outline-offset: 2px; }
+#project-add-form button { justify-self: start; }
+#project-path-help, #project-limits { color: #53645e; font-size: .85rem; margin-bottom: .4rem; }
+#project-action, #selected-project { margin: .75rem 0; }
+#selected-project { font-weight: 700; }
+.asset-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .85rem 0; }
+#asset-manifest { display: block; max-width: 100%; margin: .5rem 0; }
+#asset-result, #asset-lineage, #asset-native-status, #tests-live-status { color: #53645e; }
 button { background: #d7f3e5; color: #143d39; border: 0; border-radius: .5rem; padding: .65rem 1rem; font-weight: 700; cursor: pointer; }
 button:focus-visible, summary:focus-visible { outline: 3px solid #efb03c; outline-offset: 3px; }
 a:focus-visible { outline: 3px solid #efb03c; outline-offset: 3px; }

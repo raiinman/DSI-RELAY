@@ -9,6 +9,8 @@ members = [
   "crates/relay-assets",
   "crates/relay-blender",
   "crates/relay-krita",
+  "crates/relay-gateway",
+  "crates/relay-runtime",
   "crates/relay-support",
   "crates/relay-validation",
   "crates/relay-cli",

@@ -19,25 +19,75 @@
       <h2 id="status-title">Is RELAY working?</h2>
       <p id="status-message" role="status" aria-atomic="true">Checking…</p>
     </section>
+    <section class="card setup" aria-labelledby="setup-title">
+      <p class="eyebrow">GET STARTED</p>
+      <h2 id="setup-title">Set up your workspace</h2>
+      <p id="setup-progress">Checking setup…</p>
+      <p id="setup-guidance">RELAY is checking what is ready.</p>
+      <p id="setup-next" role="status" aria-live="polite">Next step will appear here.</p>
+      <a id="setup-action" class="action-link" href="#project-name" hidden>Continue</a>
+      <p id="setup-uefn">UEFN connection has not been checked. Live editor and play-session workflows remain UNTESTED.</p>
+      <p id="setup-handoff" hidden>Local setup is ready. Continue with <a href="#assets-title">Assets</a>, <a href="#tests-title">Tests</a>, or <a href="#diagnostics-title">Diagnostics &amp; Debug</a>. Native creator-app and live UEFN workflows remain UNTESTED.</p>
+    </section>
     <div class="grid">
       <section class="card" aria-labelledby="health-title">
         <h2 id="health-title">Health</h2>
         <p id="health-summary">Checking…</p>
         <ul id="health-checks"></ul>
         <p id="next-action" hidden></p>
+        <h3>Background file checks</h3>
+        <p id="automation-status" role="status" aria-live="polite">Checking…</p>
+        <button id="automation-toggle" type="button" disabled>Pause background checks</button>
       </section>
       <section class="card" aria-labelledby="projects-title">
         <h2 id="projects-title">Projects</h2>
         <p id="project-count">Checking…</p>
+        <form id="project-add-form">
+          <label for="project-name">Project name</label>
+          <input id="project-name" name="name" type="text" maxlength="120" required autocomplete="off">
+          <label for="project-root">Local project folder</label>
+          <input id="project-root" name="root" type="text" maxlength="2048" required autocomplete="off" aria-describedby="project-path-help">
+          <p id="project-path-help">Enter the full folder path on this computer.</p>
+          <button id="project-add" type="submit">Add project</button>
+        </form>
+        <p id="project-action" role="status" aria-live="polite">Add a project, then select it to work with its indexed files.</p>
+        <p id="selected-project">No project selected.</p>
         <ul id="projects"></ul>
+        <p id="project-limits">Archive hides a project from active work; Restore brings it back. Remove marks its RELAY record as removed. Project files and RELAY history are kept.</p>
         <button id="uefn-connect" type="button">Check UEFN connection</button>
         <p id="uefn-connection" role="status" aria-live="polite">UEFN editor connection has not been checked.</p>
         <p id="uefn-inspection" role="status" aria-live="polite">Choose a project to inspect its indexed UEFN files. Editor and runtime checks are not available yet.</p>
-        <p id="asset-inspection" role="status" aria-live="polite">Choose an asset manifest to check source and export links. Creator apps remain untested.</p>
-        <p id="krita-inspection" role="status" aria-live="polite">Choose an asset manifest to inspect declared Krita source and export formats. Native Krita export remains untested.</p>
       </section>
     </div>
     <div class="grid secondary">
+      <section class="card" aria-labelledby="assets-title">
+        <h2 id="assets-title">Assets</h2>
+        <p id="asset-selected">Select an active project to check its asset manifest.</p>
+        <label for="asset-manifest">Local asset manifest (JSON)</label>
+        <input id="asset-manifest" type="file" accept=".json,application/json">
+        <label for="asset-changed-path">Changed project-relative file</label>
+        <input id="asset-changed-path" type="text" maxlength="512" autocomplete="off" placeholder="Assets/example.png">
+        <div class="asset-actions">
+          <button id="asset-validate" type="button" disabled>Validate source and export links</button>
+          <button id="krita-validate" type="button" disabled>Inspect Krita formats</button>
+          <button id="asset-impact" type="button" disabled>Show affected assets</button>
+        </div>
+        <p id="asset-result" role="status" aria-live="polite">No manifest checked yet.</p>
+        <p id="asset-lineage">Declared source and export lineage has not been checked.</p>
+        <ul id="asset-findings"></ul>
+        <p id="asset-native-status">Native Blender, Krita, and UEFN asset workflows: UNTESTED.</p>
+      </section>
+      <section class="card" aria-labelledby="tests-title">
+        <h2 id="tests-title">Tests</h2>
+        <p id="tests-summary">Select a project to see imported Verse capture analyses.</p>
+        <ul id="tests-list"></ul>
+        <p id="tests-live-status">Live UEFN gameplay tests: UNTESTED.</p>
+      </section>
+      <section class="card" aria-labelledby="jobs-title">
+        <h2 id="jobs-title">Jobs</h2>
+        <p id="jobs-summary">Checking…</p>
+        <ul id="jobs-list"></ul>
+      </section>
       <section class="card" aria-labelledby="results-title">
         <h2 id="results-title">Stored results</h2>
         <p id="results-summary">Checking…</p>
@@ -69,12 +119,18 @@
         <div><dt>Running for</dt><dd id="relay-uptime">Checking…</dd></div>
       </dl>
       <p id="diagnostic-guidance" class="diagnostic-guidance"></p>
+      <h3>Integrated test report</h3>
+      <p>Choose the privacy-safe report JSON from a completed local run. This preview stays in this browser tab.</p>
+      <label for="integrated-report">Integrated report (JSON)</label>
+      <input id="integrated-report" type="file" accept=".json,application/json">
+      <p id="integrated-summary" role="status" aria-live="polite">No integrated report selected. Workflow tests have not been verified here.</p>
+      <ul id="integrated-workflows"></ul>
     </section>
     <details>
       <summary>Advanced details (safe summary)</summary>
       <pre id="details">Checking…</pre>
     </details>
   </main>
-  <footer>Read-only local dashboard · Your project files stay on this computer.</footer>
+  <footer>Local dashboard · Your project files stay on this computer.</footer>
 </body>
 </html>

@@ -1,2 +1,6 @@
 /target/
 *.pdb
+/packaging/out/
+/relay-integrated-*.json
+/relay-integrated-*.json.journal.json
+/validation/out/

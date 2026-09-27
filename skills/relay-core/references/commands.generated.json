@@ -3,7 +3,7 @@
   "relay_version_family": "0.1",
   "registry_format": 1,
   "registry_id": "dsi.relay.commands",
-  "registry_sha256": "ce5c9e44eed7c43a9ca6d2a443d3c806dd8f09074c94befaa388163dbfce3e69",
+  "registry_sha256": "176f297ed4199524b2a2c4103e8be81f87cee847d2f9fa3586ec32df5fb6dbe5",
   "required_capabilities": [
     "system.status@1",
     "system.doctor@1",
@@ -13,6 +13,22 @@
     "result.context@1"
   ],
   "commands": [
+    {
+      "id": "assets.blender.mesh.validate",
+      "version": 1,
+      "summary": "Run fixed bounded read-only Blender mesh checks on one authorized project-relative .blend file when Blender is installed.",
+      "effect_class": "analyze",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "assets.impact.analyze",
+      "version": 1,
+      "summary": "Find asset IDs affected by bounded project-relative changes using structurally safe manifest links; creator apps are not executed.",
+      "effect_class": "analyze",
+      "permission": "read",
+      "idempotency": "safe"
+    },
     {
       "id": "assets.krita.inspect",
       "version": 1,
@@ -26,6 +42,30 @@
       "version": 1,
       "summary": "Validate a bounded asset manifest and project-local source/export relationships without launching creator apps.",
       "effect_class": "analyze",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "automation.pause",
+      "version": 1,
+      "summary": "Pause optional background watcher reconciliation for this daemon run.",
+      "effect_class": "relay_self_repair",
+      "permission": "host_control",
+      "idempotency": "safe"
+    },
+    {
+      "id": "automation.resume",
+      "version": 1,
+      "summary": "Resume optional background watcher reconciliation for this daemon run.",
+      "effect_class": "relay_self_repair",
+      "permission": "host_control",
+      "idempotency": "safe"
+    },
+    {
+      "id": "context.compile",
+      "version": 1,
+      "summary": "Compile safe exact facts from selected stored project results, preserving source identity and conflicts within a byte budget.",
+      "effect_class": "observe",
       "permission": "read",
       "idempotency": "safe"
     },
@@ -54,12 +94,28 @@
       "idempotency": "safe"
     },
     {
+      "id": "job.list",
+      "version": 1,
+      "summary": "List bounded job metadata without checkpoints or provenance.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
       "id": "policy.egress.check",
       "version": 1,
       "summary": "Evaluate a proposed outbound data scope against trusted local egress policy and record the decision metadata.",
       "effect_class": "analyze",
       "permission": "read",
       "idempotency": "safe"
+    },
+    {
+      "id": "project.archive",
+      "version": 1,
+      "summary": "Archive a project while preserving its history and files.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed"
     },
     {
       "id": "project.capabilities",
@@ -153,6 +209,22 @@
       "id": "project.register",
       "version": 1,
       "summary": "Add or update one project registry entry.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed"
+    },
+    {
+      "id": "project.remove",
+      "version": 1,
+      "summary": "Remove a project from active use with a durable history-preserving tombstone.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed"
+    },
+    {
+      "id": "project.restore",
+      "version": 1,
+      "summary": "Restore an archived project to active discovery and indexing.",
       "effect_class": "relay_state_write",
       "permission": "state_write",
       "idempotency": "keyed"
@@ -254,9 +326,25 @@
       "idempotency": "safe"
     },
     {
+      "id": "uefn.mcp.describe_toolset",
+      "version": 1,
+      "summary": "Summarize advertised local UEFN MCP tool input shapes without exposing descriptions or invoking editor actions.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
       "id": "uefn.mcp.discover",
       "version": 1,
       "summary": "Probe an explicit localhost UEFN MCP endpoint and report bounded capability counts without invoking editor tools.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "uefn.mcp.toolsets",
+      "version": 1,
+      "summary": "Discover bounded local UEFN MCP toolset names without invoking editor actions or verifying editor identity.",
       "effect_class": "observe",
       "permission": "read",
       "idempotency": "safe"

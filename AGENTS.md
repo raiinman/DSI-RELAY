@@ -118,9 +118,12 @@ When the user requests a durable behavior change, record it here or in the relev
 
 ## Child DOX Index
 
-- `.github/AGENTS.md` — owns branch-scoped review workflows, validation helpers, and public issue intake templates.
+- `.github/AGENTS.md` — owns branch-scoped build/review workflows, validation helpers, and public issue intake templates.
 - `crates/AGENTS.md` — owns production Rust crates promoted from Phase 1 evidence during Phase 2 and later implementation phases.
 - `docs/AGENTS.md` — owns durable product, architecture, research, roadmap, security, UX, and operating documentation under `docs/`.
+- `examples/AGENTS.md` — owns installable, project-agnostic examples and templates; its child index routes the UEFN Verse telemetry example.
+- `packaging/AGENTS.md` — owns unsigned local Windows package staging and the side-by-side install/update plan.
 - `skills/AGENTS.md` — owns local AI skill packages, generated command references, and thin CLI wrappers under `skills/`.
 - `release/AGENTS.md` — owns local release assembly, preview bundle contents, and package verification under `release/`.
 - `spikes/AGENTS.md` — owns Phase 1 technical spikes, benchmark harnesses/results, and prototype verification under `spikes/`.
+- `validation/AGENTS.md` — owns the one end-of-build integrated run plan and privacy-safe report harness under `validation/`.

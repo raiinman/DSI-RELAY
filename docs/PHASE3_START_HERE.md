@@ -6,7 +6,7 @@ Phase 3 — Project discovery and indexing — is active.
 
 Phase 2 is closed. The accepted production foundation is the Rust workspace containing `relay-contracts`, `relay-core`, `relayd`, `relay`, and `relay-adapter`.
 
-Phase 3 promotes project discovery/indexing behavior into that production workspace. The generic two-project baseline, bounded change/dependency-edge foundation, provisional hint-update path, explicit content-verification recovery, bounded Windows watcher delivery, idle recovery scheduler, versioned project configuration, sandboxed parser operation, explicitly installed parser dispatch, and live parser health are accepted on synthetic fixtures; see the ten Phase 3 slice evidence records. Live watcher load, five-run 15,000-file single-host scale, and three-run installed-parser cost are recorded in `PHASE3_WATCHER_LOAD_EVIDENCE.md`, `PHASE3_RESOURCE_BUDGET_METHOD.md`, and `PHASE3_PARSER_RESOURCE_EVIDENCE.md`. `PHASE3_CLOSURE_REVIEW.md` remains NOT READY. Do not reopen Phase 1 stack selections or Phase 2 Core contracts without contradictory evidence.
+Phase 3 promotes project discovery/indexing behavior into that production workspace. The generic two-project baseline, bounded change/dependency-edge foundation, provisional hint-update path, explicit content-verification recovery, bounded Windows watcher delivery, idle recovery scheduler, versioned project configuration, sandboxed parser operation, explicitly installed parser dispatch, and live parser health are accepted on synthetic fixtures; see the ten Phase 3 slice evidence records. The active development line also adds project archive, restore, and removal tombstones; restoring an archive invalidates its old index. Live watcher load, five-run 15,000-file single-host scale, and three-run installed-parser cost are recorded in `PHASE3_WATCHER_LOAD_EVIDENCE.md`, `PHASE3_RESOURCE_BUDGET_METHOD.md`, and `PHASE3_PARSER_RESOURCE_EVIDENCE.md`. `PHASE3_CLOSURE_REVIEW.md` remains NOT READY. Do not reopen Phase 1 stack selections or Phase 2 Core contracts without contradictory evidence.
 
 ## Goal
 
@@ -41,7 +41,7 @@ Preserve:
 
 Project-specific names, tool rules, and fixtures do not belong in Core.
 
-## Work order
+## Completed construction order
 
 1. project root normalization, add/import, and durable registry extensions
 2. two-project isolation fixture and restart persistence
@@ -98,8 +98,6 @@ Phase 3 closes only when:
 - continuity-loss reconciliation restores correctness
 - Phase 3 storage/schema evolution and compatibility behavior are documented and tested
 
-## Handoff
+## Current development handoff
 
-For a fresh conversation:
-
-> Take over DSI RELAY Phase 3 from `phase3/project-discovery`. Read root `AGENTS.md`, `docs/AGENTS.md`, `docs/PHASE3_START_HERE.md`, the ten Phase 3 slice evidence records, `PHASE3_WATCHER_LOAD_EVIDENCE.md`, `PHASE3_RESOURCE_BUDGET_METHOD.md`, `PHASE3_PARSER_RESOURCE_EVIDENCE.md`, and `PHASE3_CLOSURE_REVIEW.md` before editing. Phase 1 and Phase 2 are closed; generic discovery, index continuity, change/dependency foundations, versioned project configuration, bounded watcher recovery, explicitly installed sandboxed parser dispatch, and live parser health are accepted on synthetic fixtures. Preserve the Rust Core/command/authority/adapter contracts. Continue public parser installation and real-adapter integration, supported-tier resource measurement, and creator-app foreground-interference proof. Revisit the NOT READY closure review only when those gates have passing evidence. The separate synthetic tester path is in `PUBLIC_PREVIEW_PATH.md`. Keep project files authoritative and UEFN-specific behavior outside Core.
+`development/relay-v0.1` is the active construction line. Read root `AGENTS.md`, the applicable child AGENTS files, and `ROADMAP.md` before changing code. This file records Phase 3 foundations and remaining acceptance limits; it no longer directs work to the older `phase3/project-discovery` branch. Build the documented workflows across Phases 3–11 before one integrated acceptance run. Keep `PHASE3_CLOSURE_REVIEW.md` as historical gate evidence, the preview binary unpublished, and `main` unmerged. Real adapter, creator-app, and hardware checks remain UNTESTED when their environments are unavailable.

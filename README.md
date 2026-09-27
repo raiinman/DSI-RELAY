@@ -2,7 +2,7 @@
 
 Created by **RAiiNMAN**. The first-party RELAY Core, daemon, CLI, and documentation are licensed under [MIT](LICENSE); see [creator credit](NOTICE-RELAY.txt).
 
-Preview users can read the [privacy statement](PRIVACY.md), [support guide](SUPPORT.md), and [security reporting policy](SECURITY.md).
+Project readers can review the [privacy statement](PRIVACY.md), [support guide](SUPPORT.md), and [security reporting policy](SECURITY.md). The held preview binary is not available for installation.
 
 DSI RELAY is a developing model-independent control and observability layer for game projects and creative toolchains.
 
@@ -10,9 +10,9 @@ The product exists to make AI-assisted development cheaper, more reliable, and e
 
 ## Status
 
-Phases 0–2 are complete. Phase 3 project discovery and indexing is active on `phase3/project-discovery`. The generic daemon, CLI, project index, watcher recovery, and synthetic parser dispatch are implemented and tested. The [Phase 3 closure review](docs/PHASE3_CLOSURE_REVIEW.md) remains **NOT READY** because supported hardware-tier, creator-app interference, and other operational release evidence are still open. This repository is not yet a public installer or production release.
+Phases 0–2 are complete. Construction continues on `development/relay-v0.1`, using [the roadmap](docs/ROADMAP.md) to order Phases 3–11. Phase 3 has a generic project index, watcher recovery, parser dispatch, and project lifecycle controls. Phase 4 compiles bounded context from multiple stored results. Later phases have foundations for a local dashboard and pause control, static UEFN inspection, imported Verse analysis, asset manifest and Blender mesh checks, first-run discovery, and privacy-safe diagnostics. These foundations do not close the phases or establish a production release.
 
-Early Phase 4 result-context and Phase 5 local dashboard work is underway. With the daemon running, `relay dashboard-url` prints a read-only local health and project link. The dashboard remains an early view, with no project actions yet.
+The build plan is to complete the documented workflows first, then run one integrated acceptance pass. Missing UEFN, creator-app, or specific hardware evidence will be reported **UNTESTED**. With the daemon running, `relay dashboard-url` opens the local health and project view. The unpublished preview binary stays on hold; `main` remains unmerged.
 
 ## Core product rules
 
@@ -62,9 +62,13 @@ AI clients / humans
 
 ## Documentation
 
-Start with docs/PHASE3_START_HERE.md for current development and docs/INDEX.md for the full map.
+Start with [the roadmap](docs/ROADMAP.md) for current development and [the documentation index](docs/INDEX.md) for the full map.
 
-- docs/PHASE3_START_HERE.md — active Phase 3 work and fresh-task handoff
+The [UEFN Verse telemetry example](examples/uefn-verse/README.md) is available as an unverified project template; compilation and live capture in UEFN remain untested.
+
+The [integrated run plan](validation/run-plan.json) and [runner](validation/Run-Integrated.ps1) are under construction for the single end-of-build check. They have not been used to approve a release.
+
+- docs/PHASE3_START_HERE.md — Phase 3 background and open evidence
 - docs/INDEX.md — documentation map
 - docs/PRODUCT_VISION.md — product intent and boundaries
 - docs/SYSTEM_ARCHITECTURE.md — target technical architecture
@@ -88,4 +92,4 @@ Start with docs/PHASE3_START_HERE.md for current development and docs/INDEX.md f
 
 ## Public-release posture
 
-Public release is a design constraint from the beginning, not a promise of immediate release. RELAY must avoid personal paths, private credentials, user-specific defaults, and single-project assumptions. MIT and RAiiNMAN attribution are selected for the first-party Core, daemon, CLI, and documentation. Packaging, update distribution, companion licenses, and contribution policy still need release decisions.
+Public release is a design constraint from the beginning, not a promise of immediate release. RELAY must avoid personal paths, private credentials, user-specific defaults, and single-project assumptions. MIT and RAiiNMAN attribution are selected for the first-party Core, daemon, CLI, and documentation. Packaging, update distribution, companion licenses, and contribution policy still need release work.

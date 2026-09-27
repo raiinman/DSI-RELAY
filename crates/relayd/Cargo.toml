@@ -14,6 +14,7 @@ relay-uefn = { path = "../relay-uefn" }
 relay-uefn-mcp = { path = "../relay-uefn-mcp" }
 relay-assets = { path = "../relay-assets" }
 relay-krita = { path = "../relay-krita" }
+relay-blender = { path = "../relay-blender" }
 relay-verse = { path = "../relay-verse" }
 serde.workspace = true
 serde_json.workspace = true

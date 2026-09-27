@@ -114,8 +114,22 @@ function Write-JsonAtomic([string]$Path, $Value) {
 }
 
 function Assert-DaemonStopped {
-    if (@(Get-Process -Name relayd -ErrorAction SilentlyContinue).Count -gt 0) {
-        throw 'relayd.exe is running; activation or uninstall must wait until it stops'
+    $versionPrefix = [IO.Path]::GetFullPath((Join-Path $root 'versions')) + [IO.Path]::DirectorySeparatorChar
+    foreach ($daemon in @(Get-Process -Name relayd -ErrorAction SilentlyContinue)) {
+        if ($daemon.Path -and $daemon.Path.StartsWith($versionPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'An installed RELAY engine is running; activation must wait until it stops'
+        }
+    }
+    $hostPath = Join-Path $DataRoot 'host.json'
+    if (Test-Path -LiteralPath $hostPath) {
+        Assert-RegularFile $hostPath
+        $hostState = Get-Content -LiteralPath $hostPath -Raw -ErrorAction Stop | ConvertFrom-Json
+        if ([string]$hostState.pid -match '^[1-9][0-9]*$') {
+            $selectedDaemon = Get-Process -Id ([int]$hostState.pid) -ErrorAction SilentlyContinue
+            if ($selectedDaemon -and $selectedDaemon.ProcessName -eq 'relayd') {
+                throw 'The selected RELAY data root has a running engine; activation must wait until it stops'
+            }
+        }
     }
 }
 

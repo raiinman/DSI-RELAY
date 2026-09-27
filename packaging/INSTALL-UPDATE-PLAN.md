@@ -8,6 +8,16 @@ expected archive digest. They do not sign, publish, auto-download, or clear
 the public release gates. Fixture-mode install/update activation runs a bounded
 daemon health check against an explicit disposable data root and stops it.
 
+For a Windows user test, `Build-LocalTestPackage.ps1` wraps a fresh unsigned
+stage in one ZIP. Extract it, double-click `Install-RELAY.cmd`, and launch
+`DSI RELAY` from Start. The shortcut starts `relay launch` with a hidden
+PowerShell window; failures appear in a Windows dialog. The program opens its
+local workspace view in a browser window. The extracted folder also has
+`Uninstall-RELAY.cmd`; it verifies the installed program, asks its matching
+running daemon to shut down gracefully, and removes the program and shortcut
+while preserving RELAY data and projects. This remains an unsigned local test path,
+with no publisher trust or automatic update claim.
+
 The unsigned stage contains the CLI, daemon, optional local MCP gateway, and
 the compact `skills/relay-core/` runtime skill files. Its manifest and folder
 verifier require all three Windows x64 binaries and exactly the skill's

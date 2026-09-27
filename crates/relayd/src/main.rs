@@ -4,6 +4,7 @@ mod parser;
 mod pipe;
 mod security;
 mod state;
+mod tool_discovery;
 mod uefn;
 mod verse;
 mod watcher;
@@ -453,7 +454,8 @@ fn run() -> Result<(), String> {
         }
         let response =
             core.execute_authorized_with_extension(request, &runtime, &authority, |request| {
-                uefn::execute(&core, request)
+                tool_discovery::execute(request)
+                    .or_else(|| uefn::execute(&core, request))
                     .or_else(|| assets::execute_authorized(&core, request, &runtime, &authority))
                     .or_else(|| verse::execute(&core, request))
             });

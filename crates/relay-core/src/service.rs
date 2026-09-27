@@ -760,6 +760,7 @@ impl RelayCore {
         let business = if request.command.starts_with("uefn.")
             || request.command.starts_with("assets.")
             || request.command.starts_with("runtime.")
+            || request.command == "tools.local.discover"
         {
             extension(&request)
                 .map(|result| {
@@ -4038,6 +4039,39 @@ mod tests {
         );
         assert_eq!(response.error.unwrap().code, "PROJECT_SCOPE_DENIED");
         assert!(!called.get());
+        drop(core);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn local_tool_discovery_routes_through_host_extension() {
+        let dir = temp_dir("tool-discovery-extension");
+        let core = RelayCore::open(CoreConfig::new(&dir));
+        let authority = ExecutionAuthority::local_user("CLIENT-tools");
+        let result = json!({
+            "scope": "common_locations",
+            "tools": [
+                {"id":"uefn","detection_status":"not_detected","detection_source":null,"workflow_status":"untested"},
+                {"id":"blender","detection_status":"not_detected","detection_source":null,"workflow_status":"untested"},
+                {"id":"krita","detection_status":"not_detected","detection_source":null,"workflow_status":"untested"}
+            ]
+        });
+        let response = core.execute_authorized_with_extension(
+            request("REQ-tools", "tools.local.discover", json!({})),
+            &runtime(),
+            &authority,
+            |_| Some(Ok(result.clone())),
+        );
+        assert!(response.ok, "{response:?}");
+        assert_eq!(response.result, Some(result));
+
+        let unavailable = core.execute_authorized_with_extension(
+            request("REQ-tools-missing", "tools.local.discover", json!({})),
+            &runtime(),
+            &authority,
+            |_| None,
+        );
+        assert_eq!(unavailable.error.unwrap().code, "INTEGRATION_UNAVAILABLE");
         drop(core);
         fs::remove_dir_all(dir).unwrap();
     }

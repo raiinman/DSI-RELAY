@@ -13,6 +13,7 @@ let automationActionBusy = false;
 let automationMode = "unknown";
 let currentProjects = [];
 let uefnAvailability = "not_checked";
+let localTools = null;
 let setupEpoch = 0;
 let checkCatalog = null;
 let checkCatalogMissingConfirmed = false;
@@ -79,10 +80,17 @@ function renderProjects(projects) {
   $("#asset-validate").disabled = !selected || selected.lifecycle_state === "archived";
   $("#krita-validate").disabled = !selected || selected.lifecycle_state === "archived";
   $("#asset-impact").disabled = !selected || selected.lifecycle_state === "archived";
+  $("#blender-check").disabled = !selected || selected.lifecycle_state === "archived";
+  $("#krita-export").disabled = !selected || selected.lifecycle_state === "archived";
   $("#asset-manifest").value = "";
   $("#asset-changed-path").value = "";
+  $("#blender-file-path").value = "";
+  $("#krita-source-path").value = "";
+  $("#krita-export-path").value = "";
   $("#asset-result").textContent = "No manifest checked yet.";
   $("#asset-lineage").textContent = "Declared source and export lineage has not been checked.";
+  $("#blender-check-status").textContent = selected ? "Enter a .blend file to check its meshes." : "Select an active project to check a Blender file.";
+  $("#krita-export-status").textContent = selected ? "Enter a .kra source and a new .png output." : "Select an active project to use Krita export.";
   $("#asset-findings").replaceChildren();
   const activeCount = projects.filter((project) => project.lifecycle_state !== "archived" && project.lifecycle_state !== "removed").length;
   const archivedCount = projects.filter((project) => project.lifecycle_state === "archived").length;
@@ -126,21 +134,37 @@ function renderProjects(projects) {
     const build = document.createElement("button");
     build.id = "project-index-action";
     build.type = "button";
-    build.textContent = "Build file index";
+    build.textContent = "Scan project files";
+    build.dataset.indexMode = "build";
     build.addEventListener("click", async () => {
-      if (projectActionBusy || !window.confirm(`Build the file index for ${project.name || "this project"}?`)) return;
+      const mode = build.dataset.indexMode || "build";
+      const action = mode === "build" ? "Scan" : "Verify";
+      if (projectActionBusy || !window.confirm(`${action} the local files for ${project.name || "this project"}?`)) return;
       projectActionBusy = true;
       build.disabled = true;
-      $("#project-action").textContent = "Building the local file index…";
+      $("#project-action").textContent = mode === "build" ? "Scanning the local project files…" : "Verifying the local project files…";
       try {
-        const report = await command("project.index.build", { project_id: project.id });
-        $("#project-action").textContent = `${project.name || "Project"}: ${count(report.file_count)} files indexed.`;
-        await updateSetup();
+        const report = mode === "build"
+          ? await command("project.index.build", { project_id: project.id })
+          : await command("project.index.reconcile", { project_id: project.id, verify_content: mode === "verify" });
+        if (selectedProjectId !== project.id) return;
+        let capability = await updateSetup();
+        if (selectedProjectId !== project.id) return;
+        if (mode === "build" && capability?.index_status === "stale") {
+          $("#project-action").textContent = "The scan finished, but files changed during it. Verifying them now…";
+          await command("project.index.reconcile", { project_id: project.id, verify_content: true });
+          if (selectedProjectId !== project.id) return;
+          capability = await updateSetup();
+          if (selectedProjectId !== project.id) return;
+        }
+        $("#project-action").textContent = capability?.index_status === "ready" && capability?.content_verification_required !== true
+          ? `${project.name || "Project"}: ${count(report.file_count)} files indexed and ready.`
+          : "The scan finished, but files changed during it. Wait for changes to settle, then select Verify local files.";
       } catch (problem) {
         $("#project-action").textContent = projectError(problem);
       } finally {
         projectActionBusy = false;
-        build.disabled = false;
+        build.disabled = build.dataset.indexMode === "unavailable";
       }
     });
     item.append(build);
@@ -218,11 +242,37 @@ function showSetup(progress, guidance, next, actionLabel, target, ready = false)
 }
 
 function renderUefnGuidance() {
+  const uefnInstallation = localTools?.uefn;
+  $("#tool-uefn-status").textContent = uefnAvailability === "discovered"
+    ? "Local endpoint found · editor not verified"
+    : uefnInstallation === "detected" ? "Found here · live workflows untested"
+      : uefnInstallation === "not_detected" ? "Not found in checked locations"
+        : "Installation not checked";
   $("#setup-uefn").textContent = uefnAvailability === "discovered"
     ? "Last check: a local MCP endpoint responded. UEFN editor identity and live play-session workflows remain UNTESTED."
     : uefnAvailability === "unavailable"
       ? "Last check: UEFN connection was unavailable. Open UEFN, enable its MCP connection, then retry Check UEFN connection. Live workflows remain UNTESTED."
       : "UEFN connection has not been checked. For UEFN work, open the editor and use Check UEFN connection. Live workflows remain UNTESTED.";
+}
+
+function renderLocalTools(discovery) {
+  localTools = null;
+  if (discovery?.scope === "common_locations" && Array.isArray(discovery.tools)) {
+    localTools = {};
+    for (const tool of discovery.tools) {
+      if (["uefn", "blender", "krita"].includes(tool.id) &&
+          ["detected", "not_detected"].includes(tool.detection_status) &&
+          tool.workflow_status === "untested") {
+        localTools[tool.id] = tool.detection_status;
+      }
+    }
+  }
+  for (const id of ["blender", "krita"]) {
+    $("#tool-" + id + "-status").textContent = localTools?.[id] === "detected"
+      ? "Found here · native workflow untested"
+      : localTools?.[id] === "not_detected" ? "Not found in checked locations" : "Installation not checked";
+  }
+  renderUefnGuidance();
 }
 
 async function updateSetup(projects = currentProjects) {
@@ -242,12 +292,23 @@ async function updateSetup(projects = currentProjects) {
     return;
   }
   const projectId = selected.id;
+  const buildButton = $("#project-index-action");
   showSetup("Step 3 of 3 · Check local files",
     "RELAY is checking whether this project's local file index is ready.",
     "Next: wait for the index check.", null, null);
   try {
     const capability = await command("project.capabilities", { project_id: projectId });
     if (epoch !== setupEpoch || selectedProjectId !== projectId) return;
+    if (buildButton) {
+      buildButton.dataset.indexMode = capability.index_status === "unavailable" || capability.baseline_state === "unavailable"
+        ? "unavailable" : capability.index_status === "missing" || capability.baseline_state === "missing"
+          ? "build" : capability.index_status === "stale" || capability.content_verification_required === true
+          ? "verify" : "refresh";
+      buildButton.textContent = buildButton.dataset.indexMode === "build" ? "Scan project files"
+        : buildButton.dataset.indexMode === "verify" ? "Verify local files"
+          : buildButton.dataset.indexMode === "unavailable" ? "Folder unavailable" : "Refresh file index";
+      buildButton.disabled = buildButton.dataset.indexMode === "unavailable";
+    }
     if (capability.index_status === "unavailable" || capability.baseline_state === "unavailable") {
       showSetup("Step 3 of 3 · Project folder unavailable",
         "RELAY cannot open this project's saved folder. Put it back at its original location or add the folder as a new project.",
@@ -261,8 +322,9 @@ async function updateSetup(projects = currentProjects) {
         capability.index_status === "stale" || capability.content_verification_required === true
           ? "The local file index needs a fresh build before RELAY can rely on it."
           : "RELAY needs to build a local file index for this project.",
-        "Next: build the file index below.", "Build file index", "#project-index-action");
+        "Next: scan or verify this project's files below.", buildButton?.textContent ?? "Scan project files", "#project-index-action");
     }
+    return capability;
   } catch (_problem) {
     if (epoch === setupEpoch && selectedProjectId === projectId) showSetup("Step 3 of 3 · Index check unavailable",
       "RELAY could not check this project's local index. Review Health and try again.",
@@ -337,6 +399,8 @@ async function validateAssets(name) {
   $("#asset-validate").disabled = true;
   $("#krita-validate").disabled = true;
   $("#asset-impact").disabled = true;
+  $("#blender-check").disabled = true;
+  $("#krita-export").disabled = true;
   $("#asset-result").textContent = name === "assets.impact.analyze" ? "Checking affected assets…" : "Checking local asset links…";
   try {
     const manifest = await file.text();
@@ -365,10 +429,82 @@ async function validateAssets(name) {
   } finally {
     assetActionBusy = false;
     if (selectedProjectId === projectId) {
-      $("#asset-validate").disabled = false;
-      $("#krita-validate").disabled = false;
-      $("#asset-impact").disabled = false;
+      const available = selectedActiveProject(projectId);
+      $("#asset-validate").disabled = !available;
+      $("#krita-validate").disabled = !available;
+      $("#asset-impact").disabled = !available;
+      $("#blender-check").disabled = !available;
+      $("#krita-export").disabled = !available;
     }
+  }
+}
+
+function nativeAssetPath(value, extension) {
+  if (typeof value !== "string" || value.length === 0 || value.length > 512 ||
+      value.startsWith("/") || /[\\:\x00-\x1f\x7f]/.test(value) ||
+      !value.toLowerCase().endsWith(`.${extension}`)) return false;
+  return value.split("/").every((part) => part && part !== "." && part !== ".." && !/[ .]$/.test(part));
+}
+
+async function checkBlenderFile() {
+  const projectId = selectedProjectId;
+  if (assetActionBusy || !selectedActiveProject(projectId)) return;
+  const blendPath = $("#blender-file-path").value.trim();
+  const status = $("#blender-check-status");
+  if (!nativeAssetPath(blendPath, "blend")) {
+    status.textContent = "Enter a .blend file path inside this project, using forward slashes.";
+    return;
+  }
+  assetActionBusy = true;
+  $("#blender-check").disabled = true;
+  status.textContent = "Checking Blender meshes…";
+  try {
+    const report = await command("assets.blender.mesh.validate", { project_id: projectId, blend_path: blendPath });
+    if (selectedProjectId !== projectId) return;
+    status.textContent = report.status === "passed" && report.native_workflow_status === "checked"
+      ? `${count(report.total_meshes)} meshes checked. No supported mesh problems found.`
+      : report.status === "failed" && report.native_workflow_status === "checked"
+        ? `${count(report.issue_count)} supported mesh problem${report.issue_count === 1 ? "" : "s"} found. Review the file in Blender.`
+        : report.status === "unavailable" ? "Blender was not available for this check. Native check: untested."
+          : "Blender mesh check could not finish. Native result remains incomplete or untested.";
+  } catch (_problem) {
+    if (selectedProjectId === projectId) status.textContent = "Could not check this Blender file. Check its path and RELAY health, then try again.";
+  } finally {
+    assetActionBusy = false;
+    if (selectedProjectId === projectId) $("#blender-check").disabled = !selectedActiveProject(projectId);
+  }
+}
+
+async function exportKritaPng() {
+  const projectId = selectedProjectId;
+  if (assetActionBusy || !selectedActiveProject(projectId)) return;
+  const sourcePath = $("#krita-source-path").value.trim();
+  const exportPath = $("#krita-export-path").value.trim();
+  const status = $("#krita-export-status");
+  if (!nativeAssetPath(sourcePath, "kra") || !nativeAssetPath(exportPath, "png")) {
+    status.textContent = "Enter a .kra source and a new .png destination inside this project, using forward slashes.";
+    return;
+  }
+  if (!window.confirm("Create a new PNG with Krita? RELAY will not replace an existing file.")) return;
+  assetActionBusy = true;
+  $("#krita-export").disabled = true;
+  status.textContent = "Asking Krita to create the new PNG…";
+  try {
+    const report = await command("assets.krita.export", { project_id: projectId, source_path: sourcePath, export_path: exportPath });
+    if (selectedProjectId !== projectId) return;
+    status.textContent = report.status === "exported" && report.native_workflow_status === "checked" && report.build_record_state === "stored"
+      ? "New PNG created. RELAY saved a build record for this export."
+      : report.status === "unavailable" ? "Krita was not available for this export. Native export: untested."
+        : "Krita export could not finish. No new PNG was confirmed; check the project folder before trying again.";
+  } catch (problem) {
+    if (selectedProjectId === projectId) status.textContent = problem.message === "ASSET_BUILD_RECORD_FAILED"
+      ? "A new PNG may have been created, but RELAY could not save its build record. Check the project folder before trying again."
+      : problem.message === "ASSET_PATH_INVALID"
+        ? "The source or new PNG destination is unavailable. The destination must not already exist."
+        : "Krita export could not be confirmed. Check the project folder before trying again.";
+  } finally {
+    assetActionBusy = false;
+    if (selectedProjectId === projectId) $("#krita-export").disabled = !selectedActiveProject(projectId);
   }
 }
 
@@ -695,6 +831,8 @@ async function planDeclaredChecks() {
     const fallback = plan.mode === "full_catalog_fallback";
     status.textContent = fallback
       ? `Full catalog planned at current index generation ${plan.index_generation}; ${fallbackLabels[plan.fallback_reason] ?? "Planning evidence is incomplete."} All entries remain NOT RUN. Repair and plan again before execution.`
+      : plan.checks.length === 0
+        ? `No declared checks were selected at index generation ${plan.index_generation}. There is nothing to run for this change window. Native and live workflows remain UNTESTED.`
       : `${plan.checks.length} of ${catalog.catalog.checks.length} checks selected at current index generation ${plan.index_generation}. Planning only; checks are NOT RUN.`;
     const definitions = new Map(catalog.catalog.checks.map((check) => [check.id, check]));
     for (const entry of plan.checks) {
@@ -1478,10 +1616,11 @@ async function refresh() {
     renderUefnGuidance();
     renderDiagnostics(status, doctor, summary);
     renderAutomation(status.automation_mode);
-    const [usage, history, results, jobs] = await Promise.allSettled([
+    const [usage, history, results, jobs, localToolReport] = await Promise.allSettled([
       command("usage.summary"), command("transaction.list", { limit: 10 }),
-      command("result.list", { limit: 10 }), command("job.list", { limit: 10 })
+      command("result.list", { limit: 10 }), command("job.list", { limit: 10 }), command("tools.local.discover")
     ]);
+    renderLocalTools(localToolReport.status === "fulfilled" ? localToolReport.value : null);
     renderUsage(usage.status === "fulfilled" ? usage.value : null);
     renderActivity(history.status === "fulfilled" ? history.value : null);
     renderResults(results.status === "fulfilled" ? results.value : null);
@@ -1510,10 +1649,17 @@ async function refresh() {
     $("#asset-validate").disabled = true;
     $("#krita-validate").disabled = true;
     $("#asset-impact").disabled = true;
+    $("#blender-check").disabled = true;
+    $("#krita-export").disabled = true;
     $("#asset-manifest").value = "";
     $("#asset-changed-path").value = "";
+    $("#blender-file-path").value = "";
+    $("#krita-source-path").value = "";
+    $("#krita-export-path").value = "";
     $("#asset-result").textContent = "Current asset information is unavailable.";
     $("#asset-lineage").textContent = "Declared lineage has not been checked.";
+    $("#blender-check-status").textContent = "Current project information is unavailable.";
+    $("#krita-export-status").textContent = "Current project information is unavailable.";
     $("#asset-findings").replaceChildren();
     $("#tests-summary").textContent = "Stored test summaries are unavailable. Live UEFN test status: UNTESTED.";
     $("#tests-list").replaceChildren();
@@ -1529,6 +1675,8 @@ async function refresh() {
     $("#tests-catalog-list").replaceChildren();
     $("#tests-catalog-status").textContent = "Current declared checks are unavailable. Refresh after RELAY is running.";
     $("#uefn-connection").textContent = "UEFN editor connection has not been checked.";
+    uefnAvailability = "not_checked";
+    renderLocalTools(null);
     if (openedFromFile) {
       showSetup("Open the live dashboard",
         "This file is only the dashboard source. It is not connected to RELAY when opened from a file path.",
@@ -1578,6 +1726,8 @@ $("#asset-manifest").addEventListener("change", () => {
 $("#asset-validate").addEventListener("click", () => validateAssets("assets.manifest.validate"));
 $("#krita-validate").addEventListener("click", () => validateAssets("assets.krita.inspect"));
 $("#asset-impact").addEventListener("click", () => validateAssets("assets.impact.analyze"));
+$("#blender-check").addEventListener("click", checkBlenderFile);
+$("#krita-export").addEventListener("click", exportKritaPng);
 $("#automation-toggle").addEventListener("click", toggleAutomation);
 $("#integrated-report").addEventListener("change", async () => {
   await previewIntegratedReport();

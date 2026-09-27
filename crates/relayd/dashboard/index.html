@@ -3,52 +3,46 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>RELAY</title>
+  <title>RELAY · Your local workspace</title>
   <link rel="stylesheet" href="styles.css">
   <script src="app.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to dashboard content</a>
-  <header>
-    <div><p class="eyebrow">LOCAL WORKSPACE</p><h1>RELAY</h1></div>
-    <button id="refresh" type="button">Refresh</button>
+  <header class="app-header">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">R</span><div><p class="eyebrow">YOUR LOCAL WORKSPACE</p><h1>RELAY</h1></div></div>
+    <nav class="app-nav" aria-label="RELAY sections"><a href="#main">Home</a><a href="#projects-title">Projects</a><a href="#assets-title">Assets</a><a href="#tests-title">Checks</a><a href="#diagnostics-title">Diagnostics</a></nav>
+    <button id="refresh" type="button">Refresh status</button>
   </header>
   <main id="main" tabindex="-1">
     <section class="status" aria-labelledby="status-title">
-      <p class="eyebrow">OVERVIEW</p>
-      <h2 id="status-title">Is RELAY working?</h2>
+      <div><p class="eyebrow">WELCOME TO RELAY</p><h2 id="status-title">Your workspace</h2><p class="status-description">Connect your project, check your tools, and get to work in one place.</p></div>
       <p id="status-message" role="status" aria-atomic="true">Checking…</p>
     </section>
     <section class="card setup" aria-labelledby="setup-title">
-      <p class="eyebrow">GET STARTED</p>
-      <h2 id="setup-title">Set up your workspace</h2>
-      <p id="setup-progress">Checking setup…</p>
-      <p id="setup-guidance">RELAY is checking what is ready.</p>
-      <p id="setup-next" role="status" aria-live="polite">Next step will appear here.</p>
-      <a id="setup-action" class="action-link" href="#project-name" hidden>Continue</a>
-      <p id="setup-uefn">UEFN connection has not been checked. Live editor and play-session workflows remain UNTESTED.</p>
-      <p id="setup-handoff" hidden>Local setup is ready. Continue with <a href="#assets-title">Assets</a>, <a href="#tests-title">Tests</a>, or <a href="#diagnostics-title">Diagnostics &amp; Debug</a>. Native creator-app and live UEFN workflows remain UNTESTED.</p>
+      <div class="setup-main"><div><p class="eyebrow">GET STARTED</p><h2 id="setup-title">Set up your workspace</h2><p id="setup-progress">Checking setup…</p><p id="setup-guidance">RELAY is checking what is ready.</p></div>
+      <div class="setup-action-panel"><p id="setup-next" role="status" aria-live="polite">Next step will appear here.</p><a id="setup-action" class="action-link" href="#project-name" hidden>Continue</a></div></div>
+      <p id="setup-handoff" hidden>Local setup is ready. Continue with <a href="#assets-title">Assets</a>, <a href="#tests-title">Checks</a>, or <a href="#diagnostics-title">Diagnostics</a>.</p>
+      <p id="setup-uefn" class="quiet-note">UEFN connection has not been checked. Live editor and play-session workflows remain UNTESTED.</p>
     </section>
-    <div class="grid">
-      <section class="card" aria-labelledby="health-title">
-        <h2 id="health-title">Health</h2>
-        <p id="health-summary">Checking…</p>
-        <ul id="health-checks"></ul>
-        <p id="next-action" hidden></p>
-        <h3>Background file checks</h3>
-        <p id="automation-status" role="status" aria-live="polite">Checking…</p>
-        <button id="automation-toggle" type="button" disabled>Pause background checks</button>
-      </section>
-      <section class="card" aria-labelledby="projects-title">
+    <ol class="quick-steps" aria-label="How to get started">
+      <li><span>1</span><div><strong>Choose a folder</strong><p>Use an existing project on this computer.</p></div></li>
+      <li><span>2</span><div><strong>Scan its files</strong><p>RELAY builds a local index to understand the project.</p></div></li>
+      <li><span>3</span><div><strong>Review what is ready</strong><p>See results and the next action.</p></div></li>
+    </ol>
+    <div class="grid primary-grid">
+      <section class="card project-card" aria-labelledby="projects-title">
+        <p class="eyebrow">01 · YOUR WORK</p>
         <h2 id="projects-title">Projects</h2>
         <p id="project-count">Checking…</p>
+        <p class="section-intro">Add an existing folder from this computer. RELAY leaves your project files where they are.</p>
         <form id="project-add-form">
           <label for="project-name">Project name</label>
-          <input id="project-name" name="name" type="text" maxlength="120" required autocomplete="off">
+          <input id="project-name" name="name" type="text" maxlength="120" required autocomplete="off" placeholder="My project">
           <label for="project-root">Local project folder</label>
-          <input id="project-root" name="root" type="text" maxlength="2048" required autocomplete="off" aria-describedby="project-path-help">
-          <p id="project-path-help">Enter the full folder path on this computer.</p>
-          <button id="project-add" type="submit">Add project</button>
+          <input id="project-root" name="root" type="text" maxlength="2048" required autocomplete="off" aria-describedby="project-path-help" placeholder="C:\Projects\MyProject">
+          <p id="project-path-help">Paste the folder's full path from File Explorer.</p>
+          <button id="project-add" class="primary-button" type="submit">Add this project</button>
         </form>
         <p id="project-action" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">Add a project, then select it to work with its indexed files.</p>
         <p id="selected-project">No project selected.</p>
@@ -58,7 +52,26 @@
         <p id="uefn-connection" role="status" aria-live="polite">UEFN editor connection has not been checked.</p>
         <p id="uefn-inspection" role="status" aria-live="polite">Choose a project to inspect its indexed UEFN files. Editor and runtime checks are not available yet.</p>
       </section>
+      <section class="card health-card" aria-labelledby="health-title">
+        <p class="eyebrow">02 · AT A GLANCE</p>
+        <h2 id="health-title">Health</h2>
+        <p id="health-summary">Checking…</p>
+        <ul id="health-checks"></ul>
+        <p id="next-action" hidden></p>
+        <h3>Background file checks</h3>
+        <p id="automation-status" role="status" aria-live="polite">Checking…</p>
+        <button id="automation-toggle" type="button" disabled>Pause background checks</button>
+      </section>
     </div>
+    <section class="tool-overview" aria-labelledby="tool-overview-title">
+      <div class="tools-heading"><div><p class="eyebrow">CONNECTED TO YOUR WORK</p><h2 id="tool-overview-title">Creator tools</h2></div><p>RELAY will only say a tool is ready after a real check.</p></div>
+      <div class="tool-cards">
+        <article class="tool-card"><span class="tool-icon" aria-hidden="true">U</span><div><h3>UEFN</h3><p id="tool-uefn-status" class="tool-status">Connection not checked</p><p>Editor and play session: untested.</p></div><a href="#uefn-connect">Check connection</a></article>
+        <article class="tool-card"><span class="tool-icon" aria-hidden="true">B</span><div><h3>Blender</h3><p id="tool-blender-status" class="tool-status">Native app not checked</p><p>Local asset checks are available below.</p></div><a href="#assets-title">Open assets</a></article>
+        <article class="tool-card"><span class="tool-icon" aria-hidden="true">K</span><div><h3>Krita</h3><p id="tool-krita-status" class="tool-status">Native app not checked</p><p>Local manifest inspection is available below.</p></div><a href="#assets-title">Open assets</a></article>
+      </div>
+    </section>
+    <div class="tools-heading"><div><p class="eyebrow">EXPLORE YOUR WORKSPACE</p><h2>Tools and activity</h2></div><p>Use these after your project's file index is ready.</p></div>
     <div class="grid secondary">
       <section class="card" aria-labelledby="assets-title">
         <h2 id="assets-title">Assets</h2>
@@ -75,11 +88,29 @@
         <p id="asset-result" role="status" aria-live="polite">No manifest checked yet.</p>
         <p id="asset-lineage">Declared source and export lineage has not been checked.</p>
         <ul id="asset-findings"></ul>
-        <p id="asset-native-status">Native Blender, Krita, and UEFN asset workflows: UNTESTED.</p>
+        <div class="native-actions">
+          <h3>Check a Blender file</h3>
+          <p>Enter a .blend file inside this project. RELAY checks a small set of mesh problems if Blender is installed.</p>
+          <label for="blender-file-path">Blender file in this project</label>
+          <input id="blender-file-path" type="text" maxlength="512" autocomplete="off" spellcheck="false" placeholder="Models/example.blend">
+          <button id="blender-check" type="button" disabled>Check Blender meshes</button>
+          <p id="blender-check-status" role="status" aria-live="polite">Select an active project to check a Blender file.</p>
+        </div>
+        <details class="native-actions krita-export">
+          <summary>Create a PNG with Krita</summary>
+          <p>RELAY can ask Krita to export a .kra source to a new .png in the same project. It will not replace an existing file.</p>
+          <label for="krita-source-path">Krita source in this project</label>
+          <input id="krita-source-path" type="text" maxlength="512" autocomplete="off" spellcheck="false" placeholder="Art/source.kra">
+          <label for="krita-export-path">New PNG in this project</label>
+          <input id="krita-export-path" type="text" maxlength="512" autocomplete="off" spellcheck="false" placeholder="Art/export.png">
+          <button id="krita-export" type="button" disabled>Create new PNG</button>
+          <p id="krita-export-status" role="status" aria-live="polite">Select an active project to use Krita export.</p>
+        </details>
+        <p id="asset-native-status">Native Blender, Krita, and UEFN asset workflows: UNTESTED until run on this computer.</p>
       </section>
       <section class="card" aria-labelledby="tests-title">
-        <h2 id="tests-title">Tests</h2>
-        <p class="section-intro">Declare local file checks, review the current plan, then run it explicitly. These checks inspect RELAY's file index; creator-app behavior needs a separate live test.</p>
+        <h2 id="tests-title">File checks</h2>
+        <p class="section-intro">Choose a file to check. RELAY can confirm whether it appears in the local project scan. You can review the plan before running it.</p>
         <div class="test-workflow" role="group" aria-labelledby="tests-catalog-title">
           <h3 id="tests-catalog-title">Declared checks</h3>
           <p>Add a simple check for a file in the selected project's index. Its result covers indexed-file presence only; creator-app and live UEFN behavior remain UNTESTED.</p>
@@ -92,13 +123,14 @@
             <button id="tests-add-file-save" type="submit" disabled>Add file check</button>
           </form>
           <p id="tests-add-file-status" role="status" aria-live="polite" tabindex="-1">Select an active project to add a file check.</p>
-          <h4>Advanced: replace the full catalog</h4>
-          <p>Choose a version 1 JSON catalog with check IDs, project-relative inputs, and optional indexed-file assertions. Up to 128 checks fit here; larger catalogs can use the RELAY CLI.</p>
-          <label for="tests-catalog-file">Check catalog (JSON)</label>
-          <input id="tests-catalog-file" type="file" accept=".json,application/json">
-          <button id="tests-catalog-save" type="button" disabled>Register selected catalog</button>
-          <p id="tests-catalog-status" role="status" aria-live="polite" tabindex="-1">Select an active project to inspect its declared checks.</p>
-          <ul id="tests-catalog-list"></ul>
+          <details class="advanced-inputs"><summary>Advanced: import a set of checks</summary>
+            <p>Choose a version 1 JSON catalog with check IDs, project-relative inputs, and optional indexed-file assertions. Up to 128 checks fit here; larger catalogs can use the RELAY CLI.</p>
+            <label for="tests-catalog-file">Check catalog (JSON)</label>
+            <input id="tests-catalog-file" type="file" accept=".json,application/json">
+            <button id="tests-catalog-save" type="button" disabled>Register selected catalog</button>
+            <p id="tests-catalog-status" role="status" aria-live="polite" tabindex="-1">Select an active project to inspect its declared checks.</p>
+            <ul id="tests-catalog-list"></ul>
+          </details>
         </div>
         <div class="test-workflow" role="group" aria-labelledby="tests-plan-title">
           <h3 id="tests-plan-title">Plan and run</h3>

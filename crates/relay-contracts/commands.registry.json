@@ -338,6 +338,42 @@
       "errors": ["PROJECT_NOT_FOUND", "INDEX_NOT_READY", "STORAGE_UNAVAILABLE", "INTEGRATION_UNAVAILABLE"]
     },
     {
+      "id": "tools.local.discover",
+      "version": 1,
+      "stability": "phase6",
+      "summary": "Check common local installation locations for supported creator tools without launching them.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "result_schema": {
+        "type": "object",
+        "required": ["scope", "tools"],
+        "properties": {
+          "scope": { "type": "string", "const": "common_locations" },
+          "tools": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "required": ["id", "detection_status", "detection_source", "workflow_status"],
+              "properties": {
+                "id": { "type": "string", "enum": ["uefn", "blender", "krita"] },
+                "detection_status": { "type": "string", "enum": ["detected", "not_detected"] },
+                "detection_source": { "type": ["string", "null"], "enum": ["PATH", "common_installation_folder", "epic_installation_manifest", null] },
+                "workflow_status": { "type": "string", "const": "untested" }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["INTEGRATION_UNAVAILABLE"]
+    },
+    {
       "id": "uefn.mcp.discover",
       "version": 1,
       "stability": "phase6",
@@ -567,7 +603,7 @@
       "effect_class": "project_write",
       "permission": "project_write",
       "idempotency": "keyed",
-      "surfaces": ["cli"],
+      "surfaces": ["cli", "dashboard"],
       "arguments_schema": {
         "type": "object", "required": ["project_id", "source_path", "export_path"],
         "properties": {

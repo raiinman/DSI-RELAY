@@ -24,9 +24,9 @@ function element() {
 
 async function loadDashboard(results, hash = "#local-test-token") {
   const selectors = [
-    "#details", "#refresh", "#status-message", "#health-summary", "#health-checks", "#setup-progress", "#setup-guidance", "#setup-next", "#setup-action", "#setup-handoff", "#setup-uefn",
+    "#details", "#refresh", "#status-message", "#health-summary", "#health-checks", "#setup-progress", "#setup-guidance", "#setup-next", "#setup-action", "#setup-handoff", "#setup-uefn", "#tool-uefn-status", "#tool-blender-status", "#tool-krita-status",
     "#next-action", "#automation-status", "#automation-toggle", "#project-count", "#projects", "#project-add-form", "#project-name", "#project-root", "#project-add", "#project-action", "#selected-project", "#uefn-connect", "#uefn-connection",
-    "#uefn-inspection", "#asset-selected", "#asset-manifest", "#asset-changed-path", "#asset-validate", "#krita-validate", "#asset-impact", "#asset-result", "#asset-lineage", "#asset-findings", "#tests-summary", "#tests-list",
+    "#uefn-inspection", "#asset-selected", "#asset-manifest", "#asset-changed-path", "#asset-validate", "#krita-validate", "#asset-impact", "#asset-result", "#asset-lineage", "#asset-findings", "#blender-file-path", "#blender-check", "#blender-check-status", "#krita-source-path", "#krita-export-path", "#krita-export", "#krita-export-status", "#tests-summary", "#tests-list",
     "#tests-catalog-file", "#tests-catalog-save", "#tests-catalog-status", "#tests-catalog-list", "#tests-plan", "#tests-plan-status", "#tests-plan-list", "#tests-run", "#tests-run-status", "#tests-run-list",
     "#tests-add-file-form", "#tests-add-file-id", "#tests-add-file-path", "#tests-add-file-save", "#tests-add-file-status",
     "#activity-summary", "#activity-list", "#results-summary", "#results-list", "#jobs-summary", "#jobs-list", "#usage-summary", "#usage-detail", "#diagnostic-capture",
@@ -85,7 +85,12 @@ function success(command) {
     "usage.summary": { command_count: 8, failure_count: 1, remote_calls: 0, model_tokens_in: 0, model_tokens_out: 0 },
     "transaction.list": { transactions: [{ command: "project.register", state: "verified" }] },
     "result.list": { results: [{ kind: "UEFN_STATIC", payload_bytes: 2048, producer_version: "0.1.0" }] },
-    "job.list": { jobs: [{ command: "fixture.work", state: "CHECKPOINTED" }] }
+    "job.list": { jobs: [{ command: "fixture.work", state: "CHECKPOINTED" }] },
+    "tools.local.discover": { scope: "common_locations", tools: [
+      { id: "uefn", detection_status: "not_detected", workflow_status: "untested" },
+      { id: "blender", detection_status: "detected", workflow_status: "untested" },
+      { id: "krita", detection_status: "not_detected", workflow_status: "untested" }
+    ] }
   };
   return { ok: true, json: async () => ({ ok: true, result: results[command] }) };
 }
@@ -97,7 +102,7 @@ test("keyboard landmarks and live status have semantic markup", () => {
   assert.match(html, /id="project-action" role="status"[^>]*tabindex="-1"/);
   assert.match(html, /id="diagnostic-guidance"[^>]*role="status"/);
   assert.match(html, /id="integrated-summary"[^>]*tabindex="-1"/);
-  assert.match(html, /<button id="refresh" type="button">Refresh<\/button>/);
+  assert.match(html, /<button id="refresh" type="button">Refresh status<\/button>/);
 });
 
 test("refresh uses read-only commands and renders named failures as text", async () => {
@@ -105,7 +110,7 @@ test("refresh uses read-only commands and renders named failures as text", async
   assert.equal(page.location.hash, "");
   assert.deepEqual(page.calls.map((call) => JSON.parse(call.body).command), [
     "system.status", "system.doctor", "project.list", "diagnostics.summary",
-    "usage.summary", "transaction.list", "result.list", "job.list"
+    "usage.summary", "transaction.list", "result.list", "job.list", "tools.local.discover"
   ]);
   assert.ok(page.calls.every((call) => call.headers["X-Relay-Dashboard-Token"] === "local-test-token"));
   assert.equal(page.nodes["#status-message"].textContent, "RELAY needs attention. See Health below.");
@@ -125,6 +130,8 @@ test("refresh uses read-only commands and renders named failures as text", async
   assert.equal(page.nodes["#results-list"].children[0].textContent, "UEFN_STATIC · 2,048 bytes · RELAY 0.1.0");
   assert.equal(page.nodes["#jobs-list"].children[0].textContent, "fixture.work: CHECKPOINTED");
   assert.equal(page.nodes["#usage-summary"].textContent, "8 commands run · 1 failed");
+  assert.equal(page.nodes["#tool-blender-status"].textContent, "Found here · native workflow untested");
+  assert.equal(page.nodes["#tool-krita-status"].textContent, "Not found in checked locations");
   assert.doesNotMatch(page.nodes["#details"].textContent, /private-id|raw diagnostic|<script>/);
   assert.equal(page.nodes["#refresh"].attributes["aria-disabled"], "false");
 });
@@ -211,10 +218,39 @@ test("project import, selection, and index build use the shared command path", a
   assert.equal(page.nodes["#setup-progress"].textContent, "Step 3 of 3 · Build local file index");
   assert.equal(page.nodes["#setup-action"].href, "#project-index-action");
   await page.nodes["#projects"].children[1].children[2].listener();
-  assert.equal(page.nodes["#project-action"].textContent, "New project: 12 files indexed.");
+  assert.equal(page.nodes["#project-action"].textContent, "New project: 12 files indexed and ready.");
   assert.deepEqual(page.calls.slice(-2).map((call) => JSON.parse(call.body).command), ["project.index.build", "project.capabilities"]);
   assert.equal(page.nodes["#setup-progress"].textContent, "Local setup ready");
   assert.equal(page.nodes["#setup-action"].href, "#assets-title");
+});
+
+test("a scan made stale by a watcher event verifies content before showing ready", async () => {
+  const project = { id: "project-1", name: "Sample", lifecycle_state: "active" };
+  let indexStatus = "missing";
+  const page = await loadDashboard((name, argumentsValue) => {
+    if (name === "project.list") return { ok: true, json: async () => ({ ok: true, result: { projects: [project] } }) };
+    if (name === "project.capabilities") return { ok: true, json: async () => ({ ok: true, result: {
+      index_status: indexStatus, baseline_state: indexStatus === "missing" ? "missing" : "ready",
+      content_verification_required: indexStatus === "stale"
+    } }) };
+    if (name === "project.index.build") {
+      indexStatus = "stale";
+      return { ok: true, json: async () => ({ ok: true, result: { file_count: 12 } }) };
+    }
+    if (name === "project.index.reconcile") {
+      assert.equal(argumentsValue.verify_content, true);
+      indexStatus = "ready";
+      return { ok: true, json: async () => ({ ok: true, result: { file_count: 12 } }) };
+    }
+    return success(name);
+  });
+  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
+  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Scan project files").listener();
+  assert.equal(page.nodes["#setup-progress"].textContent, "Local setup ready");
+  assert.equal(page.nodes["#project-action"].textContent, "Sample: 12 files indexed and ready.");
+  assert.deepEqual(page.calls.map((call) => JSON.parse(call.body).command)
+    .filter((name) => name === "project.index.build" || name === "project.index.reconcile"),
+    ["project.index.build", "project.index.reconcile"]);
 });
 
 test("archive and remove confirm through shared commands and retain a visible tombstone", async () => {
@@ -381,6 +417,55 @@ test("asset impact uses the shared command and displays counts without asset pat
   assert.match(page.nodes["#asset-result"].textContent, /2 declared assets affected/);
   assert.equal(page.nodes["#asset-findings"].children[0].textContent, "Source changed");
   assert.doesNotMatch(page.nodes["#asset-result"].textContent + page.nodes["#asset-findings"].children[0].textContent, /private|secret/);
+});
+
+test("native asset controls use project-scoped paths and bounded outcomes", async () => {
+  const project = { id: "project-1", name: "Sample", lifecycle_state: "active" };
+  const secondProject = { id: "project-2", name: "Other", lifecycle_state: "active" };
+  const page = await loadDashboard((name, args) => {
+    if (name === "project.list") return { ok: true, json: async () => ({ ok: true, result: { projects: [project, secondProject] } }) };
+    if (name === "project.capabilities") return { ok: true, json: async () => ({ ok: true, result: {
+      index_status: "ready", baseline_state: "ready", content_verification_required: false
+    } }) };
+    if (name === "assets.blender.mesh.validate") {
+      assert.equal(args.project_id, "project-1");
+      assert.equal(args.blend_path, "Models/example.blend");
+      return { ok: true, json: async () => ({ ok: true, result: {
+        status: "failed", native_workflow_status: "checked", issue_count: 2, total_meshes: 4,
+        message: "C:\\private\\source.blend"
+      } }) };
+    }
+    if (name === "assets.krita.export") {
+      assert.equal(args.project_id, "project-1");
+      assert.equal(args.source_path, "Art/source.kra");
+      assert.equal(args.export_path, "Art/new.png");
+      return { ok: true, json: async () => ({ ok: true, result: {
+        status: "exported", native_workflow_status: "checked", build_record_state: "stored",
+        message: "C:\\private\\new.png"
+      } }) };
+    }
+    return success(name);
+  });
+  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
+  page.nodes["#blender-file-path"].value = "../outside.blend";
+  await page.nodes["#blender-check"].listener();
+  assert.match(page.nodes["#blender-check-status"].textContent, /forward slashes/);
+  page.nodes["#blender-file-path"].value = "Models/example.blend";
+  await page.nodes["#blender-check"].listener();
+  assert.match(page.nodes["#blender-check-status"].textContent, /2 supported mesh problems/);
+  page.nodes["#krita-source-path"].value = "Art/source.kra";
+  page.nodes["#krita-export-path"].value = "Art/new.png";
+  await page.nodes["#krita-export"].listener();
+  assert.match(page.nodes["#krita-export-status"].textContent, /New PNG created/);
+  assert.doesNotMatch(page.nodes["#blender-check-status"].textContent + page.nodes["#krita-export-status"].textContent, /private|source\.blend|new\.png/);
+  await page.nodes["#projects"].children[1].children.find((child) => child.textContent === "Select").listener();
+  assert.equal(page.nodes["#blender-file-path"].value, "");
+  assert.equal(page.nodes["#krita-source-path"].value, "");
+  assert.equal(page.nodes["#krita-export-path"].value, "");
+  page.setResults(async () => { throw new Error("connection lost"); });
+  await page.refresh();
+  assert.equal(page.nodes["#blender-check"].disabled, true);
+  assert.equal(page.nodes["#krita-export"].disabled, true);
 });
 
 test("background control uses shared pause and resume commands", async () => {
@@ -633,6 +718,24 @@ test("declared checks render a bounded current plan and require explicit run", a
   assert.equal(page.nodes["#tests-run-status"].focused, true);
   assert.doesNotMatch(page.nodes["#tests-run-list"].children[0].textContent + page.nodes["#tests-plan-status"].textContent,
     /Maps\/|private-id|private-job/);
+});
+
+test("an empty selective plan explains that no check was affected", async () => {
+  const page = await loadDashboard((command) => {
+    if (command === "project.check_catalog.get") return commandReply({
+      project_id: "private-id", revision: 1, index_generation: 2, catalog
+    });
+    if (command === "automation.checks.plan") return commandReply({
+      project_id: "private-id", plan_id: `PLAN-${"a".repeat(32)}`, catalog_revision: 1,
+      index_generation: 3, after_generation: 2, mode: "selective", fallback_reason: null,
+      checks: []
+    });
+    return success(command);
+  });
+  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
+  await page.nodes["#tests-plan"].listener();
+  assert.match(page.nodes["#tests-plan-status"].textContent, /No declared checks were selected.*nothing to run.*UNTESTED/);
+  assert.equal(page.nodes["#tests-run"].disabled, true);
 });
 
 test("catalog registration uses the current revision and hides local path content", async () => {

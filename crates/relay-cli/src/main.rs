@@ -1,6 +1,7 @@
 use relay::client;
 use relay::onboarding;
 use relay::parser_install::{self, InstallOptions};
+mod launch;
 use relay_contracts::{
     CommandRequest, CommandResponse, LOCAL_HOST_STATE_FORMAT, RequestContext, registry,
 };
@@ -257,12 +258,19 @@ fn execute_human(request: CommandRequest, json_output: bool, view: &str) -> Resu
 fn run(args: &[String]) -> Result<i32, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Err(
-            "usage: relay <status|doctor|diagnostics|pause|resume|support-bundle|discover|onboard|dashboard-url|commands|project-list|project-register|project-archive|project-restore|project-removal-plan|project-removal-get|project-removal-list|project-removal-approve|project-removal-reject|project-remove|check-catalog-put|check-catalog-get|check-add-file|plan-checks|run-checks|context-compile|task-context|uefn-inspect|uefn-audit|uefn-discover|uefn-toolsets|uefn-describe|verse-analyze|verse-record|verse-file-analyze|verse-file-record|asset-validate|asset-impact|blender-mesh-check|blender-mesh-record|krita-inspect|krita-export|krita-reconcile|parser-install|result-list|result-get|job-list|job-get|shutdown|exec>"
+            "usage: relay <launch|status|doctor|diagnostics|pause|resume|support-bundle|discover|onboard|dashboard-url|commands|project-list|project-register|project-archive|project-restore|project-removal-plan|project-removal-get|project-removal-list|project-removal-approve|project-removal-reject|project-remove|check-catalog-put|check-catalog-get|check-add-file|plan-checks|run-checks|context-compile|task-context|uefn-inspect|uefn-audit|uefn-discover|uefn-toolsets|uefn-describe|verse-analyze|verse-record|verse-file-analyze|verse-file-record|asset-validate|asset-impact|blender-mesh-check|blender-mesh-record|krita-inspect|krita-export|krita-reconcile|parser-install|result-list|result-get|job-list|job-get|shutdown|exec>"
                 .to_string(),
         );
     };
 
     match command {
+        "launch" => {
+            if args.len() != 1 {
+                return Err("usage: relay launch".to_string());
+            }
+            launch::launch()?;
+            Ok(0)
+        }
         "support-bundle" => {
             if !matches!(args.len(), 2 | 4)
                 || args[1].starts_with("--")
@@ -511,22 +519,7 @@ fn run(args: &[String]) -> Result<i32, String> {
             Ok(0)
         }
         "dashboard-url" => {
-            let state = load_state()?;
-            let status = client::call(&state, &make_request("system.status", json!({}), None))?;
-            if !status.ok {
-                return Err("RELAY dashboard is unavailable".to_string());
-            }
-            let path = client::state_dir().join("dashboard.json");
-            let bytes =
-                fs::read(&path).map_err(|_| "RELAY dashboard is unavailable".to_string())?;
-            let info: Value = serde_json::from_slice(&bytes)
-                .map_err(|_| "RELAY dashboard state is invalid".to_string())?;
-            let url = info["url"]
-                .as_str()
-                .ok_or("RELAY dashboard state is invalid")?;
-            if !url.starts_with("http://127.0.0.1:") || !url.contains("/#") {
-                return Err("RELAY dashboard state is invalid".to_string());
-            }
+            let url = launch::live_dashboard_url()?.ok_or("RELAY dashboard is unavailable")?;
             println!("{url}");
             Ok(0)
         }

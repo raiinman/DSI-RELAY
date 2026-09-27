@@ -55,8 +55,22 @@ function Assert-DirectChild([string]$Child, [string]$Parent) {
 }
 
 Assert-NoReparseAncestors $root
-if (@(Get-Process -Name relayd -ErrorAction SilentlyContinue).Count -gt 0) {
-    throw 'relayd.exe is running; uninstall must wait until it stops'
+$versionPrefix = [IO.Path]::GetFullPath((Join-Path $root 'versions')) + [IO.Path]::DirectorySeparatorChar
+foreach ($daemon in @(Get-Process -Name relayd -ErrorAction SilentlyContinue)) {
+    if ($daemon.Path -and $daemon.Path.StartsWith($versionPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'An installed RELAY engine is running; uninstall must wait until it stops'
+    }
+}
+$hostPath = Join-Path (Join-Path $env:LOCALAPPDATA 'DSI\RELAY') 'host.json'
+if (Test-Path -LiteralPath $hostPath) {
+    Assert-RegularFile $hostPath
+    $hostState = Get-Content -LiteralPath $hostPath -Raw -ErrorAction Stop | ConvertFrom-Json
+    if ([string]$hostState.pid -match '^[1-9][0-9]*$') {
+        $selectedDaemon = Get-Process -Id ([int]$hostState.pid) -ErrorAction SilentlyContinue
+        if ($selectedDaemon -and $selectedDaemon.ProcessName -eq 'relayd') {
+            throw 'The default RELAY data root has a running engine; uninstall must wait until it stops'
+        }
+    }
 }
 Assert-Directory $root
 $markerPath = Join-Path $root 'install-root.json'

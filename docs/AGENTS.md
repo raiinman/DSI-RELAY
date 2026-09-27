@@ -27,6 +27,7 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `COST_AND_CONTEXT.md` — usage-efficiency rules, Result Store, Context Compiler, memory tiers, and benchmarks.
 - `CLI_AND_SKILLS.md` — headless CLI, structured machine execution, compact skills, and thin MCP posture.
 - `AUTOMATION_AND_UX.md` — onboarding automation, dashboard, recovery, approvals, and support experience.
+- `relay-dashboard-concept.png` — image-generated desktop dashboard direction for the guided local workspace; illustrative status text does not certify live tool readiness.
 - `UEFN_V0.1.md` — first integration, runtime bridge, probes, tests, captures, and asset workflow.
 - `SECURITY_AND_PERMISSIONS.md` — side-effect categories, transactions, rollback, secrets, and remote safety.
 - `DATA_BOUNDARY_AND_PRIVACY.md` — data classification, credential handling, remote egress, embeddings, screenshots, and privacy boundaries.

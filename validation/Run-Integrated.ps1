@@ -738,7 +738,6 @@ try {
                         if ($capabilities.index_status -eq 'stale') {
                             $null = Require-Relay 'project.index.reconcile' @{ project_id = $ProjectId; verify_content = $true } $true
                             $capabilities = Require-Relay 'project.capabilities' @{ project_id = $ProjectId }
-                            Write-Warning ('INDEX_AFTER_RECONCILE_' + [string]$capabilities.index_status)
                         }
                         $script:projectReady = ($capabilities.index_status -eq 'ready' -and $script:indexMetrics.generation -ge 1)
                         $status = if ($script:projectReady) { 'passed' } else { 'failed' }
@@ -894,8 +893,13 @@ try {
                             $_.record_id -eq $planRecord.approval_id -and $_.state -eq 'rejected' -and
                             $_.human_presence -eq 'unverified'
                         }).Count -eq 1
+                        # A watcher may mark the index stale after the earlier baseline; the snapshot must label that state truthfully.
+                        $indexedState = $task.project_state.index_state -in @('ready', 'stale') -and
+                            [long]$task.project_state.index_generation -ge 1 -and
+                            ($task.project_state.index_state -ne 'ready' -or
+                                $task.project_state.content_verification_required -eq $false)
                         $status = if ($decisionRecord.state -eq 'rejected' -and $hasFact -and $hasDecision -and
-                            $task.project_state.index_state -eq 'ready' -and
+                            $indexedState -and
                             $task.result_currentness -eq 'unknown_without_project_generation_link') { 'passed' } else { 'failed' }
                         $reason = if ($status -eq 'passed') { 'TASK_CONTEXT_SNAPSHOT_VERIFIED' } else { 'TASK_CONTEXT_MISMATCH' }
                         $evidenceEligible = $true
@@ -1192,7 +1196,6 @@ try {
                         if ($fixtureCapabilities.index_status -eq 'stale') {
                             $null = Require-Relay 'project.index.reconcile' @{ project_id = $fixtureProjectId; verify_content = $true } $true
                             $fixtureCapabilities = Require-Relay 'project.capabilities' @{ project_id = $fixtureProjectId }
-                            Write-Warning ('DIRECT_AFTER_RECONCILE_' + [string]$fixtureCapabilities.index_status)
                             if ($fixtureCapabilities.index_status -eq 'ready') {
                                 $baseline = Require-Relay 'project.index.build' @{ project_id = $fixtureProjectId } $true
                             }

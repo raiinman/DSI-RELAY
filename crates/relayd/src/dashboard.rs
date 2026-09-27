@@ -203,6 +203,7 @@ fn allowed_command(command: &str) -> bool {
             | "project.list"
             | "project.import"
             | "project.index.build"
+            | "project.index.reconcile"
             | "project.archive"
             | "project.restore"
             | "project.remove"
@@ -217,10 +218,13 @@ fn allowed_command(command: &str) -> bool {
             | "automation.checks.execute"
             | "uefn.static.inspect"
             | "uefn.mcp.discover"
+            | "tools.local.discover"
             | "uefn.mcp.toolsets"
             | "assets.manifest.validate"
             | "assets.impact.analyze"
             | "assets.krita.inspect"
+            | "assets.blender.mesh.validate"
+            | "assets.krita.export"
             | "automation.pause"
             | "automation.resume"
             | "usage.summary"
@@ -298,12 +302,14 @@ fn handle_request(
                     command,
                     "project.import"
                         | "project.index.build"
+                        | "project.index.reconcile"
                         | "project.archive"
                         | "project.restore"
                         | "project.remove"
                         | "project.removal.plan"
                         | "project.removal.decide"
                         | "project.check_catalog.put"
+                        | "assets.krita.export"
                         | "automation.checks.execute"
                 ) {
                     Some(format!("DASH-{}-{now}", std::process::id()))
@@ -325,7 +331,8 @@ fn handle_request(
                 &runtime,
                 &authority,
                 |request| {
-                    crate::uefn::execute(core, request)
+                    crate::tool_discovery::execute(request)
+                        .or_else(|| crate::uefn::execute(core, request))
                         .or_else(|| crate::assets::execute_authorized(core, request, &runtime, &authority))
                         .or_else(|| crate::verse::execute(core, request))
                 },
@@ -377,15 +384,19 @@ mod tests {
     #[test]
     fn dashboard_command_allowlist_limits_writes_to_project_workflows() {
         assert!(allowed_command("system.status"));
+        assert!(allowed_command("tools.local.discover"));
         assert!(allowed_command("project.list"));
         assert!(allowed_command("project.import"));
         assert!(allowed_command("project.index.build"));
+        assert!(allowed_command("project.index.reconcile"));
         assert!(allowed_command("project.archive"));
         assert!(allowed_command("project.restore"));
         assert!(allowed_command("project.remove"));
         assert!(allowed_command("assets.manifest.validate"));
         assert!(allowed_command("assets.impact.analyze"));
         assert!(allowed_command("assets.krita.inspect"));
+        assert!(allowed_command("assets.blender.mesh.validate"));
+        assert!(allowed_command("assets.krita.export"));
         assert!(allowed_command("automation.pause"));
         assert!(allowed_command("automation.resume"));
         assert!(allowed_command("project.check_catalog.get"));

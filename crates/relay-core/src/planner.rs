@@ -310,11 +310,11 @@ pub fn plan(snapshot: ProjectPlanSnapshot, after_generation: i64) -> Result<Valu
             .flatten()
         })
         .collect();
-    // The first ready baseline is the initial direct input set. The v1 plan
-    // reason remains `changed_input`, meaning changed from no prior index.
-    let initial_baseline = state.generation == state.baseline_generation
-        && after_generation == state.baseline_generation
-        && snapshot.catalog.index_generation == state.generation;
+    // A newly registered catalog has not assessed its current ready index yet.
+    // Select its direct checks at that exact generation. The resulting plan ID
+    // is stable, so execution replays rather than recording duplicate results.
+    let initial_catalog_snapshot = state.generation == snapshot.catalog.index_generation
+        && after_generation == snapshot.catalog.index_generation;
     let mut affected = BTreeSet::new();
     if fallback_reason.is_none() {
         let (revision, producer_id, producer_version) = configured.unwrap_or((0, "", ""));
@@ -350,7 +350,7 @@ pub fn plan(snapshot: ProjectPlanSnapshot, after_generation: i64) -> Result<Valu
         }
         for check in &catalog.checks {
             if check.dependency_mode == Some(DependencyMode::Direct) {
-                if initial_baseline
+                if initial_catalog_snapshot
                     || check.roots.iter().chain(&check.leaves).any(|path| changed.contains(path))
                 {
                     affected.insert(check.id.clone());
@@ -642,6 +642,58 @@ mod tests {
         let legacy = plan(basis, 1).unwrap();
         assert_eq!(legacy["mode"], "full_catalog_fallback");
         assert_eq!(legacy["fallback_reason"], "parser_configuration_unavailable");
+    }
+
+    #[test]
+    fn direct_mode_selects_new_catalog_at_current_generation_without_delta_rows() {
+        let mut basis = snapshot(false);
+        basis.state.generation = 2;
+        basis.state.baseline_generation = 1;
+        basis.catalog.index_generation = 2;
+        basis.catalog.configuration_revision = None;
+        basis.configuration = None;
+        basis.coverage.clear();
+        basis.changes.clear();
+        basis.catalog.catalog = canonical_catalog(&json!({
+            "format_version": 1,
+            "checks": [{"id":"hello_present", "roots":["hello.txt"], "leaves":[],
+                "dependency_mode":"direct",
+                "assertion":{"kind":"indexed_file_present", "path":"hello.txt"}}]
+        })).unwrap();
+        basis.files.push(IndexedFileSnapshot {
+            relative_path: "hello.txt".into(),
+            size_bytes: 5,
+            modified_unix_ns: 1,
+            content_sha256: "e".repeat(64),
+        });
+        basis.state.file_count = basis.files.len() as u64;
+        let planned = plan(basis.clone(), 2).unwrap();
+        assert_eq!(planned["mode"], "selective");
+        assert_eq!(planned["coverage_basis"], "declared_direct_paths");
+        assert_eq!(planned["checks"].as_array().unwrap().len(), 1);
+        assert_eq!(planned["checks"][0]["check_id"], "hello_present");
+        assert_eq!(planned["checks"][0]["status"], "planned_not_run");
+        assert_eq!(planned["checks"][0]["result_id"], Value::Null);
+        assert_eq!(plan(basis.clone(), 2).unwrap()["plan_id"], planned["plan_id"]);
+        let evaluated = evaluate_declared_checks(&basis, &planned).unwrap();
+        assert_eq!(evaluated[0].status, "passed");
+        assert_eq!(evaluated[0].result_payload.as_ref().unwrap()["native_workflow_status"], "untested");
+
+        // A later unrelated index generation does not keep the catalog's
+        // initial snapshot selection alive.
+        basis.state.generation = 3;
+        basis.changes.push(ProjectChangeRecord {
+            id: "CHG-unrelated".into(),
+            project_id: "PRJ-a".into(),
+            generation: 3,
+            change_kind: "modified".into(),
+            relative_path: "unrelated.txt".into(),
+            previous_path: None,
+            before_sha256: None,
+            after_sha256: Some("f".repeat(64)),
+            detected_at: "fixture".into(),
+        });
+        assert_eq!(plan(basis, 2).unwrap()["checks"].as_array().unwrap().len(), 0);
     }
 
     #[test]

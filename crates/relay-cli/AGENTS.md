@@ -16,6 +16,7 @@ Own the canonical RELAY command-line client.
 - CLI must not maintain a second command catalog; discovery/help comes from the shared registry.
 - No dashboard-only or CLI-only business capability.
 - `relay dashboard-url` prints the daemon's current local dashboard link after confirming the host is reachable; the dashboard remains a client of the same Core commands.
+- `relay launch` is the installed one-action entry point. It reuses a reachable per-user daemon or starts adjacent `relayd.exe` hidden, waits for a live authenticated dashboard link, and opens it in an Edge app window when Edge is installed, otherwise in the Windows default browser. It takes no project-specific arguments, requires no terminal or working-directory setup, exits after opening the app, and returns a failure code if startup or browser handoff fails.
 - `relay discover` is an offline, read-only nearby project/tool candidate scan for first-run onboarding; it labels live integrations untested and is a bootstrap exception to shared command parity.
 - `relay onboard <project-folder>` composes shared project import, initial baseline, project capability, and read-only indexed UEFN inspection commands into a compact first audit. It reports the project ID if any later command or transport step fails, and never treats a static UEFN marker as editor or runtime validation. Its optional JSON mode reports bounded index counts, capability gaps, and conditional UEFN findings without echoing the project root or indexed paths.
 - `project-list --all`, `project-archive`, and `project-restore` invoke shared lifecycle commands. Removal uses `project-removal-plan/get/list/approve/reject` followed by `project-remove <project-id> <approval-id>`, invoking `project.remove@2`; the legacy v1 direct route fails `APPROVAL_REQUIRED`.
@@ -32,6 +33,7 @@ Own the canonical RELAY command-line client.
 - incompatible protocol/version errors remain explicit.
 - daemon acceptance tests may reuse the exported client transport rather than duplicating the pipe protocol.
 - `dashboard-url` fails when the daemon or current dashboard state is unavailable.
+- `launch` accepts only the exact loopback dashboard URL shape before handing it to Windows, and never logs that token-bearing URL itself. The current-user protected dashboard state remains the source of the URL.
 - `diagnostics` invokes the shared bounded diagnostic summary command; `doctor` remains the repair-oriented health view.
 - `support-bundle` writes a new, summary-only JSON file from shared status and diagnostics commands. Its optional bounded integrated-report input contributes checked counts and resource totals; absent input leaves the run field empty. It omits raw logs, paths, and command arguments.
 - `result-list` and `job-list` invoke shared bounded metadata-only commands, with an optional project ID for scoped views.

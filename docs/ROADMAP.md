@@ -1,6 +1,6 @@
 # RELAY Roadmap
 
-The roadmap orders construction of the complete RELAY experience. Phases 0–2 are closed. Phases 3–11 remain open unless their documented capabilities and final acceptance evidence support closure. Build the remaining workflows on `development/relay-v0.1`, with only checks needed to keep construction working. Diagnostics is part of each workflow. Run one integrated end-to-end acceptance pass after the experience is built; record unavailable UEFN, creator-app, and hardware checks as UNTESTED. Do not publish the held preview binary or merge `main` during construction.
+The roadmap orders construction of the complete RELAY experience. Phases 0–2 are closed. Phases 3–11 remain open unless their documented capabilities and final acceptance evidence support closure. Build the remaining workflows on `development/relay-v0.1`, with only checks needed to keep construction working. Diagnostics is part of each workflow. The corrected 2026-09-27 end-of-build local run recorded 14 PASS, 0 FAIL, 0 BLOCKED, and 29 UNTESTED across 43 workflows. Unavailable UEFN, creator-app, and hardware checks remain UNTESTED. Do not publish the held preview binary or merge `main` during construction.
 
 ## Phase 0 — Documentation baseline and adversarial evidence review
 
@@ -176,7 +176,7 @@ Completed promotion evidence:
 - Third core vertical accepted: generic adapter manifest/broker lifecycle, artifact/component revalidation, registry-bound capabilities, bounded failure/quarantine behavior, qualified AppContainer/LPAC worker isolation, Job Object containment, package-lock concurrency, and measured inactive/invocation cost. Evidence: `PHASE2_THIRD_SLICE_EVIDENCE.md`.
 - Phase 2 closure review: PASS. All four published exit criteria pass and the exact accepted production tree passed 54 workspace tests. Evidence: `PHASE2_CLOSURE_REVIEW.md`.
 
-Current next work: Phase 3 project discovery and indexing.
+Phase 2 handed off to Phase 3. The current cross-phase status is recorded in the sections below.
 
 Build:
 
@@ -261,7 +261,7 @@ Exit criteria:
 
 ## Phase 5 — Dashboard
 
-Status: Active foundation — the production daemon serves local health, project lifecycle and index actions, Diagnostics/Debug summary, stored result and job descriptions, recent transaction activity, aggregate usage, static UEFN inspection, asset-manifest checks, and imported Verse analysis metadata through the same command system as the CLI. Project add/archive/restore and bounded manifest checks have browser controls. Project removal now has a schema-10 durable, expiring local confirmation workflow: plan, inspect, approve or reject, then execute against an unchanged project registration revision. The legacy direct removal command fails explicitly. This is a local-user confirmation boundary, not proof of a human at the keyboard; broader approval policy and usability review remain open. Shared commands, CLI, and dashboard controls can pause or resume optional watcher work for the current daemon run, with mode visible in status/diagnostics; an uncertain dashboard response requires a status refresh before another control action. Live UEFN and native creator-app outcomes remain UNTESTED. Keyboard/status/error-state accessibility improvements are present. Manual assistive-technology review, full test execution, and integrated security review remain open.
+Status: Active foundation — the daemon now serves a responsive purple-and-gold local workspace launched from the Windows Start menu. It guides project add/select/index steps, surfaces bounded local tool discovery and truthful UEFN/Blender/Krita readiness, and groups advanced controls behind progressive disclosure. The same command system as the CLI supplies health, project lifecycle and index actions, Diagnostics/Debug, safe support download, stored result/job descriptions, transaction activity, usage, static UEFN inspection, asset checks, and declared check planning/execution. On the installed build, a project was added and indexed through the browser, then two direct indexed-file assertions were planned and passed with durable result IDs. This proves the local browser/engine path only. Project removal retains its schema-10 expiring local confirmation workflow; this is not proof of a human at the keyboard. Shared pause/resume controls expose watcher mode in status/diagnostics. Live UEFN and native creator-app outcomes remain UNTESTED. Manual assistive-technology and integrated security review remain open.
 
 Build first usable dashboard:
 
@@ -396,7 +396,7 @@ Exit criteria:
 
 ## Phase 11 — Public hardening
 
-Status: Open — MIT license and RAiiNMAN credit apply to first-party RELAY source and documentation; the public binary remains an unpublished draft. Unsigned local staging and guarded fixture-only install/update/uninstall scripts exist. The daemon offers a bounded read-only actual-storage schema probe; unsigned install and rollback use it before changing the active version pointer and reject incomplete WAL/journal state. Disposable fixture activation now launches the staged daemon, checks its own version and bounded CLI health, then stops it; failure restores a compatible prior pointer or removes a first-activation pointer. A separate signed-catalog verifier contract requires exact SHA-256 payload/catalog matching, CA-trusted publisher identity, pinned signer/root certificates, online revocation, and timestamped Windows Authenticode verification; no certificate or real signed package is available to pass it. The 2026-09-27 integrated local run recorded 14 PASS, 0 FAIL, 0 BLOCKED, and 29 UNTESTED across 43 planned workflows, with no public acceptance claim. Full archive install/update, actual per-user installation, clean-account installation, non-fixture activation health, and installer rollback on a real machine remain open.
+Status: Open — MIT license and RAiiNMAN credit apply to first-party RELAY source and documentation; the public binary remains unpublished. An unsigned local Windows x64 ZIP now contains install/uninstall entrypoints and a Start menu launcher for the dashboard and engine. The package was installed on this workstation, activated with schema-aware checks, launched, and used for the browser add/index/plan/run path. A separate signed-catalog verifier contract requires exact SHA-256 payload/catalog matching, CA-trusted publisher identity, pinned signer/root certificates, online revocation, and timestamped Windows Authenticode verification; no certificate or real signed package is available to pass it. Clean-account installation, low-tier hardware, signed distribution, and actual public acceptance remain open. The corrected local run has no automated failures but 29 UNTESTED workflows, so it does not establish public acceptance.
 
 Before public beta:
 

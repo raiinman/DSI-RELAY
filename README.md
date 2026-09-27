@@ -2,7 +2,7 @@
 
 Created by **RAiiNMAN**. RELAY's first-party source code and documentation are licensed under [MIT](LICENSE); see [creator credit](NOTICE-RELAY.txt).
 
-Project readers can review the [privacy statement](PRIVACY.md), [support guide](SUPPORT.md), and [security reporting policy](SECURITY.md). The held preview binary is not available for installation.
+Project readers can review the [privacy statement](PRIVACY.md), [support guide](SUPPORT.md), and [security reporting policy](SECURITY.md). The earlier public preview binary remains unpublished. A separate unsigned local Windows test package is available from the development line.
 
 DSI RELAY is a developing model-independent control and observability layer for game projects and creative toolchains.
 
@@ -10,9 +10,17 @@ The product exists to make AI-assisted development cheaper, more reliable, and e
 
 ## Status
 
-Phases 0–2 are complete. Construction continues on `development/relay-v0.1`, using [the roadmap](docs/ROADMAP.md) to order Phases 3–11. Phase 3 has a generic project index, watcher recovery, parser dispatch, and durable project lifecycle controls. Phase 4 compiles bounded stored-result and current task context. The local dashboard covers project approvals, diagnostics with safe recent events and a support-summary download, and declared checks. Other foundations include static UEFN inspection and separate local-editor discovery, project-local Verse log analysis, asset manifest and bounded Blender/Krita commands, first-run discovery with a bounded static audit, guarded indexed-check execution including direct file selection, and authenticated local MCP result reads. Interrupted Krita exports can be recorded as unverified recovery candidates. Unsigned local update and rollback inspect actual storage schema before changing the active version; disposable activation also checks daemon health. The installable all-in-one Windows experience is not finished: the current development line exposes the local daemon, CLI, and dashboard foundations rather than a completed end-user application. A local integrated run on 2026-09-27 recorded 14 PASS, 0 FAIL, 0 BLOCKED, and 29 UNTESTED across 43 workflows. Real creator-app, hardware, clean-account, and signed-distribution checks remain open. These foundations do not close the phases or establish a production release.
+Phases 0–2 are complete. Construction continues on `development/relay-v0.1`, using [the roadmap](docs/ROADMAP.md) to order Phases 3–11. The current Windows test package installs RELAY as one local program with a Start menu launcher, background engine, CLI, purple-and-gold workspace, and Diagnostics/Debug view. The workspace guides project setup and exposes truthful readiness for UEFN, Blender, and Krita. It uses the same commands as the CLI for indexing, project controls, asset checks, and declared file checks. The Core also has durable result/context storage, local discovery, bounded creator-tool adapters, and a local MCP gateway. These are real local capabilities, but live creator sessions, lower-tier hardware, clean-account install, and signed public distribution have not been accepted. Phases 3–11 remain open and this is not a production release.
 
-The build plan is to complete the documented workflows first, then use one integrated acceptance pass to measure them. Missing UEFN, creator-app, or specific hardware evidence is reported **UNTESTED**. With the daemon running, `relay dashboard-url` opens the current development dashboard; opening `crates/relayd/dashboard/index.html` directly is only opening the source file. The unpublished preview binary stays on hold; `main` remains unmerged.
+The corrected end-of-build integrated run on 2026-09-27 recorded 14 PASS, 0 FAIL, 0 BLOCKED, and 29 UNTESTED across 43 workflows on the installed local build. Missing UEFN, creator-app, or specific hardware evidence was never replaced with synthetic success. Open RELAY from the Start menu after installation; opening `crates/relayd/dashboard/index.html` directly only opens the source file and cannot connect to the engine. The unpublished preview binary stays on hold; `main` remains unmerged.
+
+## Install the local Windows test build
+
+1. Download or copy the unsigned `relay-0.1.0-windows-x64-local-test-installer.zip` produced by `packaging/Build-LocalTestPackage.ps1` on the development branch.
+2. Extract the ZIP and double-click `Install-RELAY.cmd` inside the extracted folder.
+3. Open **DSI RELAY** from the Windows Start menu. Follow the three setup steps to add a project folder and build its local index. The Diagnostics/Debug section shows status and safe support information.
+
+The extracted folder includes `Uninstall-RELAY.cmd`. Uninstall removes the program and shortcut while preserving project files and RELAY data. This package is unsigned and intended for local testing; it is not the held public binary. [Installation details](packaging/INSTALL-UPDATE-PLAN.md) explain the per-user location and update limits.
 
 ## Core product rules
 

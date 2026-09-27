@@ -141,6 +141,8 @@ foreach ($relative in $runtimeSkillFiles) {
     Assert-RegularFile $path
     Assert-NoPersonalPath $path
 }
+Assert-RegularFile (Join-Path $PSScriptRoot 'Launch-RELAY.ps1')
+Assert-NoPersonalPath (Join-Path $PSScriptRoot 'Launch-RELAY.ps1')
 foreach ($source in @('LICENSE', 'NOTICE-RELAY.txt', 'Cargo.lock')) {
     Assert-RegularFile (Join-Path $repoRoot $source)
 }
@@ -159,6 +161,12 @@ try {
 }
 finally { Pop-Location }
 $packages = @(Get-RuntimePackages $metadata)
+$runtimeVersions = @($metadata.packages | Where-Object {
+    $_.name -in @('relay', 'relayd', 'relay-gateway')
+} | Select-Object -ExpandProperty version -Unique)
+if ($runtimeVersions.Count -ne 1 -or $Version -cne [string]$runtimeVersions[0]) {
+    throw 'Package version must exactly match the CLI, daemon, and gateway runtime version'
+}
 
 if (-not (Test-Path -LiteralPath $outputRoot)) {
     $null = New-Item -ItemType Directory -Path $outputRoot
@@ -201,6 +209,7 @@ foreach ($relative in $runtimeSkillFiles) {
     }
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Verify-UnsignedStage.ps1') -Destination (Join-Path $payloadRoot 'verify-package.ps1')
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Launch-RELAY.ps1') -Destination (Join-Path $payloadRoot 'Launch-RELAY.ps1')
 
 $inventory = @()
 $unresolved = New-Object 'Collections.Generic.List[string]'
@@ -236,10 +245,9 @@ Created by RAiiNMAN. RELAY first-party source uses the MIT license in LICENSE.
 Third-party license texts and expressions are in THIRD-PARTY-INVENTORY.json
 and third-party/. Their legal completeness must be reviewed for this exact graph.
 
-This package has not been signed, installed, live-tested, or approved for public
-distribution. It does not contain an installer or updater. Do not run it as a
-published product. relay.exe, relayd.exe, and relay-gateway.exe are staged for
-local integration work. The compact local coding-agent skill is in
+This package has not been signed or approved for public distribution. Do not
+run it as a published product. relay.exe, relayd.exe, and relay-gateway.exe
+are staged for local integration work. The compact local coding-agent skill is in
 skills/relay-core/; its script calls the staged relay CLI through the shared
 command system. The gateway is an optional local MCP adapter; it is not a
 public or remote endpoint.
@@ -251,8 +259,9 @@ Verify the folder before use:
   powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-package.ps1
 
 No telemetry or upload runs during package assembly or verification.
-The per-user install/update/uninstall design is maintained in the source
-repository's packaging/INSTALL-UPDATE-PLAN.md.
+An outer local-test package may include a double-click installer for this
+archive. It uses the per-user side-by-side install path and creates a Start
+menu shortcut. The full design is in packaging/INSTALL-UPDATE-PLAN.md.
 "@
 Write-Utf8Lf (Join-Path $payloadRoot 'README.txt') ($readme + "`n")
 $unresolved.Add('THIRD_PARTY_NOTICE_LEGAL_REVIEW')

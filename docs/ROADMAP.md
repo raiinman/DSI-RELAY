@@ -236,7 +236,7 @@ Exit criteria:
 
 ## Phase 4 — Context and cost engine
 
-Status: Active early foundation — `result.describe` provides a project-scoped metadata-only lookup, and `result.context` selects exact scalar facts from an authorized durable result within a requested byte budget. These are first slices; the full Context Compiler, cost benchmarks, and Phase 4 exit criteria remain open. Evidence: `PHASE4_RESULT_DESCRIPTION_EVIDENCE.md` and `PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md`.
+Status: Active early foundation — `result.describe` provides a project-scoped metadata-only lookup, and `result.context` selects exact scalar facts from an authorized durable result within a requested byte budget. A first deterministic Context Gauntlet fixture measures exact retention and serialized bytes for stored results. The full Context Compiler, model/client cost benchmarks, and Phase 4 exit criteria remain open. Evidence: `PHASE4_RESULT_DESCRIPTION_EVIDENCE.md`, `PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md`, and `PHASE4_CONTEXT_GAUNTLET_FIRST_FIXTURE.md`.
 
 Build:
 

@@ -39,6 +39,7 @@ Own production RELAY Core deterministic local business logic and durable state.
 - Live installed-parser fixtures verify that a stale configuration guard cannot restore edges after a version change.
 - Result-description tests cover no payload/provenance exposure, UTF-8 byte size, project-scope denial, and restart persistence.
 - Result-context tests cover exact allowlisted facts, byte ceilings, deterministic ordering, unsafe path/token omission, full-payload size comparison, and project-scope denial.
+- The deterministic Context Gauntlet integration fixture stores and re-reads results through Core commands, compares serialized payload/context body bytes, asserts exact retained and omitted fields, and checks repeat output.
 
 # Child DOX Index
 

@@ -14,6 +14,7 @@ Own the versioned report model for one integrated end-of-build RELAY validation 
 - Preserve explicit reason codes, component versions, timing, resource use, opaque log references, and reproducible scenario identifiers. Never include raw logs, local paths, secrets, or free-form diagnostic text in the report.
 - Unknown environment availability, absent observations, and missing live evidence remain visible rather than being counted as passed.
 - An attempted workflow failure remains failed even if a required environment later becomes unavailable; an unattempted unavailable workflow remains untested.
+- Optional transport metrics name only the CLI stdin or local MCP HTTP path and count bounded application-JSON request/response bytes and elapsed milliseconds. They do not estimate model tokens, remote latency, or money saved.
 - The serialized integrated report can be deserialized for bounded local support-summary extraction; deserialization does not establish evidence authenticity.
 
 # Work Guidance

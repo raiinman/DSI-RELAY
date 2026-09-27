@@ -1,13 +1,16 @@
 use relay_contracts::CommandRequest;
-use relay_core::service::{ExtensionError, RelayCore};
+use relay_core::{policy::ExecutionAuthority, service::{ExtensionError, RelayCore, RuntimeContext}};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Local deterministic asset checks after Core validation and project scope checks.
-pub fn execute(
+pub fn execute_authorized(
     core: &RelayCore,
     request: &CommandRequest,
+    runtime: &RuntimeContext,
+    authority: &ExecutionAuthority,
 ) -> Option<Result<Value, ExtensionError>> {
     if !matches!(request.command.as_str(),
         "assets.manifest.validate" | "assets.krita.inspect" | "assets.impact.analyze"
@@ -29,14 +32,45 @@ pub fn execute(
     }
     if request.command == "assets.krita.export" {
         return Some((|| {
+            authority.require_permission("state_write").map_err(|error| {
+                ExtensionError::new(error.code, "build recording permission is not granted")
+            })?;
+            authority.require_effect("relay_state_write").map_err(|error| {
+                ExtensionError::new(error.code, "build recording effect is not granted")
+            })?;
             let root = core.trusted_project_root(project_id)?;
-            let source = project_existing_file(&root, request.arguments["source_path"].as_str()
-                .expect("shared registry validates source_path"), "kra")?;
-            let target = project_new_file(&root, request.arguments["export_path"].as_str()
-                .expect("shared registry validates export_path"), "png")?;
-            serde_json::to_value(relay_krita::export_png(&source, &target)).map_err(|_| {
+            let source_relative = request.arguments["source_path"].as_str()
+                .expect("shared registry validates source_path");
+            let export_relative = request.arguments["export_path"].as_str()
+                .expect("shared registry validates export_path");
+            let source = project_existing_file(&root, source_relative, "kra")?;
+            let target = project_new_file(&root, export_relative, "png")?;
+            let report = relay_krita::export_png(&source, &target);
+            let mut result = serde_json::to_value(&report).map_err(|_| {
                 ExtensionError::new("ASSET_SERIALIZATION_FAILED", "Krita export result is unavailable")
-            })
+            })?;
+            result["build_record_state"] = json!("not_attempted");
+            result["result_id"] = Value::Null;
+            result["source_identity_sha256"] = Value::Null;
+            result["export_identity_sha256"] = Value::Null;
+            if report.status == relay_krita::ExportStatus::Exported {
+                let source_identity = relative_identity_sha256(source_relative);
+                let export_identity = relative_identity_sha256(export_relative);
+                match record_krita_build(core, request, runtime, authority, &source_identity,
+                    &export_identity, &report) {
+                    Some(id) => {
+                        result["build_record_state"] = json!("stored");
+                        result["result_id"] = json!(id);
+                        result["source_identity_sha256"] = json!(source_identity);
+                        result["export_identity_sha256"] = json!(export_identity);
+                    }
+                    None => {
+                        return Err(ExtensionError::new("ASSET_BUILD_RECORD_FAILED",
+                            "PNG was published, but build evidence could not be stored; the output remains in place"));
+                    }
+                }
+            }
+            Ok(result)
         })());
     }
     let manifest_text = request.arguments["manifest_json"]
@@ -89,6 +123,65 @@ pub fn execute(
             )
         })
     })())
+}
+
+#[cfg(test)]
+fn execute(core: &RelayCore, request: &CommandRequest) -> Option<Result<Value, ExtensionError>> {
+    execute_authorized(core, request, &RuntimeContext::in_process(),
+        &ExecutionAuthority::local_user("asset-test"))
+}
+
+fn record_krita_build(
+    core: &RelayCore,
+    request: &CommandRequest,
+    runtime: &RuntimeContext,
+    authority: &ExecutionAuthority,
+    source_identity: &str,
+    export_identity: &str,
+    report: &relay_krita::ExportReport,
+) -> Option<String> {
+    let source_sha256 = report.source_sha256.as_ref()?;
+    let output_sha256 = report.output_sha256.as_ref()?;
+    let output_bytes = report.output_bytes?;
+    let mut request_hasher = Sha256::new();
+    request_hasher.update(b"relay-krita-build-request-v1\0");
+    request_hasher.update(request.request_id.as_bytes());
+    if let Some(key) = &request.idempotency_key {
+        request_hasher.update(b"\0");
+        request_hasher.update(key.as_bytes());
+    }
+    let request_digest: String = request_hasher.finalize().iter()
+        .map(|byte| format!("{byte:02x}")).collect();
+    let inner = CommandRequest {
+        request_id: format!("BUILD-{}", &request_digest[..32]),
+        command: "result.put".to_string(),
+        command_version: Some(1),
+        arguments: json!({
+            "project_id": request.arguments["project_id"],
+            "kind": "ASSET_KRITA_EXPORT_BUILD",
+            "payload": {
+                "schema_version": 1,
+                "source_identity_sha256": source_identity,
+                "export_identity_sha256": export_identity,
+                "source_sha256": source_sha256,
+                "output_sha256": output_sha256,
+                "output_bytes": output_bytes,
+                "native_workflow_status": "checked",
+                "export_status": "exported"
+            }
+        }),
+        idempotency_key: None,
+        context: request.context.clone(),
+    };
+    let stored = core.execute_authorized(inner, runtime, authority);
+    stored.ok.then(|| stored.result?["id"].as_str().map(str::to_string)).flatten()
+}
+
+fn relative_identity_sha256(relative: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"relay-project-relative-path-v1\0");
+    hasher.update(relative.as_bytes());
+    hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 fn project_blend_file(root: &Path, relative: &str) -> Result<PathBuf, ExtensionError> {
@@ -351,13 +444,94 @@ mod tests {
         assert!(project_new_file(&root, "../escape.png", "png").is_err());
         assert!(project_new_file(&root, "missing/export.png", "png").is_err());
         assert!(project_new_file(&root, "assets/export.kra", "png").is_err());
-        let result = serde_json::to_value(relay_krita::export_png(
+        let mut result = serde_json::to_value(relay_krita::export_png(
             Path::new("wrong.psd"), Path::new("unused.png"),
         )).unwrap();
+        result["build_record_state"] = json!("not_attempted");
+        result["result_id"] = Value::Null;
+        result["source_identity_sha256"] = Value::Null;
+        result["export_identity_sha256"] = Value::Null;
         let spec = relay_contracts::registry::resolve_command("assets.krita.export", Some(1)).unwrap();
         assert!(relay_contracts::registry::validate_value(&spec.result_schema, &result).is_ok());
         assert_eq!(result["native_workflow_status"], "untested");
         assert!(!result.to_string().contains(root.to_string_lossy().as_ref()));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn synthetic_krita_build_record_uses_shared_scoped_result_store() {
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let dir = std::env::temp_dir().join(format!("relay-krita-record-{}-{nonce}", std::process::id()));
+        let root = dir.join("project");
+        fs::create_dir_all(&root).unwrap();
+        let core = RelayCore::open(CoreConfig::new(dir.join("state")));
+        let runtime = RuntimeContext::in_process();
+        let registered = core.execute(request("project.register", json!({
+            "id": "PRJ-krita-record", "name": "Krita record", "root_uri": root.to_string_lossy()
+        })), &runtime);
+        assert!(registered.ok, "{registered:?}");
+        let outer = request("assets.krita.export", json!({
+            "project_id": "PRJ-krita-record", "source_path": "art/source.kra",
+            "export_path": "art/export.png"
+        }));
+        // This is a storage fixture only. It does not assert that Krita ran.
+        let fixture = relay_krita::ExportReport {
+            status: relay_krita::ExportStatus::Exported,
+            native_workflow_status: "checked", scope: "fixed_krita_kra_to_png_export",
+            message: "fixture", output_bytes: Some(128),
+            source_sha256: Some("a".repeat(64)), output_sha256: Some("b".repeat(64)),
+            source_changed: false, elapsed_ms: 1,
+        };
+        let source_identity = relative_identity_sha256("art/source.kra");
+        let export_identity = relative_identity_sha256("art/export.png");
+        let authority = ExecutionAuthority::local_user("CLIENT-local");
+        let id = record_krita_build(&core, &outer, &runtime, &authority,
+            &source_identity, &export_identity, &fixture).unwrap();
+        let mut command_result = serde_json::to_value(&fixture).unwrap();
+        command_result["build_record_state"] = json!("stored");
+        command_result["result_id"] = json!(id);
+        command_result["source_identity_sha256"] = json!(source_identity);
+        command_result["export_identity_sha256"] = json!(export_identity);
+        let spec = relay_contracts::registry::resolve_command("assets.krita.export", Some(1)).unwrap();
+        assert!(relay_contracts::registry::validate_value(&spec.result_schema, &command_result).is_ok());
+        let result = core.execute_authorized(request("result.get", json!({
+            "result_id": id
+        })), &runtime, &authority);
+        assert!(result.ok, "{result:?}");
+        let payload = &result.result.as_ref().unwrap()["payload"];
+        assert_eq!(payload["source_identity_sha256"], source_identity);
+        assert_eq!(payload["export_identity_sha256"], export_identity);
+        assert_eq!(payload["source_sha256"], "a".repeat(64));
+        assert_eq!(payload["output_sha256"], "b".repeat(64));
+        assert_eq!(result.result.as_ref().unwrap()["project_id"], "PRJ-krita-record");
+        assert!(!payload.to_string().contains("art/source.kra"));
+        assert!(!payload.to_string().contains("art/export.png"));
+        let mut denied = ExecutionAuthority::local_user("CLIENT-denied");
+        denied.permissions.remove("state_write");
+        assert!(record_krita_build(&core, &outer, &runtime, &denied,
+            &source_identity, &export_identity, &fixture).is_none());
+        let mut scoped_writer = ExecutionAuthority::local_user("CLIENT-other-project");
+        scoped_writer.project_ids = Some(["PRJ-other".to_string()].into_iter().collect());
+        assert!(record_krita_build(&core, &outer, &runtime, &scoped_writer,
+            &source_identity, &export_identity, &fixture).is_none());
+        denied.project_ids = Some(["PRJ-other".to_string()].into_iter().collect());
+        let scoped = core.execute_authorized(request("result.get", json!({
+            "result_id": id
+        })), &runtime, &denied);
+        assert_eq!(scoped.error.unwrap().code, "PROJECT_SCOPE_DENIED");
+        let partial = core.execute_authorized_with_extension(outer, &runtime, &authority, |_| {
+            Some(Err(ExtensionError::new("ASSET_BUILD_RECORD_FAILED",
+                "PNG was published, but build evidence could not be stored; the output remains in place")))
+        });
+        assert_eq!(partial.error.unwrap().code, "ASSET_BUILD_RECORD_FAILED");
+        let history = core.execute_authorized(request("transaction.list", json!({
+            "project_id": "PRJ-krita-record", "limit": 20
+        })), &runtime, &authority);
+        assert!(history.ok, "{history:?}");
+        assert!(history.result.unwrap()["transactions"].as_array().unwrap().iter().any(|item| {
+            item["command"] == "assets.krita.export" && item["state"] == "FAILED"
+        }));
+        drop(core);
         fs::remove_dir_all(dir).unwrap();
     }
 }

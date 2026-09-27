@@ -32,6 +32,7 @@ main:focus-visible { outline: 3px solid #146b53; outline-offset: 3px; }
 .diagnostic-guidance { margin: 1.5rem 0 0; }
 ul { list-style: none; padding: 0; margin-bottom: 0; }
 li { border-top: 1px solid #e3ece7; padding: .7rem 0; }
+#integrated-workflows li { overflow-wrap: anywhere; }
 #projects li { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
 #projects li strong { margin-right: auto; }
 #projects button { flex: none; font-size: .8rem; }

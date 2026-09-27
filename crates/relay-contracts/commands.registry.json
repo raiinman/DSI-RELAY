@@ -250,6 +250,78 @@
       "errors": ["PROJECT_NOT_FOUND", "INDEX_NOT_READY", "STORAGE_UNAVAILABLE", "UEFN_SERIALIZATION_FAILED", "INTEGRATION_UNAVAILABLE"]
     },
     {
+      "id": "uefn.editor.inspect",
+      "version": 1,
+      "stability": "phase6",
+      "summary": "Combine a registered project's ready-index counts with independent local UEFN MCP discovery. Editor identity and project binding remain unverified; entity, device, spawn, and session observations remain untested.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["schema_version", "project_id", "index_generation", "static_index", "local_mcp", "binding_state", "editor_identity_verified", "observations", "live_workflow_status"],
+        "properties": {
+          "schema_version": { "type": "integer", "const": 1 },
+          "project_id": { "type": "string" },
+          "index_generation": { "type": "integer", "minimum": 1 },
+          "static_index": {
+            "type": "object",
+            "required": ["marker_state", "project_marker_count", "verse_source_count", "generated_verse_count", "unreal_asset_count", "unreal_map_count", "rejected_index_path_count"],
+            "properties": {
+              "marker_state": { "type": "string", "enum": ["missing", "present", "ambiguous"] },
+              "project_marker_count": { "type": "integer", "minimum": 0 },
+              "verse_source_count": { "type": "integer", "minimum": 0 },
+              "generated_verse_count": { "type": "integer", "minimum": 0 },
+              "unreal_asset_count": { "type": "integer", "minimum": 0 },
+              "unreal_map_count": { "type": "integer", "minimum": 0 },
+              "rejected_index_path_count": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          },
+          "local_mcp": {
+            "type": "object",
+            "required": ["state", "reason_code", "protocol_version", "tool_count", "discovery_tools_advertised", "toolset_count", "toolset_names"],
+            "properties": {
+              "state": { "type": "string", "enum": ["discovered", "unavailable"] },
+              "reason_code": { "type": ["string", "null"] },
+              "protocol_version": { "type": ["string", "null"] },
+              "tool_count": { "type": ["integer", "null"], "minimum": 0 },
+              "discovery_tools_advertised": { "type": "boolean" },
+              "toolset_count": { "type": "integer", "minimum": 0, "maximum": 64 },
+              "toolset_names": { "type": "array", "maxItems": 64, "items": { "type": "string", "minLength": 1, "maxLength": 128 } }
+            },
+            "additionalProperties": false
+          },
+          "binding_state": { "type": "string", "const": "unverified" },
+          "editor_identity_verified": { "type": "boolean", "const": false },
+          "observations": {
+            "type": "object",
+            "required": ["entity", "device", "spawn", "session"],
+            "properties": {
+              "entity": { "type": "string", "const": "untested" },
+              "device": { "type": "string", "const": "untested" },
+              "spawn": { "type": "string", "const": "untested" },
+              "session": { "type": "string", "const": "untested" }
+            },
+            "additionalProperties": false
+          },
+          "live_workflow_status": { "type": "string", "const": "untested" }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["PROJECT_NOT_FOUND", "INDEX_NOT_READY", "STORAGE_UNAVAILABLE", "INTEGRATION_UNAVAILABLE"]
+    },
+    {
       "id": "uefn.mcp.discover",
       "version": 1,
       "stability": "phase6",
@@ -475,7 +547,7 @@
       "id": "assets.krita.export",
       "version": 1,
       "stability": "phase8",
-      "summary": "Create a new PNG from one project-local KRA using Krita's fixed command-line export.",
+      "summary": "Create a new PNG from one project-local KRA using Krita's fixed command-line export and store a build record. Requires project_write plus state_write/relay_state_write authority.",
       "effect_class": "project_write",
       "permission": "project_write",
       "idempotency": "keyed",
@@ -490,7 +562,7 @@
       },
       "result_schema": {
         "type": "object",
-        "required": ["status", "native_workflow_status", "scope", "message", "output_bytes", "source_sha256", "output_sha256", "source_changed", "elapsed_ms"],
+        "required": ["status", "native_workflow_status", "scope", "message", "output_bytes", "source_sha256", "output_sha256", "source_changed", "elapsed_ms", "build_record_state", "result_id", "source_identity_sha256", "export_identity_sha256"],
         "properties": {
           "status": { "type": "string", "enum": ["exported", "unavailable", "incomplete", "invalid_input", "tool_error"] },
           "native_workflow_status": { "type": "string", "enum": ["checked", "incomplete", "untested"] },
@@ -500,10 +572,14 @@
           "source_sha256": { "type": ["string", "null"], "minLength": 64, "maxLength": 64 },
           "output_sha256": { "type": ["string", "null"], "minLength": 64, "maxLength": 64 },
           "source_changed": { "type": "boolean" },
-          "elapsed_ms": { "type": "integer", "minimum": 0 }
+          "elapsed_ms": { "type": "integer", "minimum": 0 },
+          "build_record_state": { "type": "string", "enum": ["not_attempted", "stored"] },
+          "result_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+          "source_identity_sha256": { "type": ["string", "null"], "minLength": 64, "maxLength": 64 },
+          "export_identity_sha256": { "type": ["string", "null"], "minLength": 64, "maxLength": 64 }
         }, "additionalProperties": false
       },
-      "errors": ["PROJECT_NOT_FOUND", "PROJECT_ROOT_UNAVAILABLE", "STORAGE_UNAVAILABLE", "ASSET_PATH_INVALID", "ASSET_SERIALIZATION_FAILED", "INTEGRATION_UNAVAILABLE"]
+      "errors": ["PROJECT_NOT_FOUND", "PROJECT_ROOT_UNAVAILABLE", "STORAGE_UNAVAILABLE", "ASSET_PATH_INVALID", "ASSET_SERIALIZATION_FAILED", "ASSET_BUILD_RECORD_FAILED", "INTEGRATION_UNAVAILABLE"]
     },
     {
       "id": "assets.krita.inspect",
@@ -585,6 +661,48 @@
         "additionalProperties": false
       },
       "errors": ["PROJECT_NOT_FOUND", "STORAGE_UNAVAILABLE", "CAPTURE_INVALID", "ASSERTION_SPEC_INVALID", "INTEGRATION_UNAVAILABLE"]
+    },
+    {
+      "id": "runtime.capture.file.analyze",
+      "version": 1,
+      "stability": "phase7",
+      "summary": "Read one bounded project-relative Verse log file and evaluate local assertions; live UEFN remains untested.",
+      "effect_class": "analyze",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id", "session_id", "relative_path"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "session_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "relative_path": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "assertions": { "type": "array", "maxItems": 32, "items": { "type": "object" } }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["schema_version", "session_id", "source_kind", "source_version", "capture_ref", "counts", "quality", "assertions", "omitted_assertions", "live_uefn_status", "acquisition_kind", "capture_sha256", "capture_bytes"],
+        "properties": {
+          "schema_version": { "type": "integer", "const": 1 },
+          "session_id": { "type": "string" },
+          "source_kind": { "type": "string", "const": "imported_log" },
+          "source_version": { "type": "string", "const": "project-file-v1" },
+          "capture_ref": { "type": "string" },
+          "counts": { "type": "object" },
+          "quality": { "type": "object" },
+          "assertions": { "type": "array", "maxItems": 32, "items": { "type": "object" } },
+          "omitted_assertions": { "type": "integer", "minimum": 0 },
+          "live_uefn_status": { "type": "string", "const": "untested" },
+          "acquisition_kind": { "type": "string", "const": "project_local_file" },
+          "capture_sha256": { "type": "string" },
+          "capture_bytes": { "type": "integer", "minimum": 0, "maximum": 32768 }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["PROJECT_NOT_FOUND", "PROJECT_ROOT_UNAVAILABLE", "STORAGE_UNAVAILABLE", "CAPTURE_PATH_INVALID", "CAPTURE_FILE_UNAVAILABLE", "CAPTURE_FILE_TOO_LARGE", "CAPTURE_FILE_CHANGED", "CAPTURE_FILE_INVALID", "CAPTURE_INVALID", "ASSERTION_SPEC_INVALID", "INTEGRATION_UNAVAILABLE"]
     },
     {
       "id": "system.shutdown",
@@ -1736,6 +1854,126 @@
         "INDEX_EDGE_LIMIT_EXCEEDED",
         "STORAGE_UNAVAILABLE", "STORAGE_ERROR"
       ]
+    },
+    {
+      "id": "project.check_catalog.put",
+      "version": 1,
+      "stability": "phase10",
+      "summary": "Store a versioned project-scoped declaration of checks and their input paths.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id", "expected_revision", "catalog"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "expected_revision": { "type": "integer", "minimum": 0 },
+          "catalog": {
+            "type": "object",
+            "required": ["format_version", "checks"],
+            "properties": {
+              "format_version": { "type": "integer", "const": 1 },
+              "checks": { "type": "array", "minItems": 1, "maxItems": 128, "items": { "type": "object" } }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["project_id", "revision", "index_generation", "configuration_revision", "catalog_sha256", "check_count"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "revision": { "type": "integer", "minimum": 1 },
+          "index_generation": { "type": "integer", "minimum": 1 },
+          "configuration_revision": { "type": ["integer", "null"] },
+          "catalog_sha256": { "type": "string", "minLength": 64, "maxLength": 64 },
+          "check_count": { "type": "integer", "minimum": 1, "maximum": 128 }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["PROJECT_NOT_FOUND", "INDEX_BASELINE_MISSING", "CHECK_CATALOG_INVALID", "CHECK_CATALOG_CONFLICT", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "project.check_catalog.get",
+      "version": 1,
+      "stability": "phase10",
+      "summary": "Read the current project-scoped check declaration and revision.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": { "project_id": { "type": "string", "minLength": 1 } },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["project_id", "revision", "index_generation", "configuration_revision", "catalog_sha256", "catalog"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "revision": { "type": "integer", "minimum": 1 },
+          "index_generation": { "type": "integer", "minimum": 1 },
+          "configuration_revision": { "type": ["integer", "null"] },
+          "catalog_sha256": { "type": "string", "minLength": 64, "maxLength": 64 },
+          "catalog": { "type": "object" }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["PROJECT_NOT_FOUND", "CHECK_CATALOG_MISSING", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "automation.checks.plan",
+      "version": 1,
+      "stability": "phase10",
+      "summary": "Plan declared project checks from one index generation without executing them.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id", "after_generation"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "after_generation": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["project_id", "plan_id", "catalog_revision", "index_generation", "after_generation", "mode", "fallback_reason", "coverage_basis", "declared_check_count", "checks"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "plan_id": { "type": "string" },
+          "catalog_revision": { "type": "integer", "minimum": 1 },
+          "index_generation": { "type": "integer", "minimum": 1 },
+          "after_generation": { "type": "integer", "minimum": 0 },
+          "mode": { "type": "string", "enum": ["selective", "full_catalog_fallback"] },
+          "fallback_reason": { "type": ["string", "null"] },
+          "coverage_basis": { "type": "string" },
+          "declared_check_count": { "type": "integer", "minimum": 1 },
+          "checks": { "type": "array", "items": {
+            "type": "object",
+            "required": ["check_id", "planned_check_id", "status", "reason", "result_id"],
+            "properties": {
+              "check_id": { "type": "string" },
+              "planned_check_id": { "type": "string" },
+              "status": { "type": "string", "const": "planned_not_run" },
+              "reason": { "type": "string", "enum": ["changed_input", "coverage_fallback"] },
+              "result_id": { "type": ["string", "null"] }
+            },
+            "additionalProperties": false
+          } }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["PROJECT_NOT_FOUND", "INDEX_BASELINE_MISSING", "INDEX_GENERATION_CONFLICT", "CHECK_CATALOG_MISSING", "CHECK_CATALOG_INVALID", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
     },
     {
       "id": "project.capabilities",

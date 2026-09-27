@@ -15,7 +15,7 @@ Own Windows per-user package staging and the future signed-distribution verifica
 - Keep generated local staging output under ignored `packaging/out/`; never commit or upload an unsigned archive as a public binary.
 - Local installation requires an explicit unsigned-development opt-in, expected archive digest, verified extraction, declared storage schema compatibility, and stopped `relayd.exe` before activation or uninstall.
 - Install/update/uninstall uses per-user side-by-side version directories, inactive staging, one active pointer, schema-aware rollback, and durable-data preservation. Never delete an unverified version directory or a path outside the explicit program root.
-- `Verify-SignedDistribution.ps1` is a separate read-only release verifier for a detached SHA-256 Windows catalog over an exact payload folder. It requires a trusted Authenticode signature, exact catalog digest, expected publisher subject and signer/root thumbprints from a separately reviewed policy, a current non-revoked code-signing chain, and warning-free timestamped Windows SDK SignTool verification. It must fail closed without a real certificate and never turn unsigned local staging into a trusted package.
+- `Verify-SignedDistribution.ps1` is a separate read-only PowerShell 7.2+ Windows release verifier for a detached SHA-256 catalog over an exact payload folder. It requires a trusted Authenticode signature, exact catalog digest, expected publisher subject and signer/root thumbprints from a separately reviewed policy, a current non-revoked code-signing chain, and warning-free timestamped Windows SDK SignTool verification. It must fail closed without a real certificate and never turn unsigned local staging into a trusted package.
 
 # Work Guidance
 

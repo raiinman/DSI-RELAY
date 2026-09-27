@@ -16,6 +16,9 @@ Own the one end-of-build integrated validation runner and its bounded workflow p
 - Reserve a new report and sidecar journal path before launching; never overwrite existing output. Generated evidence is local and ignored by Git.
 - Bound child processes. Keep disposable daemon state in a current-user-only temporary directory, reject reparse points before recursive cleanup, and safely collect owned orphans on the next invocation.
 - The private daemon state is disposable; project source files are read but not modified by the plan.
+- The Phase 9 local discovery measurement compares one bounded `registry.list` JSON exchange through `relay exec --stdin` with the same query through the loopback MCP gateway. `transport_metrics` records only application JSON request/response byte counts and elapsed milliseconds; it excludes HTTP headers, bearer tokens, gateway startup, and any claim about AI token savings or remote ChatGPT compatibility. Missing or busy gateway remains `untested`.
+- The Phase 7 project-file capture workflow requires an explicitly supplied project-relative log path and matching session ID. It observes only bounded local file acquisition and analysis; absent input is `untested`, and a local pass never certifies a live UEFN session.
+- The Phase 10 check-plan scenario reads an existing catalog and verifies project/catalog generation and `planned_not_run` results without changing the creator's catalog. The disposable private host normally has no catalog, so that workflow stays `untested` with an explicit reason; a no-delta plan also stays `untested` for affected-only behavior. It never writes a fixture change to project content.
 
 # Work Guidance
 

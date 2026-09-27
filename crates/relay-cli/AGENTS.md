@@ -19,6 +19,7 @@ Own the canonical RELAY command-line client.
 - `relay discover` is an offline, read-only nearby project/tool candidate scan for first-run onboarding; it labels live integrations untested and is a bootstrap exception to shared command parity.
 - `relay onboard <project-folder>` composes shared project import and initial baseline commands. It reports the project ID even if baseline construction fails, so a partial import is never hidden.
 - `project-list --all`, `project-archive`, `project-restore`, and `project-remove` invoke shared lifecycle commands. Removal supplies the exact project-ID confirmation guard.
+- `check-catalog-put` reads a bounded local JSON file and invokes the shared revisioned project catalog write; `check-catalog-get` and `plan-checks` use shared read commands. Plans report only `planned_not_run` checks and an explicit full-catalog fallback when selective coverage is uncertain.
 - `relay parser-install` is an offline bootstrap maintenance path for a local parser package. It requires the daemon stopped, validates and copies a manifest and worker into RELAY state, then publishes a version-1 project grant with an explicit source-delivery opt-in. Normal parser dispatch still requires exact project configuration and is revalidated by the daemon on startup. This bootstrap path does not represent live command parity and must move behind a shared host operation before product beta.
 
 # Verification
@@ -39,11 +40,12 @@ Own the canonical RELAY command-line client.
 - `asset-impact` sends a bounded local manifest and changed project-relative paths through the shared structural impact command; it prints only affected IDs, reason codes, and the explicit creator-app state.
 - `blender-mesh-check` invokes the shared read-only native mesh command for one project-relative `.blend` file without accepting a caller-supplied executable or script.
 - `krita-inspect` sends that bounded manifest through the shared Krita declaration/link inspection command; native Krita execution remains untested.
-- `krita-export` explicitly invokes the shared create-only KRA-to-PNG project-write command with two project-relative paths; it cannot select an executable or script, and returns a nonzero exit when no PNG was published.
+- `krita-export` explicitly invokes the shared create-only KRA-to-PNG project-write command with two project-relative paths; it cannot select an executable or script, and returns a nonzero exit unless export and durable build recording both succeed. A successful response carries a `result_id` and source/export identity hashes that match its stored project-scoped build record.
 - `uefn-discover` invokes an explicit localhost-only MCP capability probe. `verse-analyze` sends a bounded imported capture and optional assertion file through the shared analysis command; it never labels the import as a live UEFN pass.
 - `uefn-toolsets` invokes the bounded discovery-only toolset command; it does not dispatch editor tools.
 - `uefn-describe` summarizes one advertised toolset's input shape through the shared discovery-only command.
 - `verse-record` records that imported analysis through shared `result.put` with an explicit imported kind and durable result ID; it still does not certify live gameplay.
+- `verse-file-analyze` sends an active project ID, session ID, and project-relative `.log`/`.jsonl` path through shared `runtime.capture.file.analyze`; the daemon reads and bounds the file. `verse-file-record` stores only that compact analysis through shared `result.put` with kind `PROJECT_FILE_VERSE_CAPTURE_ANALYSIS`. Neither route imports raw file text into a CLI command payload or calls it verified live UEFN evidence.
 - Offline parser installation rejects missing opt-in, over-permission, digest mismatch, duplicate project grant, and a running host; the daemon accepts the resulting staged grant after restart.
 
 # Child DOX Index

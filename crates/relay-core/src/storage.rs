@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const STORAGE_SCHEMA_VERSION: i64 = 8;
+pub const STORAGE_SCHEMA_VERSION: i64 = 9;
 static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,6 +115,51 @@ pub struct DependencyEdgeRecord {
     pub producer_id: String,
     pub producer_version: String,
     pub indexed_generation: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DependencyCoverageRecord {
+    pub project_id: String,
+    pub source_path: String,
+    pub source_sha256: String,
+    pub producer_id: String,
+    pub producer_version: String,
+    pub indexed_generation: i64,
+    pub configuration_revision: Option<i64>,
+    pub target_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct InvalidatedDependencyEdgeRecord {
+    pub project_id: String,
+    pub generation: i64,
+    pub source_path: String,
+    pub target_path: String,
+    pub source_sha256: String,
+    pub producer_id: String,
+    pub producer_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProjectCheckCatalogRecord {
+    pub project_id: String,
+    pub revision: i64,
+    pub index_generation: i64,
+    pub configuration_revision: Option<i64>,
+    pub catalog: Value,
+    pub catalog_sha256: String,
+}
+
+pub struct ProjectPlanSnapshot {
+    pub state: ProjectIndexState,
+    pub configuration: Option<ProjectConfiguration>,
+    pub catalog: ProjectCheckCatalogRecord,
+    pub files: Vec<IndexedFileSnapshot>,
+    pub changes: Vec<ProjectChangeRecord>,
+    pub edges: Vec<DependencyEdgeRecord>,
+    pub invalidations: Vec<InvalidatedDependencyEdgeRecord>,
+    pub coverage: Vec<DependencyCoverageRecord>,
+    pub bounds_exceeded: bool,
 }
 
 pub struct DependencyReplacement<'a> {
@@ -458,6 +503,9 @@ impl RelayStorage {
         }
         if self.schema_version()? < 8 {
             self.apply_schema_eight()?;
+        }
+        if self.schema_version()? < 9 {
+            self.apply_schema_nine()?;
         }
         Ok(())
     }
@@ -819,6 +867,52 @@ impl RelayStorage {
         tx.commit().map_err(|error| StorageError::sqlite("commit schema migration 8", error))
     }
 
+    fn apply_schema_nine(&mut self) -> Result<(), StorageError> {
+        let applied_at = sqlite_now(&self.conn)?;
+        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| StorageError::sqlite("begin schema-9 migration", error))?;
+        tx.execute_batch(
+            "CREATE TABLE project_dependency_coverage (
+               project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+               source_path TEXT NOT NULL,
+               source_sha256 TEXT NOT NULL,
+               producer_id TEXT NOT NULL,
+               producer_version TEXT NOT NULL,
+               indexed_generation INTEGER NOT NULL,
+               configuration_revision INTEGER,
+               target_count INTEGER NOT NULL CHECK(target_count >= 0),
+               updated_at TEXT NOT NULL,
+               PRIMARY KEY(project_id, source_path, producer_id)
+             );
+             CREATE TABLE project_dependency_edge_invalidations (
+               project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+               generation INTEGER NOT NULL,
+               source_path TEXT NOT NULL,
+               target_path TEXT NOT NULL,
+               source_sha256 TEXT NOT NULL,
+               producer_id TEXT NOT NULL,
+               producer_version TEXT NOT NULL,
+               PRIMARY KEY(project_id, generation, source_path, target_path, producer_id)
+             );
+             CREATE INDEX project_dependency_edge_invalidations_generation
+               ON project_dependency_edge_invalidations(project_id, generation);
+             CREATE TABLE project_check_catalog (
+               project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+               revision INTEGER NOT NULL CHECK(revision >= 1),
+               index_generation INTEGER NOT NULL,
+               configuration_revision INTEGER,
+               catalog_json TEXT NOT NULL,
+               catalog_sha256 TEXT NOT NULL,
+               updated_at TEXT NOT NULL
+             );"
+        ).map_err(|error| StorageError::sqlite("create dependency coverage", error))?;
+        tx.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
+            params![9i64, applied_at],
+        ).map_err(|error| StorageError::sqlite("record schema migration 9", error))?;
+        tx.commit().map_err(|error| StorageError::sqlite("commit schema migration 9", error))
+    }
+
     pub fn db_path(&self) -> &Path {
         &self.db_path
     }
@@ -1090,6 +1184,10 @@ impl RelayStorage {
         .map_err(|error| {
             StorageError::sqlite("invalidate edges after configuration change", error)
         })?;
+        tx.execute("DELETE FROM project_dependency_coverage WHERE project_id = ?1", [project_id])
+            .map_err(|error| StorageError::sqlite("invalidate parser coverage after configuration change", error))?;
+        tx.execute("DELETE FROM project_dependency_edge_invalidations WHERE project_id = ?1", [project_id])
+            .map_err(|error| StorageError::sqlite("invalidate edge history after configuration change", error))?;
         tx.commit()
             .map_err(|error| StorageError::sqlite("commit project configuration", error))?;
         self.get_project_configuration(project_id)?.ok_or_else(|| {
@@ -1132,14 +1230,20 @@ impl RelayStorage {
     pub fn mark_project_index_stale(&self, project_id: &str) -> Result<(), StorageError> {
         self.get_active_project(project_id)?;
         let now = sqlite_now(&self.conn)?;
-        self.conn
-            .execute(
+        let tx = self.conn.unchecked_transaction()
+            .map_err(|error| StorageError::sqlite("begin index continuity loss", error))?;
+        tx.execute(
                 "UPDATE project_index_state
              SET status = 'stale', content_verification_required = 1, updated_at = ?2
              WHERE project_id = ?1",
                 params![project_id, now],
             )
             .map_err(|error| StorageError::sqlite("mark project index stale", error))?;
+        tx.execute(
+            "DELETE FROM project_dependency_coverage WHERE project_id = ?1",
+            [project_id],
+        ).map_err(|error| StorageError::sqlite("invalidate coverage after continuity loss", error))?;
+        tx.commit().map_err(|error| StorageError::sqlite("commit index continuity loss", error))?;
         Ok(())
     }
 
@@ -1174,6 +1278,29 @@ impl RelayStorage {
                 .push(row.map_err(|error| StorageError::sqlite("decode project file row", error))?);
         }
         Ok(files)
+    }
+
+    fn list_project_files_bounded(
+        &self,
+        project_id: &str,
+        limit: usize,
+    ) -> Result<Vec<IndexedFileSnapshot>, StorageError> {
+        let mut statement = self.conn.prepare(
+            "SELECT relative_path, size_bytes, modified_unix_ns, content_sha256
+             FROM project_files WHERE project_id = ?1
+             ORDER BY relative_path LIMIT ?2",
+        ).map_err(|error| StorageError::sqlite("prepare bounded project files", error))?;
+        let rows = statement.query_map(
+            params![project_id, i64::try_from(limit).unwrap_or(i64::MAX)],
+            |row| Ok(IndexedFileSnapshot {
+                relative_path: row.get(0)?,
+                size_bytes: row.get::<_, i64>(1)?.max(0) as u64,
+                modified_unix_ns: row.get::<_, i64>(2)?.max(0) as u64,
+                content_sha256: row.get(3)?,
+            }),
+        ).map_err(|error| StorageError::sqlite("query bounded project files", error))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| StorageError::sqlite("decode bounded project files", error))
     }
 
     pub fn project_file_sha256(
@@ -1271,6 +1398,10 @@ impl RelayStorage {
             [project_id],
         )
         .map_err(|error| StorageError::sqlite("clear prior project dependencies", error))?;
+        tx.execute("DELETE FROM project_dependency_coverage WHERE project_id = ?1", [project_id])
+            .map_err(|error| StorageError::sqlite("clear prior parser coverage", error))?;
+        tx.execute("DELETE FROM project_dependency_edge_invalidations WHERE project_id = ?1", [project_id])
+            .map_err(|error| StorageError::sqlite("clear prior edge history", error))?;
 
         for file in files {
             tx.execute(
@@ -1392,6 +1523,32 @@ impl RelayStorage {
             .into_iter()
             .flatten()
             {
+                tx.execute(
+                    "INSERT OR IGNORE INTO project_dependency_edge_invalidations(
+                       project_id, generation, source_path, target_path,
+                       source_sha256, producer_id, producer_version
+                     ) SELECT project_id, ?3, source_path, target_path,
+                              source_sha256, producer_id, producer_version
+                       FROM project_dependency_edges
+                       WHERE project_id = ?1 AND (source_path = ?2 OR target_path = ?2)",
+                    params![project_id, path, next_generation],
+                )
+                .map_err(|error| StorageError::sqlite("record invalidated dependency edges", error))?;
+                tx.execute(
+                    "DELETE FROM project_dependency_coverage
+                     WHERE project_id = ?1 AND source_path IN (
+                       SELECT source_path FROM project_dependency_edges
+                       WHERE project_id = ?1 AND (source_path = ?2 OR target_path = ?2)
+                     )",
+                    params![project_id, path],
+                )
+                .map_err(|error| StorageError::sqlite("invalidate parser coverage for changed edge", error))?;
+                tx.execute(
+                    "DELETE FROM project_dependency_coverage
+                     WHERE project_id = ?1 AND source_path = ?2",
+                    params![project_id, path],
+                )
+                .map_err(|error| StorageError::sqlite("invalidate changed source parser coverage", error))?;
                 tx.execute(
                     "DELETE FROM project_dependency_edges
                      WHERE project_id = ?1
@@ -1705,6 +1862,17 @@ impl RelayStorage {
         }
 
         tx.execute(
+            "INSERT OR IGNORE INTO project_dependency_edge_invalidations(
+               project_id, generation, source_path, target_path,
+               source_sha256, producer_id, producer_version
+             ) SELECT project_id, ?4, source_path, target_path,
+                      source_sha256, producer_id, producer_version
+               FROM project_dependency_edges
+               WHERE project_id = ?1 AND source_path = ?2 AND producer_id = ?3",
+            params![project_id, source_path, producer_id, generation],
+        )
+        .map_err(|error| StorageError::sqlite("record replaced dependency edges", error))?;
+        tx.execute(
             "DELETE FROM project_dependency_edges
              WHERE project_id = ?1 AND source_path = ?2 AND producer_id = ?3",
             params![project_id, source_path, producer_id],
@@ -1729,6 +1897,32 @@ impl RelayStorage {
             )
             .map_err(|error| StorageError::sqlite("insert dependency edge", error))?;
         }
+        tx.execute(
+            "INSERT INTO project_dependency_coverage(
+               project_id, source_path, source_sha256, producer_id,
+               producer_version, indexed_generation, configuration_revision,
+               target_count, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(project_id, source_path, producer_id) DO UPDATE SET
+               source_sha256=excluded.source_sha256,
+               producer_version=excluded.producer_version,
+               indexed_generation=excluded.indexed_generation,
+               configuration_revision=excluded.configuration_revision,
+               target_count=excluded.target_count,
+               updated_at=excluded.updated_at",
+            params![
+                project_id,
+                source_path,
+                source_sha256,
+                producer_id,
+                producer_version,
+                generation,
+                configuration_guard.map(|(revision, _, _)| revision),
+                i64::try_from(targets.len()).unwrap_or(i64::MAX),
+                now,
+            ],
+        )
+        .map_err(|error| StorageError::sqlite("record parser coverage", error))?;
         tx.commit()
             .map_err(|error| StorageError::sqlite("commit dependency replacement", error))?;
         Ok(targets.len())
@@ -1776,6 +1970,178 @@ impl RelayStorage {
             edges.push(row.map_err(|error| StorageError::sqlite("decode dependency edge", error))?);
         }
         Ok(edges)
+    }
+
+    pub fn list_project_dependency_coverage(
+        &self,
+        project_id: &str,
+        limit: usize,
+    ) -> Result<Vec<DependencyCoverageRecord>, StorageError> {
+        let mut statement = self.conn.prepare(
+            "SELECT project_id, source_path, source_sha256, producer_id,
+                    producer_version, indexed_generation, configuration_revision, target_count
+             FROM project_dependency_coverage WHERE project_id = ?1
+             ORDER BY source_path, producer_id LIMIT ?2",
+        ).map_err(|error| StorageError::sqlite("prepare parser coverage list", error))?;
+        let rows = statement.query_map(
+            params![project_id, i64::try_from(limit).unwrap_or(i64::MAX)],
+            |row| Ok(DependencyCoverageRecord {
+                project_id: row.get(0)?,
+                source_path: row.get(1)?,
+                source_sha256: row.get(2)?,
+                producer_id: row.get(3)?,
+                producer_version: row.get(4)?,
+                indexed_generation: row.get(5)?,
+                configuration_revision: row.get(6)?,
+                target_count: row.get::<_, i64>(7)?.max(0) as u32,
+            }),
+        ).map_err(|error| StorageError::sqlite("query parser coverage", error))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| StorageError::sqlite("decode parser coverage", error))
+    }
+
+    pub fn list_project_dependency_invalidations_since(
+        &self,
+        project_id: &str,
+        after_generation: i64,
+        limit: usize,
+    ) -> Result<Vec<InvalidatedDependencyEdgeRecord>, StorageError> {
+        let mut statement = self.conn.prepare(
+            "SELECT project_id, generation, source_path, target_path, source_sha256,
+                    producer_id, producer_version
+             FROM project_dependency_edge_invalidations
+             WHERE project_id = ?1 AND generation > ?2
+             ORDER BY generation, source_path, target_path, producer_id LIMIT ?3",
+        ).map_err(|error| StorageError::sqlite("prepare dependency invalidation list", error))?;
+        let rows = statement.query_map(
+            params![project_id, after_generation, i64::try_from(limit).unwrap_or(i64::MAX)],
+            |row| Ok(InvalidatedDependencyEdgeRecord {
+                project_id: row.get(0)?,
+                generation: row.get(1)?,
+                source_path: row.get(2)?,
+                target_path: row.get(3)?,
+                source_sha256: row.get(4)?,
+                producer_id: row.get(5)?,
+                producer_version: row.get(6)?,
+            }),
+        ).map_err(|error| StorageError::sqlite("query dependency invalidations", error))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| StorageError::sqlite("decode dependency invalidations", error))
+    }
+
+    pub fn put_project_check_catalog(
+        &self,
+        project_id: &str,
+        expected_revision: i64,
+        catalog: &Value,
+    ) -> Result<ProjectCheckCatalogRecord, StorageError> {
+        self.get_active_project(project_id)?;
+        let catalog_json = json_text(catalog)?;
+        let catalog_sha256 = sha256_hex(catalog_json.as_bytes());
+        let now = sqlite_now(&self.conn)?;
+        let tx = self.conn.unchecked_transaction()
+            .map_err(|error| StorageError::sqlite("begin check catalog update", error))?;
+        let index_generation: i64 = tx.query_row(
+            "SELECT generation FROM project_index_state WHERE project_id = ?1",
+            [project_id], |row| row.get(0),
+        ).optional().map_err(|error| StorageError::sqlite("read check catalog index generation", error))?
+            .ok_or_else(|| StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing"))?;
+        let configuration_revision: Option<i64> = tx.query_row(
+            "SELECT revision FROM project_configuration WHERE project_id = ?1",
+            [project_id], |row| row.get(0),
+        ).optional().map_err(|error| StorageError::sqlite("read check catalog configuration revision", error))?;
+        let current_revision: Option<i64> = tx.query_row(
+            "SELECT revision FROM project_check_catalog WHERE project_id = ?1",
+            [project_id], |row| row.get(0),
+        ).optional().map_err(|error| StorageError::sqlite("read check catalog revision", error))?;
+        if current_revision.unwrap_or(0) != expected_revision {
+            return Err(StorageError::new(
+                "CHECK_CATALOG_CONFLICT",
+                "check catalog revision changed",
+            ));
+        }
+        let revision = expected_revision.checked_add(1)
+            .ok_or_else(|| StorageError::new("CHECK_CATALOG_CONFLICT", "check catalog revision exhausted"))?;
+        tx.execute(
+            "INSERT INTO project_check_catalog(project_id, revision, index_generation,
+               configuration_revision, catalog_json, catalog_sha256, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(project_id) DO UPDATE SET
+               revision=excluded.revision,
+               index_generation=excluded.index_generation,
+               configuration_revision=excluded.configuration_revision,
+               catalog_json=excluded.catalog_json,
+               catalog_sha256=excluded.catalog_sha256,
+               updated_at=excluded.updated_at",
+            params![project_id, revision, index_generation, configuration_revision,
+                    catalog_json, catalog_sha256, now],
+        ).map_err(|error| StorageError::sqlite("write check catalog", error))?;
+        tx.commit().map_err(|error| StorageError::sqlite("commit check catalog update", error))?;
+        self.get_project_check_catalog(project_id)?.ok_or_else(||
+            StorageError::new("STORAGE_ERROR", "check catalog disappeared after update"))
+    }
+
+    pub fn get_project_check_catalog(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<ProjectCheckCatalogRecord>, StorageError> {
+        self.conn.query_row(
+            "SELECT project_id, revision, index_generation, configuration_revision,
+                    catalog_json, catalog_sha256
+             FROM project_check_catalog WHERE project_id = ?1",
+            [project_id],
+            |row| {
+                let catalog_json: String = row.get(4)?;
+                let catalog_sha256: String = row.get(5)?;
+                if sha256_hex(catalog_json.as_bytes()) != catalog_sha256 {
+                    return Err(rusqlite::Error::FromSqlConversionFailure(
+                        5, rusqlite::types::Type::Text,
+                        Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, "check catalog digest mismatch")),
+                    ));
+                }
+                Ok(ProjectCheckCatalogRecord {
+                    project_id: row.get(0)?,
+                    revision: row.get(1)?,
+                    index_generation: row.get(2)?,
+                    configuration_revision: row.get(3)?,
+                    catalog: parse_json(&catalog_json, 4)?,
+                    catalog_sha256,
+                })
+            },
+        ).optional().map_err(|error| StorageError::sqlite("read check catalog", error))
+    }
+
+    pub fn project_plan_snapshot(
+        &self,
+        project_id: &str,
+        after_generation: i64,
+        max_items: usize,
+    ) -> Result<ProjectPlanSnapshot, StorageError> {
+        self.get_active_project(project_id)?;
+        let tx = self.conn.unchecked_transaction()
+            .map_err(|error| StorageError::sqlite("begin check plan snapshot", error))?;
+        let state = self.get_project_index_state(project_id)?
+            .ok_or_else(|| StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing"))?;
+        let configuration = self.get_project_configuration(project_id)?;
+        let catalog = self.get_project_check_catalog(project_id)?
+            .ok_or_else(|| StorageError::new("CHECK_CATALOG_MISSING", "project check catalog is missing"))?;
+        let changes = self.list_project_changes_since(project_id, after_generation, max_items + 1)?;
+        let edges = self.list_project_dependency_edges(project_id, None, max_items + 1)?;
+        let invalidations = self.list_project_dependency_invalidations_since(project_id, after_generation, max_items + 1)?;
+        let coverage = self.list_project_dependency_coverage(project_id, max_items + 1)?;
+        let files = if state.file_count <= max_items as u64 {
+            self.list_project_files_bounded(project_id, max_items + 1)?
+        } else {
+            Vec::new()
+        };
+        let bounds_exceeded = state.file_count > max_items as u64 || files.len() > max_items
+            || changes.len() > max_items || edges.len() > max_items
+            || invalidations.len() > max_items || coverage.len() > max_items;
+        tx.commit().map_err(|error| StorageError::sqlite("commit check plan snapshot", error))?;
+        Ok(ProjectPlanSnapshot {
+            state, configuration, catalog, files, changes, edges,
+            invalidations, coverage, bounds_exceeded,
+        })
     }
 
     pub fn put_result(
@@ -2696,7 +3062,7 @@ mod tests {
         drop(storage);
 
         let reopened = RelayStorage::open(&path).unwrap();
-        assert_eq!(reopened.schema_version().unwrap(), 8);
+        assert_eq!(reopened.schema_version().unwrap(), STORAGE_SCHEMA_VERSION);
         assert_eq!(reopened.get_project("PRJ-life").unwrap().unwrap().lifecycle_state, "removed");
         assert_eq!(reopened.get_job(&job.id).unwrap().unwrap().project_id.as_deref(), Some("PRJ-life"));
         drop(reopened);
@@ -2709,7 +3075,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 8);
+        assert_eq!(storage.schema_version().unwrap(), STORAGE_SCHEMA_VERSION);
         let project = storage
             .register_project(
                 Some("PRJ-production"),
@@ -2762,7 +3128,7 @@ mod tests {
         create_schema_one_fixture(&path);
 
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 8);
+        assert_eq!(storage.schema_version().unwrap(), STORAGE_SCHEMA_VERSION);
         let project = storage.get_project("PRJ-phase1").unwrap().unwrap();
         assert_eq!(project.name, "Phase 1 Fixture");
 
@@ -2803,7 +3169,7 @@ mod tests {
         create_schema_two_fixture(&path);
 
         let storage = RelayStorage::open(&path).unwrap();
-        assert_eq!(storage.schema_version().unwrap(), 8);
+        assert_eq!(storage.schema_version().unwrap(), STORAGE_SCHEMA_VERSION);
         let result = storage.get_result("RES-phase1").unwrap().unwrap();
         assert_eq!(result.payload["value"], 42);
         assert_eq!(result.trust, "local");
@@ -2910,7 +3276,7 @@ mod tests {
         drop(schema_three);
 
         let migrated = RelayStorage::open(&path).unwrap();
-        assert_eq!(migrated.schema_version().unwrap(), 8);
+        assert_eq!(migrated.schema_version().unwrap(), STORAGE_SCHEMA_VERSION);
         assert_eq!(
             migrated.get_project("PRJ-phase1").unwrap().unwrap().name,
             "Phase 1 Fixture"
@@ -3022,7 +3388,7 @@ mod tests {
         drop(schema_four);
 
         let migrated = RelayStorage::open(&path).unwrap();
-        assert_eq!(migrated.schema_version().unwrap(), 8);
+        assert_eq!(migrated.schema_version().unwrap(), STORAGE_SCHEMA_VERSION);
         let state = migrated
             .get_project_index_state("PRJ-schema4")
             .unwrap()
@@ -3089,7 +3455,7 @@ mod tests {
         drop(schema_five);
 
         let migrated = RelayStorage::open(&path).unwrap();
-        assert_eq!(migrated.schema_version().unwrap(), 8);
+        assert_eq!(migrated.schema_version().unwrap(), STORAGE_SCHEMA_VERSION);
         let state = migrated
             .get_project_index_state("PRJ-schema5")
             .unwrap()
@@ -3144,7 +3510,7 @@ mod tests {
         drop(schema_six);
 
         let migrated = RelayStorage::open(&path).unwrap();
-        assert_eq!(migrated.schema_version().unwrap(), 8);
+        assert_eq!(migrated.schema_version().unwrap(), STORAGE_SCHEMA_VERSION);
         assert!(
             migrated
                 .get_project_configuration("PRJ-schema6")
@@ -3258,7 +3624,7 @@ mod tests {
 
         drop(storage);
         let reopened = RelayStorage::open(&path).unwrap();
-        assert_eq!(reopened.schema_version().unwrap(), 8);
+        assert_eq!(reopened.schema_version().unwrap(), STORAGE_SCHEMA_VERSION);
         assert_eq!(
             reopened
                 .get_project_index_state("PRJ-index-a")
@@ -3268,6 +3634,97 @@ mod tests {
             2
         );
         assert_eq!(reopened.list_project_files("PRJ-index-b").unwrap(), b_files);
+        drop(reopened);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn parser_coverage_records_zero_edges_and_invalidation_history() {
+        let dir = temp_dir("parser-coverage");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("relay.sqlite3");
+        let storage = RelayStorage::open(&path).unwrap();
+        storage.register_project(Some("PRJ-coverage"), "Coverage", "file:///fixture").unwrap();
+        let files = [
+            IndexedFileSnapshot { relative_path: "source.txt".into(), size_bytes: 1, modified_unix_ns: 1, content_sha256: "a".repeat(64) },
+            IndexedFileSnapshot { relative_path: "empty.txt".into(), size_bytes: 1, modified_unix_ns: 1, content_sha256: "b".repeat(64) },
+            IndexedFileSnapshot { relative_path: "target.txt".into(), size_bytes: 1, modified_unix_ns: 1, content_sha256: "c".repeat(64) },
+        ];
+        storage.replace_project_baseline("PRJ-coverage", &files, 3).unwrap();
+        storage.replace_project_dependencies(DependencyReplacement {
+            project_id: "PRJ-coverage", expected_generation: 1,
+            source_path: "source.txt", expected_source_sha256: &files[0].content_sha256,
+            producer_id: "fixture", producer_version: "1", configuration_guard: None,
+            targets: &["target.txt".to_string()],
+        }).unwrap();
+        storage.replace_project_dependencies(DependencyReplacement {
+            project_id: "PRJ-coverage", expected_generation: 1,
+            source_path: "empty.txt", expected_source_sha256: &files[1].content_sha256,
+            producer_id: "fixture", producer_version: "1", configuration_guard: None,
+            targets: &[],
+        }).unwrap();
+        let coverage = storage.list_project_dependency_coverage("PRJ-coverage", 10).unwrap();
+        assert_eq!(coverage.len(), 2);
+        assert_eq!(coverage[0].source_path, "empty.txt");
+        assert_eq!(coverage[0].target_count, 0);
+        assert_eq!(coverage[1].target_count, 1);
+        drop(storage);
+
+        let storage = RelayStorage::open(&path).unwrap();
+        assert_eq!(storage.list_project_dependency_coverage("PRJ-coverage", 10).unwrap().len(), 2);
+        let changed_target = IndexedFileSnapshot { relative_path: "target.txt".into(), size_bytes: 2, modified_unix_ns: 2, content_sha256: "d".repeat(64) };
+        storage.apply_project_reconciliation(ProjectIndexCommit {
+            project_id: "PRJ-coverage", expected_generation: 1,
+            touched_files: &[changed_target.clone()],
+            changes: &[IndexChange {
+                change_kind: "modified".into(), relative_path: "target.txt".into(),
+                previous_path: None, before_sha256: Some(files[2].content_sha256.clone()),
+                after_sha256: Some(changed_target.content_sha256.clone()),
+            }],
+            file_count: 3, total_bytes: 4, mode: IndexCommitMode::Authoritative,
+            content_verified: false,
+        }).unwrap();
+        let coverage = storage.list_project_dependency_coverage("PRJ-coverage", 10).unwrap();
+        assert_eq!(coverage.len(), 1);
+        assert_eq!(coverage[0].source_path, "empty.txt");
+        let history = storage.list_project_dependency_invalidations_since("PRJ-coverage", 1, 10).unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].generation, 2);
+        assert_eq!(history[0].source_path, "source.txt");
+        assert_eq!(history[0].target_path, "target.txt");
+        storage.mark_project_index_stale("PRJ-coverage").unwrap();
+        assert!(storage.list_project_dependency_coverage("PRJ-coverage", 10).unwrap().is_empty());
+        storage.replace_project_baseline("PRJ-coverage", &[files[0].clone(), files[1].clone(), changed_target], 4).unwrap();
+        assert!(storage.list_project_dependency_coverage("PRJ-coverage", 10).unwrap().is_empty());
+        assert!(storage.list_project_dependency_invalidations_since("PRJ-coverage", 0, 10).unwrap().is_empty());
+        drop(storage);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn project_check_catalog_is_revisioned_and_digest_verified() {
+        let dir = temp_dir("check-catalog");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("relay.sqlite3");
+        let storage = RelayStorage::open(&path).unwrap();
+        storage.register_project(Some("PRJ-checks"), "Checks", "file:///fixture").unwrap();
+        storage.replace_project_baseline("PRJ-checks", &[], 0).unwrap();
+        let catalog = serde_json::json!({"format_version": 1, "checks": []});
+        let first = storage.put_project_check_catalog("PRJ-checks", 0, &catalog).unwrap();
+        assert_eq!(first.revision, 1);
+        assert_eq!(first.index_generation, 1);
+        assert_eq!(first.catalog, catalog);
+        assert_eq!(storage.put_project_check_catalog("PRJ-checks", 0, &catalog)
+            .unwrap_err().code, "CHECK_CATALOG_CONFLICT");
+        drop(storage);
+
+        let reopened = RelayStorage::open(&path).unwrap();
+        assert_eq!(reopened.get_project_check_catalog("PRJ-checks").unwrap().unwrap().revision, 1);
+        reopened.conn.execute(
+            "UPDATE project_check_catalog SET catalog_json = ?1 WHERE project_id = ?2",
+            params![r#"{"format_version":1,"checks":[{"id":"changed"}]}"#, "PRJ-checks"],
+        ).unwrap();
+        assert!(reopened.get_project_check_catalog("PRJ-checks").is_err());
         drop(reopened);
         fs::remove_dir_all(dir).unwrap();
     }

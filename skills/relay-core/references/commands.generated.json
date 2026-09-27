@@ -3,7 +3,7 @@
   "relay_version_family": "0.1",
   "registry_format": 1,
   "registry_id": "dsi.relay.commands",
-  "registry_sha256": "7935c78615503f168881bd1410d7ae4cdc7600a29f9207882a7123396ecb774c",
+  "registry_sha256": "cd8e51d5a33f242aced88dce50ac351fe796af1c296c75e5be95c7b1a834cf6d",
   "required_capabilities": [
     "system.status@1",
     "system.doctor@1",
@@ -42,6 +42,14 @@
       "version": 1,
       "summary": "Validate a bounded asset manifest and project-local source/export relationships without launching creator apps.",
       "effect_class": "analyze",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "automation.checks.plan",
+      "version": 1,
+      "summary": "Plan declared project checks from one index generation without executing them.",
+      "effect_class": "observe",
       "permission": "read",
       "idempotency": "safe"
     },
@@ -132,6 +140,22 @@
       "effect_class": "observe",
       "permission": "read",
       "idempotency": "safe"
+    },
+    {
+      "id": "project.check_catalog.get",
+      "version": 1,
+      "summary": "Read the current project-scoped check declaration and revision.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "project.check_catalog.put",
+      "version": 1,
+      "summary": "Store a versioned project-scoped declaration of checks and their input paths.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed"
     },
     {
       "id": "project.configuration.get",
@@ -294,6 +318,14 @@
       "idempotency": "safe"
     },
     {
+      "id": "runtime.capture.file.analyze",
+      "version": 1,
+      "summary": "Read one bounded project-relative Verse log file and evaluate local assertions; live UEFN remains untested.",
+      "effect_class": "analyze",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
       "id": "storage.integrity",
       "version": 1,
       "summary": "Run SQLite quick_check and report the operational schema/version state.",
@@ -321,6 +353,14 @@
       "id": "transaction.list",
       "version": 1,
       "summary": "List recent durable transaction records within the granted project scope.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "uefn.editor.inspect",
+      "version": 1,
+      "summary": "Combine a registered project's ready-index counts with independent local UEFN MCP discovery. Editor identity and project binding remain unverified; entity, device, spawn, and session observations remain untested.",
       "effect_class": "observe",
       "permission": "read",
       "idempotency": "safe"

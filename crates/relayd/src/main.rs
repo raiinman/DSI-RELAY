@@ -353,7 +353,7 @@ fn run() -> Result<(), String> {
         let response =
             core.execute_authorized_with_extension(request, &runtime, &authority, |request| {
                 uefn::execute(&core, request)
-                    .or_else(|| assets::execute(&core, request))
+                    .or_else(|| assets::execute_authorized(&core, request, &runtime, &authority))
                     .or_else(|| verse::execute(&core, request))
             });
         let accepted_shutdown = should_shutdown && response.ok;

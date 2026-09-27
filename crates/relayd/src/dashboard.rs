@@ -314,7 +314,7 @@ fn handle_request(
                 &authority,
                 |request| {
                     crate::uefn::execute(core, request)
-                        .or_else(|| crate::assets::execute(core, request))
+                        .or_else(|| crate::assets::execute_authorized(core, request, &runtime, &authority))
                         .or_else(|| crate::verse::execute(core, request))
                 },
             );

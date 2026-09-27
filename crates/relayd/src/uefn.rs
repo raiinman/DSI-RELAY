@@ -8,12 +8,42 @@ pub fn execute(
     core: &RelayCore,
     request: &CommandRequest,
 ) -> Option<Result<Value, ExtensionError>> {
+    if request.command == "uefn.editor.inspect" {
+        let project_id = request.arguments["project_id"]
+            .as_str()
+            .expect("shared registry validates project_id");
+        let port = request
+            .arguments
+            .get("port")
+            .and_then(Value::as_u64)
+            .unwrap_or(8000) as u16;
+        return Some(core.ready_index_snapshot(project_id).map(|snapshot| {
+            let inspection = relay_uefn::inspect(StaticProjectInput {
+                project_id: project_id.to_string(),
+                index_generation: snapshot.generation,
+                relative_paths: snapshot.relative_paths,
+            });
+            let mcp = local_mcp_capabilities(port);
+            combined_inspection(&inspection, mcp)
+        }));
+    }
     if request.command == "uefn.mcp.describe_toolset" {
-        let port = request.arguments.get("port").and_then(Value::as_u64).unwrap_or(8000) as u16;
-        let toolset_name = request.arguments["toolset_name"].as_str().expect("registry validates name");
+        let port = request
+            .arguments
+            .get("port")
+            .and_then(Value::as_u64)
+            .unwrap_or(8000) as u16;
+        let toolset_name = request.arguments["toolset_name"]
+            .as_str()
+            .expect("registry validates name");
         let endpoint = match relay_uefn_mcp::LocalEndpoint::new(port, "/mcp") {
             Ok(endpoint) => endpoint,
-            Err(_) => return Some(Err(ExtensionError::new("UEFN_ENDPOINT_INVALID", "UEFN local endpoint is invalid"))),
+            Err(_) => {
+                return Some(Err(ExtensionError::new(
+                    "UEFN_ENDPOINT_INVALID",
+                    "UEFN local endpoint is invalid",
+                )))
+            }
         };
         let mut client = match relay_uefn_mcp::UefnMcpClient::connect(endpoint) {
             Ok(client) => client,
@@ -39,10 +69,19 @@ pub fn execute(
         }));
     }
     if request.command == "uefn.mcp.toolsets" {
-        let port = request.arguments.get("port").and_then(Value::as_u64).unwrap_or(8000) as u16;
+        let port = request
+            .arguments
+            .get("port")
+            .and_then(Value::as_u64)
+            .unwrap_or(8000) as u16;
         let endpoint = match relay_uefn_mcp::LocalEndpoint::new(port, "/mcp") {
             Ok(endpoint) => endpoint,
-            Err(_) => return Some(Err(ExtensionError::new("UEFN_ENDPOINT_INVALID", "UEFN local endpoint is invalid"))),
+            Err(_) => {
+                return Some(Err(ExtensionError::new(
+                    "UEFN_ENDPOINT_INVALID",
+                    "UEFN local endpoint is invalid",
+                )))
+            }
         };
         let mut client = match relay_uefn_mcp::UefnMcpClient::connect(endpoint) {
             Ok(client) => client,
@@ -114,6 +153,86 @@ pub fn execute(
     }))
 }
 
+/// Project-index facts and an independent localhost MCP probe must never be
+/// presented as an authenticated observation of the same open UEFN project.
+fn combined_inspection(inspection: &relay_uefn::StaticInspection, local_mcp: Value) -> Value {
+    serde_json::json!({
+        "schema_version": 1,
+        "project_id": inspection.project_id,
+        "index_generation": inspection.index_generation,
+        "static_index": {
+            "marker_state": inspection.marker_state,
+            "project_marker_count": inspection.project_marker_count,
+            "verse_source_count": inspection.verse_source_count,
+            "generated_verse_count": inspection.generated_verse_count,
+            "unreal_asset_count": inspection.unreal_asset_count,
+            "unreal_map_count": inspection.unreal_map_count,
+            "rejected_index_path_count": inspection.rejected_index_path_count
+        },
+        "local_mcp": local_mcp,
+        "binding_state": "unverified",
+        "editor_identity_verified": false,
+        "observations": {
+            "entity": "untested",
+            "device": "untested",
+            "spawn": "untested",
+            "session": "untested"
+        },
+        "live_workflow_status": "untested"
+    })
+}
+
+fn local_mcp_capabilities(port: u16) -> Value {
+    let endpoint = match relay_uefn_mcp::LocalEndpoint::new(port, "/mcp") {
+        Ok(endpoint) => endpoint,
+        Err(_) => return local_mcp_unavailable("UEFN_ENDPOINT_INVALID"),
+    };
+    let mut client = match relay_uefn_mcp::UefnMcpClient::connect(endpoint) {
+        Ok(client) => client,
+        Err(error) => return local_mcp_unavailable(mcp_reason_code(&error)),
+    };
+    let protocol_version = client.protocol_version().to_string();
+    let catalog = match client.list_tools() {
+        Ok(catalog) => catalog,
+        Err(error) => return local_mcp_unavailable(mcp_reason_code(&error)),
+    };
+    let discovery_tools_advertised =
+        catalog.has("list_toolsets") && catalog.has("describe_toolset");
+    let tool_count = catalog.names.len();
+    match client.list_toolset_summaries() {
+        Ok(summary) => serde_json::json!({
+            "state": "discovered",
+            "reason_code": Value::Null,
+            "protocol_version": protocol_version,
+            "tool_count": tool_count,
+            "discovery_tools_advertised": discovery_tools_advertised,
+            "toolset_count": summary.names.len(),
+            "toolset_names": summary.names
+        }),
+        Err(error) => serde_json::json!({
+            "state": "unavailable",
+            "reason_code": mcp_reason_code(&error),
+            "protocol_version": protocol_version,
+            "tool_count": tool_count,
+            "discovery_tools_advertised": discovery_tools_advertised,
+            "toolset_count": 0,
+            "toolset_names": []
+        }),
+    }
+}
+
+fn local_mcp_unavailable(reason_code: &'static str) -> Value {
+    serde_json::json!({
+        "state": "unavailable",
+        "reason_code": reason_code,
+        "protocol_version": Value::Null,
+        "tool_count": Value::Null,
+        "discovery_tools_advertised": false,
+        "toolset_count": 0,
+        "toolset_names": []
+    })
+}
+
 fn toolset_description_unavailable(name: &str, error: &relay_uefn_mcp::ClientError) -> Value {
     serde_json::json!({
         "state": "unavailable",
@@ -137,15 +256,7 @@ fn toolsets_unavailable(error: &relay_uefn_mcp::ClientError) -> Value {
 }
 
 fn discovery_unavailable(error: &relay_uefn_mcp::ClientError) -> Value {
-    let reason_code = match error {
-        relay_uefn_mcp::ClientError::UnsupportedProtocol => "UEFN_MCP_PROTOCOL_UNSUPPORTED",
-        relay_uefn_mcp::ClientError::Transport | relay_uefn_mcp::ClientError::HttpStatus(_) => {
-            "UEFN_MCP_UNAVAILABLE"
-        }
-        relay_uefn_mcp::ClientError::ToolsUnavailable => "UEFN_MCP_TOOLS_UNAVAILABLE",
-        relay_uefn_mcp::ClientError::ToolLimit => "UEFN_MCP_TOOL_LIMIT",
-        _ => "UEFN_MCP_DISCOVERY_FAILED",
-    };
+    let reason_code = mcp_reason_code(error);
     serde_json::json!({
         "state": "unavailable",
         "reason_code": reason_code,
@@ -155,4 +266,62 @@ fn discovery_unavailable(error: &relay_uefn_mcp::ClientError) -> Value {
         "editor_identity_verified": false,
         "live_workflow_status": "untested"
     })
+}
+
+fn mcp_reason_code(error: &relay_uefn_mcp::ClientError) -> &'static str {
+    match error {
+        relay_uefn_mcp::ClientError::UnsupportedProtocol => "UEFN_MCP_PROTOCOL_UNSUPPORTED",
+        relay_uefn_mcp::ClientError::Transport | relay_uefn_mcp::ClientError::HttpStatus(_) => {
+            "UEFN_MCP_UNAVAILABLE"
+        }
+        relay_uefn_mcp::ClientError::ToolsUnavailable => "UEFN_MCP_TOOLS_UNAVAILABLE",
+        relay_uefn_mcp::ClientError::ToolLimit => "UEFN_MCP_TOOL_LIMIT",
+        _ => "UEFN_MCP_DISCOVERY_FAILED",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn combined_snapshot_keeps_local_mcp_unbound_and_omits_index_paths() {
+        let static_inspection = relay_uefn::inspect(StaticProjectInput {
+            project_id: "project-one".to_string(),
+            index_generation: 7,
+            relative_paths: vec![
+                "Island.uefnproject".to_string(),
+                "Private/Gameplay.verse".to_string(),
+            ],
+        });
+        let combined = combined_inspection(
+            &static_inspection,
+            serde_json::json!({
+                "state": "discovered",
+                "reason_code": null,
+                "protocol_version": "2025-06-18",
+                "tool_count": 3,
+                "discovery_tools_advertised": true,
+                "toolset_count": 1,
+                "toolset_names": ["Example"]
+            }),
+        );
+        assert_eq!(combined["static_index"]["verse_source_count"], 1);
+        assert_eq!(combined["binding_state"], "unverified");
+        assert_eq!(combined["editor_identity_verified"], false);
+        assert_eq!(combined["observations"]["entity"], "untested");
+        assert_eq!(combined["observations"]["spawn"], "untested");
+        assert!(!combined.to_string().contains("Private/Gameplay.verse"));
+        assert!(!combined.to_string().contains("Island.uefnproject"));
+        let spec =
+            relay_contracts::registry::resolve_command("uefn.editor.inspect", Some(1)).unwrap();
+        assert!(relay_contracts::registry::validate_value(&spec.result_schema, &combined).is_ok());
+        let unavailable = combined_inspection(
+            &static_inspection,
+            local_mcp_unavailable("UEFN_MCP_UNAVAILABLE"),
+        );
+        assert!(
+            relay_contracts::registry::validate_value(&spec.result_schema, &unavailable).is_ok()
+        );
+    }
 }

@@ -272,6 +272,23 @@ Common diagnostic output should be concise by default and include structured det
 Normal supported workflows should not require users/agents to memorize internal daemon, database, IPC, adapter-broker, or policy implementation details.
 
 
+## Krita build identity
+
+`relay krita-export` returns a project-scoped build `result_id` after a successful
+create-only export. It requires `project_write` for publication and
+`state_write`/`relay_state_write` for the build record before the native command
+starts. The response and stored build payload share
+`source_identity_sha256` and `export_identity_sha256`, so the original source and
+export request can be matched to the record without returning filenames. Each
+record can be retrieved with `relay result-get <result-id>`. Each identity is
+SHA-256 over the UTF-8 bytes of
+`relay-project-relative-path-v1` followed by a zero byte and the validated
+project-relative path exactly as supplied to the command. File-content hashes
+are separate fields. If the PNG is published but its Result Store write fails,
+the command returns `ASSET_BUILD_RECORD_FAILED`; the PNG remains in place and
+the transaction is marked failed. A process crash between file publication and
+record storage has no automatic reconciliation yet.
+
 ## CLI contract versioning
 
 Human-readable CLI text is not a stable parsing surface.

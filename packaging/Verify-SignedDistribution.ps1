@@ -1,3 +1,5 @@
+#requires -Version 7.2
+
 param(
     [string]$PayloadDirectory,
     [string]$CatalogPath,

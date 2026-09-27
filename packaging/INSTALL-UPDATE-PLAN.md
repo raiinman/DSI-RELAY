@@ -14,6 +14,7 @@ with Windows `New-FileCatalog -CatalogVersion 2.0` over the completed payload,
 then sign and RFC 3161 timestamp the catalog with a reviewed CA-issued code
 signing certificate. `Verify-SignedDistribution.ps1` is a separate read-only
 gate for that layout; it does not sign or install anything.
+It requires PowerShell 7.2 or newer on Windows.
 
 Release policy must supply the exact SHA-256 digest of `payload.cat`, signer
 certificate subject and thumbprint, and trusted CA root thumbprint from an

@@ -186,7 +186,7 @@ fn execute_human(request: CommandRequest, json_output: bool, view: &str) -> Resu
 fn run(args: &[String]) -> Result<i32, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Err(
-            "usage: relay <status|doctor|diagnostics|pause|resume|support-bundle|discover|onboard|dashboard-url|commands|project-list|project-register|project-archive|project-restore|project-remove|context-compile|uefn-inspect|uefn-audit|uefn-discover|uefn-toolsets|uefn-describe|verse-analyze|verse-record|asset-validate|asset-impact|blender-mesh-check|krita-inspect|krita-export|parser-install|result-list|result-get|job-list|job-get|shutdown|exec>"
+            "usage: relay <status|doctor|diagnostics|pause|resume|support-bundle|discover|onboard|dashboard-url|commands|project-list|project-register|project-archive|project-restore|project-remove|check-catalog-put|check-catalog-get|plan-checks|context-compile|uefn-inspect|uefn-audit|uefn-discover|uefn-toolsets|uefn-describe|verse-analyze|verse-record|verse-file-analyze|verse-file-record|asset-validate|asset-impact|blender-mesh-check|krita-inspect|krita-export|parser-install|result-list|result-get|job-list|job-get|shutdown|exec>"
                 .to_string(),
         );
     };
@@ -401,6 +401,64 @@ fn run(args: &[String]) -> Result<i32, String> {
                 "default",
             )
         }
+        "check-catalog-put" => {
+            if !matches!(args.len(), 4 | 5) || args[1..4].iter().any(|arg| arg.starts_with("--"))
+                || (args.len() == 5 && args[4] != "--json") {
+                return Err("usage: relay check-catalog-put <project-id> <expected-revision> <catalog.json> [--json]".to_string());
+            }
+            let expected_revision = args[2].parse::<i64>()
+                .map_err(|_| "expected revision must be a nonnegative number".to_string())?;
+            if expected_revision < 0 {
+                return Err("expected revision must be a nonnegative number".to_string());
+            }
+            let metadata = fs::symlink_metadata(&args[3])
+                .map_err(|_| "check catalog file is unavailable".to_string())?;
+            if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() > 128 * 1024 {
+                return Err("check catalog file is invalid or too large".to_string());
+            }
+            let mut catalog_bytes = Vec::new();
+            fs::File::open(&args[3])
+                .map_err(|_| "check catalog file could not be read".to_string())?
+                .take(128 * 1024 + 1)
+                .read_to_end(&mut catalog_bytes)
+                .map_err(|_| "check catalog file could not be read".to_string())?;
+            if catalog_bytes.len() > 128 * 1024 {
+                return Err("check catalog file is too large".to_string());
+            }
+            let catalog: Value = serde_json::from_slice(&catalog_bytes)
+                .map_err(|_| "check catalog is invalid JSON".to_string())?;
+            let req_id = request_id();
+            execute_human(CommandRequest {
+                request_id: req_id.clone(),
+                command: "project.check_catalog.put".to_string(),
+                command_version: Some(1),
+                arguments: json!({"project_id": args[1], "expected_revision": expected_revision, "catalog": catalog}),
+                idempotency_key: Some(format!("CLI-{req_id}")),
+                context: RequestContext::default(),
+            }, has_json_flag(args), "default")
+        }
+        "check-catalog-get" => {
+            if !matches!(args.len(), 2 | 3) || args[1].starts_with("--")
+                || (args.len() == 3 && args[2] != "--json") {
+                return Err("usage: relay check-catalog-get <project-id> [--json]".to_string());
+            }
+            execute_human(make_request("project.check_catalog.get", json!({"project_id": args[1]}), None),
+                has_json_flag(args), "default")
+        }
+        "plan-checks" => {
+            if !matches!(args.len(), 3 | 4) || args[1..3].iter().any(|arg| arg.starts_with("--"))
+                || (args.len() == 4 && args[3] != "--json") {
+                return Err("usage: relay plan-checks <project-id> <after-generation> [--json]".to_string());
+            }
+            let after_generation = args[2].parse::<i64>()
+                .map_err(|_| "after-generation must be a nonnegative number".to_string())?;
+            if after_generation < 0 {
+                return Err("after-generation must be a nonnegative number".to_string());
+            }
+            execute_human(make_request("automation.checks.plan",
+                json!({"project_id": args[1], "after_generation": after_generation}), None),
+                has_json_flag(args), "default")
+        }
         "project-archive" | "project-restore" | "project-remove" => {
             let project_id = args.get(1).filter(|arg| !arg.starts_with("--"))
                 .ok_or_else(|| format!("usage: relay {command} <project-id> [--json]"))?;
@@ -540,6 +598,47 @@ fn run(args: &[String]) -> Result<i32, String> {
                 arguments: json!({
                     "project_id": args[1],
                     "kind": "IMPORTED_VERSE_CAPTURE_ANALYSIS",
+                    "payload": payload
+                }),
+                idempotency_key: Some(format!("CLI-{req_id}")),
+                context: RequestContext::default(),
+            })?;
+            if has_json_flag(args) { print_machine(&recorded); } else { print_human(&recorded); }
+            Ok(if recorded.ok { 0 } else { 2 })
+        }
+        "verse-file-analyze" | "verse-file-record" => {
+            if args.len() < 4 || args.len() > 6 {
+                return Err("usage: relay <verse-file-analyze|verse-file-record> <project-id> <session-id> <project-relative-log-path> [assertions.json] [--json]".to_string());
+            }
+            let assertions = if args.get(4).is_some_and(|arg| arg != "--json") {
+                let bytes = fs::read(&args[4])
+                    .map_err(|_| "assertion file could not be read".to_string())?;
+                if bytes.len() > 8192 {
+                    return Err("assertion file exceeds the local command size limit".to_string());
+                }
+                serde_json::from_slice::<Value>(&bytes)
+                    .map_err(|_| "assertion file is not valid JSON".to_string())?
+            } else {
+                json!([])
+            };
+            let analysis = invoke(&make_request("runtime.capture.file.analyze", json!({
+                "project_id": args[1], "session_id": args[2],
+                "relative_path": args[3], "assertions": assertions
+            }), None))?;
+            if command == "verse-file-analyze" || !analysis.ok {
+                if has_json_flag(args) { print_machine(&analysis); } else { print_human(&analysis); }
+                return Ok(if analysis.ok { 0 } else { 2 });
+            }
+            let payload = analysis.result
+                .ok_or_else(|| "Verse file analysis returned no result".to_string())?;
+            let req_id = request_id();
+            let recorded = invoke(&CommandRequest {
+                request_id: req_id.clone(),
+                command: "result.put".to_string(),
+                command_version: Some(1),
+                arguments: json!({
+                    "project_id": args[1],
+                    "kind": "PROJECT_FILE_VERSE_CAPTURE_ANALYSIS",
                     "payload": payload
                 }),
                 idempotency_key: Some(format!("CLI-{req_id}")),

@@ -134,6 +134,8 @@ RELAY should:
 - compare with baseline/previous results
 - surface regressions
 
+Current planning foundation: a creator can register a revisioned check catalog with project-relative parser roots and declared leaf paths. RELAY records successful parser coverage, including observations with no dependency edges, and keeps bounded-query history of edges invalidated by index changes. A read-only plan uses one index snapshot. It selects checks only when the declared inputs and guarded parser coverage are complete; otherwise it proposes the entire declared catalog with a fixed fallback reason. Every proposed check is `planned_not_run`, has no result ID, and is not executed by this command. A catalog declaration is not proof that all real project checks were listed. A live affected-only workflow remains untested.
+
 ## Visual regression
 
 Where captures are available:

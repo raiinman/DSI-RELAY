@@ -3,6 +3,7 @@ use crate::diagnostics::{
     DiagnosticConfig, DiagnosticEvent, DiagnosticHealth, JsonlDiagnostics, Severity,
 };
 use crate::indexing;
+use crate::planner;
 use crate::policy::{
     CredentialHandle, DataClass, EgressDecision, EgressRequest, ExecutionAuthority,
 };
@@ -1220,6 +1221,9 @@ impl RelayCore {
             "project.changes" => self.project_changes(&request.arguments),
             "project.dependencies.replace" => self.project_dependencies_replace(&request.arguments),
             "project.dependencies.list" => self.project_dependencies_list(&request.arguments),
+            "project.check_catalog.put" => self.project_check_catalog_put(&request.arguments),
+            "project.check_catalog.get" => self.project_check_catalog_get(&request.arguments),
+            "automation.checks.plan" => self.automation_checks_plan(&request.arguments),
             "result.put" => self.result_put(request),
             "result.get" => self.result_get(&request.arguments, authority),
             "result.list" => self.result_list(&request.arguments, authority),
@@ -1875,6 +1879,56 @@ impl RelayCore {
                 .map(|state| state.content_verification_required).unwrap_or(false),
             "capabilities": capabilities
         }))
+    }
+
+    fn project_check_catalog_put(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"].as_str()
+            .expect("registry validation requires project_id");
+        let expected_revision = arguments["expected_revision"].as_i64()
+            .expect("registry validation requires expected_revision");
+        let canonical = planner::canonical_catalog(&arguments["catalog"])
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        let record = self.with_storage(|storage| {
+            storage.put_project_check_catalog(project_id, expected_revision, &canonical)
+        })?;
+        Ok(json!({
+            "project_id": record.project_id,
+            "revision": record.revision,
+            "index_generation": record.index_generation,
+            "configuration_revision": record.configuration_revision,
+            "catalog_sha256": record.catalog_sha256,
+            "check_count": record.catalog["checks"].as_array().map_or(0, Vec::len),
+        }))
+    }
+
+    fn project_check_catalog_get(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"].as_str()
+            .expect("registry validation requires project_id");
+        let record = self.with_storage(|storage| {
+            storage.get_active_project(project_id)?;
+            storage.get_project_check_catalog(project_id)?
+                .ok_or_else(|| StorageError::new("CHECK_CATALOG_MISSING", "project check catalog is missing"))
+        })?;
+        Ok(json!({
+            "project_id": record.project_id,
+            "revision": record.revision,
+            "index_generation": record.index_generation,
+            "configuration_revision": record.configuration_revision,
+            "catalog_sha256": record.catalog_sha256,
+            "catalog": record.catalog,
+        }))
+    }
+
+    fn automation_checks_plan(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"].as_str()
+            .expect("registry validation requires project_id");
+        let after_generation = arguments["after_generation"].as_i64()
+            .expect("registry validation requires after_generation");
+        let snapshot = self.with_storage(|storage| {
+            storage.project_plan_snapshot(project_id, after_generation, 4096)
+        })?;
+        planner::plan(snapshot, after_generation)
+            .map_err(|error| CoreCommandError::new(error.code, error.message))
     }
 
     fn project_changes(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
@@ -2832,6 +2886,40 @@ mod tests {
 
     fn runtime() -> RuntimeContext {
         RuntimeContext::in_process()
+    }
+
+    #[test]
+    fn check_catalog_commands_plan_without_running_checks() {
+        let dir = temp_dir("check-plan-commands");
+        fs::create_dir_all(&dir).unwrap();
+        let core = RelayCore::open(CoreConfig::new(&dir));
+        core.with_storage(|storage| {
+            storage.register_project(Some("PRJ-plan"), "Plan", "file:///fixture")?;
+            storage.replace_project_baseline("PRJ-plan", &[], 0)?;
+            Ok(())
+        }).unwrap();
+        let mut put = request("catalog-put", "project.check_catalog.put", json!({
+            "project_id": "PRJ-plan", "expected_revision": 0,
+            "catalog": {"format_version": 1, "checks": [
+                {"id": "check.a", "roots": ["source.txt"], "leaves": []}
+            ]}
+        }));
+        put.idempotency_key = Some("catalog-put-key".into());
+        let saved = core.execute(put, &runtime());
+        assert!(saved.ok, "{:?}", saved.error);
+        assert_eq!(saved.result.unwrap()["revision"], 1);
+        let fetched = core.execute(request("catalog-get", "project.check_catalog.get",
+            json!({"project_id":"PRJ-plan"})), &runtime());
+        assert!(fetched.ok, "{:?}", fetched.error);
+        let planned = core.execute(request("check-plan", "automation.checks.plan",
+            json!({"project_id":"PRJ-plan", "after_generation": 1})), &runtime());
+        assert!(planned.ok, "{:?}", planned.error);
+        let result = planned.result.unwrap();
+        assert_eq!(result["mode"], "full_catalog_fallback");
+        assert_eq!(result["checks"][0]["status"], "planned_not_run");
+        assert!(result["checks"][0]["result_id"].is_null());
+        drop(core);
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

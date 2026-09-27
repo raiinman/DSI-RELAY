@@ -13,6 +13,7 @@ pub const MAX_OBSERVATIONS: usize = 256;
 pub const MAX_DIAGNOSTIC_CODES: usize = 32;
 pub const MAX_VERSIONS: usize = 64;
 pub const MAX_REPRO_STEPS: usize = 16;
+pub const MAX_TRANSPORT_METRICS: usize = 4;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReportError {
@@ -116,6 +117,17 @@ pub struct ResourceUse {
     pub peak_gpu_bytes: Option<u64>,
 }
 
+/// Comparable local application-JSON exchange measurements. These are not
+/// model-token or remote-network cost estimates.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransportMetric {
+    pub path_id: String,
+    pub byte_scope: String,
+    pub request_bytes: u64,
+    pub response_bytes: u64,
+    pub elapsed_ms: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Reproduction {
     /// Registered command ID, not a shell command or arbitrary text.
@@ -140,6 +152,8 @@ pub struct WorkflowObservation {
     pub timing: Option<Timing>,
     pub resource_use: Option<ResourceUse>,
     pub reproduction: Option<Reproduction>,
+    #[serde(default)]
+    pub transport_metrics: Vec<TransportMetric>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,6 +175,8 @@ pub struct WorkflowResult {
     pub timing: Option<Timing>,
     pub resource_use: Option<ResourceUse>,
     pub reproduction: Option<Reproduction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub transport_metrics: Vec<TransportMetric>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -328,7 +344,7 @@ fn classify_workflow(
         (WorkflowStatus::Untested, "NOT_EXECUTED".to_string())
     };
 
-    let (evidence, diagnostic_codes, component_versions, timing, resource_use, reproduction) =
+    let (evidence, diagnostic_codes, component_versions, timing, resource_use, reproduction, transport_metrics) =
         if let Some(observation) = observation {
             (
                 observation.evidence,
@@ -337,6 +353,7 @@ fn classify_workflow(
                 observation.timing,
                 observation.resource_use,
                 observation.reproduction,
+                observation.transport_metrics,
             )
         } else {
             (
@@ -346,6 +363,7 @@ fn classify_workflow(
                 None,
                 None,
                 None,
+                Vec::new(),
             )
         };
     WorkflowResult {
@@ -360,6 +378,7 @@ fn classify_workflow(
         timing,
         resource_use,
         reproduction,
+        transport_metrics,
     }
 }
 
@@ -416,6 +435,7 @@ fn validate_observation(observation: &WorkflowObservation) -> Result<(), ReportE
         || !safe_token(&observation.reason_code, 96)
         || observation.diagnostic_codes.len() > MAX_DIAGNOSTIC_CODES
         || observation.component_versions.len() > MAX_VERSIONS
+        || observation.transport_metrics.len() > MAX_TRANSPORT_METRICS
         || observation
             .diagnostic_codes
             .iter()
@@ -425,6 +445,18 @@ fn validate_observation(observation: &WorkflowObservation) -> Result<(), ReportE
         })
     {
         return Err(error("INVALID_OBSERVATION_METADATA"));
+    }
+    let mut metric_paths = BTreeSet::new();
+    for metric in &observation.transport_metrics {
+        if !matches!(metric.path_id.as_str(), "cli_stdin" | "local_mcp_http")
+            || metric.byte_scope != "application_json"
+            || metric.request_bytes > 1_048_576
+            || metric.response_bytes > 1_048_576
+            || metric.elapsed_ms > 600_000
+            || !metric_paths.insert(metric.path_id.as_str())
+        {
+            return Err(error("INVALID_TRANSPORT_METRIC"));
+        }
     }
     match &observation.evidence {
         EvidenceSource::Observed { source_id, log_ref } => {
@@ -510,6 +542,7 @@ mod tests {
                 scenario_ref: "SCENARIO-1".into(),
                 step_codes: vec!["OPEN_SESSION".into(), "RUN_ASSERTION".into()],
             }),
+            transport_metrics: Vec::new(),
         }
     }
 
@@ -570,6 +603,39 @@ mod tests {
         .unwrap();
         assert_eq!(report.workflows[0].status, WorkflowStatus::Failed);
         assert_eq!(report.workflows[0].reason_code, "RUNNER_INTERRUPTED");
+    }
+
+    #[test]
+    fn bounded_local_transport_metrics_remain_numeric_and_typed() {
+        let mut measured = observation(EvidenceSource::Observed {
+            source_id: "runner".into(),
+            log_ref: "LOG-1".into(),
+        });
+        measured.transport_metrics = vec![TransportMetric {
+            path_id: "local_mcp_http".into(),
+            byte_scope: "application_json".into(),
+            request_bytes: 120,
+            response_bytes: 240,
+            elapsed_ms: 12,
+        }];
+        let report = assemble_report(
+            plan(Requirement::Uefn, Availability::Available),
+            vec![measured.clone()],
+            200,
+        )
+        .unwrap();
+        assert_eq!(report.workflows[0].transport_metrics[0].response_bytes, 240);
+        measured.transport_metrics[0].path_id = "remote_secret_path".into();
+        assert_eq!(
+            assemble_report(
+                plan(Requirement::Uefn, Availability::Available),
+                vec![measured],
+                200,
+            )
+            .unwrap_err()
+            .code,
+            "INVALID_TRANSPORT_METRIC"
+        );
     }
 
     #[test]

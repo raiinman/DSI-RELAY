@@ -577,10 +577,16 @@ async function toggleAutomation() {
   $("#automation-status").textContent = next === "automation.pause" ? "Pausing background checks…" : "Resuming background checks…";
   try {
     const result = await command(next);
-    renderAutomation(result.mode);
+    const expectedMode = next === "automation.pause" ? "paused" : "running";
+    if (result.mode === expectedMode || result.mode === "unavailable") {
+      renderAutomation(result.mode);
+    } else {
+      renderAutomation("unknown");
+      $("#automation-status").textContent = "Could not confirm whether background checks changed. Refresh RELAY before trying again.";
+    }
   } catch (_problem) {
-    renderAutomation(automationMode);
-    $("#automation-status").textContent = "Could not change background checks. Refresh RELAY and try again.";
+    renderAutomation("unknown");
+    $("#automation-status").textContent = "Could not confirm whether background checks changed. Refresh RELAY before trying again.";
   } finally {
     automationActionBusy = false;
     $("#automation-toggle").disabled = !["running", "paused"].includes(automationMode);
@@ -598,18 +604,61 @@ async function previewIntegratedReport() {
     const report = JSON.parse(await file.text());
     const statuses = ["passed", "failed", "blocked", "untested"];
     if (report.schema_version !== 1 || !statuses.includes(report.overall_status) ||
-        !Array.isArray(report.workflows) || report.workflows.length > 256 ||
+        !Array.isArray(report.workflows) || report.workflows.length < 1 || report.workflows.length > 256 ||
         report.workflows.some((item) => typeof item.workflow_id !== "string" ||
           !/^[a-z0-9._-]{1,96}$/.test(item.workflow_id) || !statuses.includes(item.status))) {
       throw new Error("INVALID_REPORT");
     }
     const counts = Object.fromEntries(statuses.map((status) => [status, report.workflows.filter((item) => item.status === status).length]));
+    const expectedOverall = counts.failed ? "failed" : counts.blocked ? "blocked" : counts.untested ? "untested" : "passed";
+    if (new Set(report.workflows.map((item) => item.workflow_id)).size !== report.workflows.length ||
+        expectedOverall !== report.overall_status ||
+        statuses.some((status) => report.counts?.[status] !== counts[status]) ||
+        report.workflows.some((item) => item.status === "passed" &&
+          (item.evidence?.kind !== "observed" ||
+            (Array.isArray(item.requirements) && item.requirements.some((entry) => entry.availability !== "available"))))) {
+      throw new Error("INCONSISTENT_REPORT");
+    }
     summary.textContent = `Selected report preview: ${counts.passed} passed · ${counts.failed} failed · ${counts.blocked} blocked · ${counts.untested} untested. File-provided outcomes are not verified by this dashboard.`;
     for (const workflow of report.workflows) {
       const item = document.createElement("li");
       const code = typeof workflow.reason_code === "string" && /^[A-Z][A-Z0-9_]{0,95}$/.test(workflow.reason_code)
         ? ` · ${workflow.reason_code}` : "";
-      item.textContent = `${workflow.workflow_id}: ${workflow.status.toUpperCase()}${code}`;
+      const details = [];
+      if (Number.isSafeInteger(workflow.timing?.duration_ms) && workflow.timing.duration_ms >= 0) {
+        details.push(`${count(workflow.timing.duration_ms)} ms`);
+      }
+      if (Number.isSafeInteger(workflow.resource_use?.peak_rss_bytes) && workflow.resource_use.peak_rss_bytes >= 0) {
+        details.push(`${(workflow.resource_use.peak_rss_bytes / 1048576).toFixed(1)} MiB peak memory`);
+      }
+      if (Number.isSafeInteger(workflow.resource_use?.cpu_ms) && workflow.resource_use.cpu_ms >= 0) {
+        details.push(`${count(workflow.resource_use.cpu_ms)} ms CPU`);
+      }
+      const diagnostics = Array.isArray(workflow.diagnostic_codes)
+        ? workflow.diagnostic_codes.filter((value) => typeof value === "string" && /^[A-Z][A-Z0-9_]{0,95}$/.test(value)).slice(0, 4) : [];
+      if (diagnostics.length) details.push(`Codes: ${diagnostics.join(", ")}`);
+      const versions = Array.isArray(workflow.component_versions)
+        ? workflow.component_versions.filter((value) => typeof value?.component_id === "string" &&
+            /^[a-z0-9._-]{1,64}$/.test(value.component_id) && typeof value?.version === "string" &&
+            /^[A-Za-z0-9_.:+-]{1,64}$/.test(value.version)).slice(0, 4) : [];
+      if (versions.length) details.push(`Versions: ${versions.map((value) => `${value.component_id} ${value.version}`).join(", ")}`);
+      const reproduction = workflow.reproduction;
+      if (typeof reproduction?.command_id === "string" && /^[a-z0-9._-]{1,96}$/.test(reproduction.command_id) &&
+          typeof reproduction?.scenario_ref === "string" && /^[a-z0-9._-]{1,96}$/i.test(reproduction.scenario_ref)) {
+        details.push(`Retry: ${reproduction.command_id} · ${reproduction.scenario_ref}`);
+      }
+      if (typeof workflow.evidence?.log_ref === "string" && /^sha256:[a-f0-9]{64}$/.test(workflow.evidence.log_ref)) {
+        details.push(`Journal: ${workflow.evidence.log_ref}`);
+      }
+      const transport = Array.isArray(workflow.transport_metrics)
+        ? workflow.transport_metrics.filter((value) => ["cli_stdin", "local_mcp_http"].includes(value?.path_id) &&
+            value.byte_scope === "application_json" &&
+            [value.request_bytes, value.response_bytes, value.elapsed_ms].every((number) => Number.isSafeInteger(number) && number >= 0 && number <= 1048576)).slice(0, 4) : [];
+      for (const metric of transport) {
+        const pathLabel = metric.path_id === "cli_stdin" ? "CLI" : "local MCP";
+        details.push(`${pathLabel}: ${count(metric.request_bytes)} in / ${count(metric.response_bytes)} out JSON bytes · ${count(metric.elapsed_ms)} ms`);
+      }
+      item.textContent = `${workflow.workflow_id}: ${workflow.status.toUpperCase()}${code}${details.length ? ` · ${details.join(" · ")}` : ""}`;
       list.append(item);
     }
   } catch (_problem) {

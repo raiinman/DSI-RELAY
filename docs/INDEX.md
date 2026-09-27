@@ -22,6 +22,7 @@ PHASE4_RESULT_DESCRIPTION_EVIDENCE.md records the early metadata-only result loo
 PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md records the byte-budgeted exact-fact view by result ID, bounded required pointers, and test limits.
 PHASE4_CONTEXT_GAUNTLET_FIRST_FIXTURE.md records deterministic stored-payload/context byte and exact-fact comparisons, including explicit-pointer retention; it does not measure model tokens.
 PHASE5_DASHBOARD_FIRST_SLICE_EVIDENCE.md records the first local read-only dashboard view; Phase 5 remains open.
+PHASE5_DASHBOARD_ACCESSIBILITY_SLICE_EVIDENCE.md records the focused keyboard, status, and error-state improvements; manual assistive-technology review remains open.
 
 ## Core design
 

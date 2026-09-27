@@ -261,7 +261,7 @@ Exit criteria:
 
 ## Phase 5 — Dashboard
 
-Status: Active early foundation — the production daemon serves a local read-only health/project view through the same command system as the CLI. The remaining views, actions, accessibility, and security review are open. Evidence: `PHASE5_DASHBOARD_FIRST_SLICE_EVIDENCE.md`.
+Status: Active early foundation — the production daemon serves a local read-only health/project view through the same command system as the CLI. A focused keyboard/status/error-state accessibility slice is implemented; manual assistive-technology review, remaining views, actions, and security review are open. Evidence: `PHASE5_DASHBOARD_FIRST_SLICE_EVIDENCE.md`, `PHASE5_DASHBOARD_ACCESSIBILITY_SLICE_EVIDENCE.md`.
 
 Build first usable dashboard:
 

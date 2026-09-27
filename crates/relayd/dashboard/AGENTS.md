@@ -11,6 +11,7 @@ Own the static, local RELAY dashboard presentation.
 
 - Use the canonical command path through the daemon; do not read project files, SQLite, or other local state from browser code.
 - Keep the primary view plain-language, responsive, and keyboard accessible. Put raw command output in Advanced details.
+- Announce refresh results in the status region, keep Refresh keyboard focusable while loading, and remove stale health/project details when a refresh fails.
 - Insert untrusted project names and details with text nodes, never HTML interpretation.
 - The dashboard's URL fragment carries a per-start local token. Browser code sends it only in the local command header and removes it from the visible address after loading.
 - No external assets, network services, telemetry, or browser storage.
@@ -19,6 +20,7 @@ Own the static, local RELAY dashboard presentation.
 
 - `cargo test -p relayd --bin relayd dashboard::tests` covers HTTP command scope and token/origin rejection.
 - `cargo test -p relayd --test phase5_dashboard` covers live daemon HTTP and pipe parity.
+- `node --test crates/relayd/dashboard/app.test.mjs` covers dashboard rendering, current-state/error behavior, token handling, and the read-only command set without adding a browser runtime dependency.
 
 # Child DOX Index
 

@@ -68,6 +68,7 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `PHASE3_PORTABLE_BENCHMARK_DRAFT.md` — local synthetic benchmark runner draft for testers without Rust/Cargo.
 - `PHASE3_CLOSURE_REVIEW.md` — active Phase 3 exit-gate review with explicit open and partial items.
 - `PHASE5_DASHBOARD_FIRST_SLICE_EVIDENCE.md` — local read-only dashboard health/project view and security-boundary evidence.
+- `PHASE5_DASHBOARD_ACCESSIBILITY_SLICE_EVIDENCE.md` — keyboard, status-announcement, error-state, and plain-language checks for the read-only dashboard.
 - `PHASE4_RESULT_DESCRIPTION_EVIDENCE.md` — early metadata-only result retrieval foundation and focused verification; Phase 4 remains open.
 - `PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md` — byte-budgeted exact-fact result view, bounded required pointers, scope/privacy tests, and explicit Phase 4 limits.
 - `PHASE4_CONTEXT_GAUNTLET_FIRST_FIXTURE.md` — repeatable stored-result payload/context comparison across hard synthetic cases, measured limitations, and explicit-pointer retention.

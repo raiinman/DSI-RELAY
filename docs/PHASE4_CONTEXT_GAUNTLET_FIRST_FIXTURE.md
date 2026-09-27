@@ -11,10 +11,15 @@ The compared byte counts are UTF-8 serialized JSON for the **stored payload alon
 | Target at start of 101 entries | 3,515 | 388 | 2 | Target ID and generation retained. |
 | Target in middle of 101 entries | 3,515 | 390 | 2 | Same exact values retained. |
 | Target at end of 101 entries | 3,515 | 392 | 2 | Same exact values retained. |
+| Target at start amid 400 eligible codes | 10,847 | 979 | 1 | Target code retained among 12 selected facts. |
+| Target in middle amid 400 eligible codes | 10,847 | 972 | 0 | Target code omitted; 12 unrelated codes selected. |
+| Target at end amid 400 eligible codes | 10,847 | 972 | 0 | Target code omitted; 12 unrelated codes selected. |
 | Stale then current state | 204 | 553 | 4 | Old, stale, and current state facts remain distinguishable by pointer; compact body is larger than full payload. |
 | 600 repeated warnings | 18,044 | 1,009 | 1 | Target ID retained; 11 repeated warning codes selected, 589 scalar values omitted. There is no deduplication. |
 | Coordinate in noisy logs | 2,365 | 331 | 1 | Target ID retained; all three coordinate numbers omitted by the current allowlist. |
 
-These numbers were observed on two consecutive Windows runs of the command above; both produced identical JSON measurements. The assertions are the durable, repeatable evidence. The placement entries contain prose noise; they do not test competition against hundreds of higher-priority allowlisted facts. The stale-state case checks exact fact retention, not whether a model or client will choose the latest state. The coordinate case is a known retention failure for task-critical but non-allowlisted fields. A truncated context must fetch the full result by ID whenever omitted fields matter.
+The first six rows above separate two placement conditions. The first three have prose noise, which is ineligible for the current selector. The next three each contain 401 entries: 400 `event_code` facts and one `target_code` fact, all with the same selection priority. At this budget, pointer ordering admits the target at array index 0 but loses it at indices 200 and 400. The test asserts the latter omissions against the stored source payload; a small body alone cannot establish exact fact retention.
 
-Next work: task-aware exact-field selection, stale-state resolution, repeated-fact deduplication, harder placement competition, and a model/client benchmark with real token, recall, success, latency, and cost measures. Any remote use still requires the separate data-egress decision.
+All nine cases produced identical JSON measurements on two consecutive Windows runs. The assertions are the durable, repeatable evidence. The stale-state case checks exact fact retention, not whether a model or client will choose the latest state. The coordinate case is a known retention failure for task-critical but non-allowlisted fields. A truncated context must fetch the full result by ID whenever omitted fields matter.
+
+Next work: task-aware exact-field selection, stale-state resolution, repeated-fact deduplication, additional competing-fact patterns, and a model/client benchmark with real token, recall, success, latency, and cost measures. Any remote use still requires the separate data-egress decision.

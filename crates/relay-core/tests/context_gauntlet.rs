@@ -49,11 +49,41 @@ fn placement(name: &'static str, target_index: usize) -> Fixture {
     }
 }
 
+fn competing_placement(name: &'static str, target_index: usize) -> Fixture {
+    let mut entries: Vec<Value> = (0..401)
+        .map(|index| json!({ "event_code": format!("EVENT-{index:03}") }))
+        .collect();
+    entries[target_index] = json!({ "target_code": "TARGET-EXACT-42" });
+    let pointer = match target_index {
+        0 => "/entries/0/target_code",
+        200 => "/entries/200/target_code",
+        400 => "/entries/400/target_code",
+        _ => unreachable!(),
+    };
+    Fixture {
+        name,
+        payload: json!({ "entries": entries }),
+        retained: if target_index == 0 {
+            vec![(pointer, json!("TARGET-EXACT-42"))]
+        } else {
+            vec![]
+        },
+        absent: if target_index == 0 {
+            vec![]
+        } else {
+            vec![pointer]
+        },
+    }
+}
+
 fn fixtures() -> Vec<Fixture> {
     let mut cases = vec![
         placement("target_at_start", 0),
         placement("target_in_middle", 50),
         placement("target_at_end", 100),
+        competing_placement("competing_target_at_start", 0),
+        competing_placement("competing_target_in_middle", 200),
+        competing_placement("competing_target_at_end", 400),
     ];
     cases.push(Fixture {
         name: "stale_then_current",
@@ -164,7 +194,8 @@ fn deterministic_context_gauntlet_first_fixture() {
 
         let facts = compact["facts"].as_array().unwrap();
         for (suffix, expected) in &fixture.retained {
-            let pointer = if suffix.starts_with("/entries/") {
+            let pointer = if fixture.name.starts_with("target_") && suffix.starts_with("/entries/")
+            {
                 let target_index = match fixture.name {
                     "target_at_start" => 0,
                     "target_in_middle" => 50,

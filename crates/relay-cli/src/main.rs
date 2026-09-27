@@ -186,7 +186,7 @@ fn execute_human(request: CommandRequest, json_output: bool, view: &str) -> Resu
 fn run(args: &[String]) -> Result<i32, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Err(
-            "usage: relay <status|doctor|diagnostics|pause|resume|support-bundle|discover|onboard|dashboard-url|commands|project-list|project-register|project-archive|project-restore|project-removal-plan|project-removal-get|project-removal-list|project-removal-approve|project-removal-reject|project-remove|check-catalog-put|check-catalog-get|plan-checks|run-checks|context-compile|task-context|uefn-inspect|uefn-audit|uefn-discover|uefn-toolsets|uefn-describe|verse-analyze|verse-record|verse-file-analyze|verse-file-record|asset-validate|asset-impact|blender-mesh-check|blender-mesh-record|krita-inspect|krita-export|krita-reconcile|parser-install|result-list|result-get|job-list|job-get|shutdown|exec>"
+            "usage: relay <status|doctor|diagnostics|pause|resume|support-bundle|discover|onboard|dashboard-url|commands|project-list|project-register|project-archive|project-restore|project-removal-plan|project-removal-get|project-removal-list|project-removal-approve|project-removal-reject|project-remove|check-catalog-put|check-catalog-get|check-add-file|plan-checks|run-checks|context-compile|task-context|uefn-inspect|uefn-audit|uefn-discover|uefn-toolsets|uefn-describe|verse-analyze|verse-record|verse-file-analyze|verse-file-record|asset-validate|asset-impact|blender-mesh-check|blender-mesh-record|krita-inspect|krita-export|krita-reconcile|parser-install|result-list|result-get|job-list|job-get|shutdown|exec>"
                 .to_string(),
         );
     };
@@ -511,6 +511,51 @@ fn run(args: &[String]) -> Result<i32, String> {
                 has_json_flag(args),
                 "default",
             )
+        }
+        "check-add-file" => {
+            if !matches!(args.len(), 4 | 5)
+                || args[1..4].iter().any(|arg| arg.starts_with("--"))
+                || (args.len() == 5 && args[4] != "--json")
+            {
+                return Err("usage: relay check-add-file <project-id> <check-id> <project-relative-path> [--json]".to_string());
+            }
+            let read = invoke(&make_request(
+                "project.check_catalog.get",
+                json!({"project_id": args[1]}),
+                None,
+            ))?;
+            let (revision, mut catalog) = if read.ok {
+                let record = read.result.as_ref().ok_or_else(|| "check catalog response is incomplete".to_string())?;
+                let revision = record["revision"].as_i64().ok_or_else(|| "check catalog revision is invalid".to_string())?;
+                let catalog = record.get("catalog").cloned().ok_or_else(|| "check catalog response is incomplete".to_string())?;
+                (revision, catalog)
+            } else if read.error.as_ref().is_some_and(|error| error.code == "CHECK_CATALOG_MISSING") {
+                (0, json!({"format_version": 1, "checks": []}))
+            } else {
+                if has_json_flag(args) { print_machine(&read); } else { print_human(&read); }
+                return Ok(2);
+            };
+            let checks = catalog.get_mut("checks").and_then(Value::as_array_mut)
+                .ok_or_else(|| "check catalog response is invalid".to_string())?;
+            if checks.iter().any(|check| check["id"] == args[2]) {
+                return Err("check ID already exists in this project".to_string());
+            }
+            checks.push(json!({
+                "id": args[2], "roots": [args[3]], "leaves": [],
+                "dependency_mode": "direct",
+                "assertion": {"kind": "indexed_file_present", "path": args[3]}
+            }));
+            let req_id = request_id();
+            let saved = invoke(&CommandRequest {
+                request_id: req_id.clone(),
+                command: "project.check_catalog.put".to_string(),
+                command_version: Some(1),
+                arguments: json!({"project_id": args[1], "expected_revision": revision, "catalog": catalog}),
+                idempotency_key: Some(format!("CLI-{req_id}")),
+                context: RequestContext::default(),
+            })?;
+            if has_json_flag(args) { print_machine(&saved); } else { print_human(&saved); }
+            Ok(if saved.ok { 0 } else { 2 })
         }
         "plan-checks" => {
             if !matches!(args.len(), 3 | 4)

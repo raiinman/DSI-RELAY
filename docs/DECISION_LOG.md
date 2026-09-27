@@ -18,7 +18,7 @@ RELAY is not a tool for one map or project. Projects are isolated workspaces and
 
 Status: Approved
 
-Architecture, configuration, paths, documentation, and packaging decisions must be compatible with eventual public use. RELAY Core uses MIT; public release timing and companion licenses remain open.
+Architecture, configuration, paths, documentation, and packaging decisions must be compatible with eventual public use. First-party RELAY source and documentation use MIT; public release timing and third-party component licenses remain open.
 
 ## D-004 — RELAY Core owns behavior
 
@@ -633,11 +633,11 @@ Status: Approved
 
 RELAY may identify missing metadata, known conflicts, or policy drift, but does not represent automated checks as legal certification, copyright clearance, or platform approval.
 
-## D-109 — RELAY Core uses MIT with creator credit
+## D-109 — First-party RELAY source uses MIT with creator credit
 
 Status: Approved
 
-The creator selected MIT for RELAY Core and requested explicit credit as RAiiNMAN. The repository `LICENSE` and `NOTICE-RELAY.txt` carry that credit. SDK and companion licenses remain separate decisions because GPL host-plugin obligations and Unreal/UEFN distribution boundaries can differ from Core. Public binary distribution still requires third-party notices and the release review.
+The creator selected MIT for first-party RELAY source and documentation and requested explicit credit as RAiiNMAN. The repository `LICENSE` and `NOTICE-RELAY.txt` carry that credit. Third-party components and any future code whose host terms require separate licensing need their own review; RELAY cannot relicense them by including them in the repository. Public binary distribution still requires applicable third-party notices and release review.
 
 ## D-110 — Public privacy/security claims must match tested behavior
 

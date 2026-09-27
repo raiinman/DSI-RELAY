@@ -4,8 +4,9 @@
 `Install-LocalStage.ps1`, `Rollback-LocalStage.ps1`, and
 `Uninstall-LocalStage.ps1` exercise the side-by-side path only with an explicit
 unsigned-development opt-in. Install and rollback additionally require an
-expected archive digest. They do not sign, publish, auto-download, launch the
-daemon, or clear the public release gates.
+expected archive digest. They do not sign, publish, auto-download, or clear
+the public release gates. Fixture-mode install/update activation runs a bounded
+daemon health check against an explicit disposable data root and stops it.
 
 The unsigned stage contains the CLI, daemon, optional local MCP gateway, and
 the compact `skills/relay-core/` runtime skill files. Its manifest and folder
@@ -89,9 +90,21 @@ Replacement activation requires a positive actual schema within the target
 package's declared range. `-ObservedStorageSchema` remains optional and must
 equal the probed value when supplied. Fixture activations require an explicit
 fixture data root. A custom data root is unavailable outside fixture mode;
-activation refuses an ambient `RELAY_STATE_DIR` override. The script does not
-launch or health-check the daemon. Production still needs post-activation
-health verification and a trusted signed delivery path.
+activation refuses an ambient `RELAY_STATE_DIR` override. After switching the
+pointer in fixture mode, `Test-LocalActivationHealth.ps1` launches the staged
+daemon in that data root with a unique local instance, waits at most 12 seconds
+for its own host record, asks the staged CLI for status, doctor, and diagnostics
+with an eight-second bound per command, and stops the daemon before returning.
+The installer checks the post-launch storage schema and records it in the
+pointer. To keep automatic reversal schema-aware, fixture updates require the
+new package's maximum declared schema to fit the previous version's declared
+range. On a failed health check, it restores the previous verified pointer if
+the daemon has stopped and the actual schema is still compatible. A failed
+first activation removes the new pointer. The version files and separately
+owned data are retained for inspection; an unclean or incompatible database
+requires manual recovery and blocks automatic pointer restoration. Non-fixture
+activation remains pointer-only. Production still needs post-activation health
+verification and a trusted signed delivery path.
 
 ## Rollback and uninstall
 
@@ -104,9 +117,7 @@ health verification and a trusted signed delivery path.
   receipts, then probes actual storage through the active binary. Rollback
   requires a positive schema within the target package's declared range;
   an optional caller schema must match the probe. It then atomically switches
-  `current.json`. It never launches the daemon or alters the data
-  root. A failed post-activation health check must be handled by a separate
-  operator action until trusted automated launch/health handling exists.
+  `current.json`. It never launches the daemon or alters the data root.
 - Local-development uninstall requires the daemon to be stopped; it does not
   terminate any process. It removes only the program pointer and verified
   version directories owned by this installation, leaving separately owned

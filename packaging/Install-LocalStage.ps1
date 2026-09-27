@@ -303,7 +303,11 @@ if ($Activate) {
             $observedStorageSchema -gt [int]$receipt.storage_schema_max)) {
         throw 'UPDATE_STORAGE_SCHEMA_INCOMPATIBLE'
     }
-    Write-JsonAtomic $currentPath ([ordered]@{
+    if ($FixtureMode -and $previousVersion -and
+        [int]$receipt.storage_schema_max -gt [int]$previousReceipt.storage_schema_max) {
+        throw 'UPDATE_AUTO_ROLLBACK_SCHEMA_RANGE_INCOMPATIBLE'
+    }
+    $activationPointer = [ordered]@{
         schema_version = 1
         active_version = $version
         archive_sha256 = $actualHash
@@ -312,7 +316,53 @@ if ($Activate) {
         observed_storage_schema = $observedStorageSchema
         channel = 'unsigned_local_development'
         previous_version = $previousVersion
-    })
+    }
+    Write-JsonAtomic $currentPath $activationPointer
+    if ($FixtureMode) {
+        try {
+            $null = & (Join-Path $PSScriptRoot 'Test-LocalActivationHealth.ps1') `
+                -RelaydPath (Join-Path $versionPath 'relayd.exe') `
+                -RelayPath (Join-Path $versionPath 'relay.exe') `
+                -DataRoot $DataRoot -ExpectedVersion $version
+            Assert-DaemonStopped
+            $postLaunchSchema = & (Join-Path $PSScriptRoot 'Read-StorageSchema.ps1') `
+                -RelaydPath (Join-Path $versionPath 'relayd.exe') -DataRoot $DataRoot
+            if ($postLaunchSchema -lt [int]$receipt.storage_schema_min -or
+                $postLaunchSchema -gt [int]$receipt.storage_schema_max) {
+                throw 'UPDATE_POST_LAUNCH_SCHEMA_INCOMPATIBLE'
+            }
+            if ($previousVersion -and
+                ($postLaunchSchema -lt [int]$previousReceipt.storage_schema_min -or
+                    $postLaunchSchema -gt [int]$previousReceipt.storage_schema_max)) {
+                throw 'UPDATE_POST_LAUNCH_ROLLBACK_SCHEMA_INCOMPATIBLE'
+            }
+            $activationPointer.observed_storage_schema = $postLaunchSchema
+            Write-JsonAtomic $currentPath $activationPointer
+        }
+        catch {
+            $activationError = $_.Exception.Message
+            Assert-DaemonStopped
+            if ($previousVersion) {
+                $rollbackSchema = & (Join-Path $PSScriptRoot 'Read-StorageSchema.ps1') `
+                    -RelaydPath (Join-Path $previousPath 'relayd.exe') -DataRoot $DataRoot
+                if ($rollbackSchema -lt [int]$previousReceipt.storage_schema_min -or
+                    $rollbackSchema -gt [int]$previousReceipt.storage_schema_max) {
+                    throw 'ACTIVATION_HEALTH_FAILED_ROLLBACK_SCHEMA_INCOMPATIBLE'
+                }
+                if ($previous.PSObject.Properties.Name -contains 'observed_storage_schema') {
+                    $previous.observed_storage_schema = $rollbackSchema
+                }
+                else {
+                    $previous | Add-Member -NotePropertyName observed_storage_schema -NotePropertyValue $rollbackSchema
+                }
+                Write-JsonAtomic $currentPath $previous
+                throw "ACTIVATION_HEALTH_FAILED_PREVIOUS_RESTORED: $activationError"
+            }
+            Assert-RegularFile $currentPath
+            Remove-Item -LiteralPath $currentPath -Force
+            throw "ACTIVATION_HEALTH_FAILED_NO_ACTIVE_VERSION: $activationError"
+        }
+    }
     Write-Output "Activated local development version: $version"
 }
 else { Write-Output "Staged local development version without activation: $version" }

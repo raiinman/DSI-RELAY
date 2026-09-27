@@ -1285,12 +1285,12 @@ impl RelayCore {
 
     fn diagnostics_summary(&self) -> Result<Value, CoreCommandError> {
         let health = self.diagnostics_health();
-        let (available, events, error_code) = match &self.diagnostics {
-            None => (false, Value::Null, Some("DIAGNOSTICS_UNAVAILABLE")),
+        let (available, events, recent, error_code) = match &self.diagnostics {
+            None => (false, Value::Null, Value::Null, Some("DIAGNOSTICS_UNAVAILABLE")),
             Some(logger) => match logger.lock() {
-                Err(_) => (false, Value::Null, Some("DIAGNOSTICS_LOCK_UNAVAILABLE")),
+                Err(_) => (false, Value::Null, Value::Null, Some("DIAGNOSTICS_LOCK_UNAVAILABLE")),
                 Ok(logger) => match logger.support_summary() {
-                    Err(_) => (false, Value::Null, Some("DIAGNOSTICS_READ_FAILED")),
+                    Err(_) => (false, Value::Null, Value::Null, Some("DIAGNOSTICS_READ_FAILED")),
                     Ok(summary) => (
                         true,
                         json!({
@@ -1300,6 +1300,7 @@ impl RelayCore {
                             "invalid_lines": summary.aggregate.invalid_lines,
                             "by_severity": summary.aggregate.by_severity,
                         }),
+                        json!(summary.aggregate.recent),
                         None,
                     ),
                 },
@@ -1316,6 +1317,7 @@ impl RelayCore {
                 "retention_evicted_files": health.evicted_files,
             },
             "events": events,
+            "recent": recent,
             "error_code": error_code,
             "automation_mode": self.automation_mode(),
         }))
@@ -4165,6 +4167,15 @@ mod tests {
             &runtime(),
         );
         assert!(echoed.ok);
+        let failed = core.execute(
+            request(
+                "REQ-private-failure",
+                "diagnostics.summary",
+                json!({ "secret": secret, "unexpected": secret }),
+            ),
+            &runtime(),
+        );
+        assert!(!failed.ok);
         let summary = core.execute(
             request("REQ-diagnostic-summary", "diagnostics.summary", json!({})),
             &runtime(),
@@ -4173,6 +4184,8 @@ mod tests {
         let body = serde_json::to_string(&summary.result.unwrap()).unwrap();
         assert!(body.contains("relay_version"));
         assert!(body.contains("by_severity"));
+        assert!(body.contains("VALIDATION_FAILED"));
+        assert!(body.contains("relay.command.completed"));
         assert!(!body.contains(secret));
         assert!(!body.contains("raw_history"));
         drop(core);

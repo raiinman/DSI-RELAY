@@ -27,10 +27,11 @@ async function loadDashboard(results, hash = "#local-test-token") {
     "#next-action", "#automation-status", "#automation-toggle", "#project-count", "#projects", "#project-add-form", "#project-name", "#project-root", "#project-add", "#project-action", "#selected-project", "#uefn-connect", "#uefn-connection",
     "#uefn-inspection", "#asset-selected", "#asset-manifest", "#asset-changed-path", "#asset-validate", "#krita-validate", "#asset-impact", "#asset-result", "#asset-lineage", "#asset-findings", "#tests-summary", "#tests-list",
     "#tests-catalog-file", "#tests-catalog-save", "#tests-catalog-status", "#tests-catalog-list", "#tests-plan", "#tests-plan-status", "#tests-plan-list", "#tests-run", "#tests-run-status", "#tests-run-list",
+    "#tests-add-file-form", "#tests-add-file-id", "#tests-add-file-path", "#tests-add-file-save", "#tests-add-file-status",
     "#activity-summary", "#activity-list", "#results-summary", "#results-list", "#jobs-summary", "#jobs-list", "#usage-summary", "#usage-detail", "#diagnostic-capture",
     "#diagnostic-detail", "#diagnostic-storage", "#diagnostic-dropped",
     "#diagnostic-events", "#diagnostic-incomplete", "#relay-version",
-    "#relay-uptime", "#diagnostic-guidance", "#integrated-report", "#integrated-summary", "#integrated-workflows"
+    "#relay-uptime", "#diagnostic-guidance", "#diagnostic-recent-summary", "#diagnostic-recent-list", "#integrated-report", "#integrated-summary", "#integrated-workflows"
   ];
   const nodes = Object.fromEntries(selectors.map((selector) => [selector, element()]));
   const calls = [];
@@ -71,7 +72,11 @@ function success(command) {
     },
     "project.list": { projects: [{ name: "<script>unsafe</script>", id: "private-id" }] },
     "diagnostics.summary": {
-      available: true, events: { total: 12, incomplete: 1 }, error_code: null
+      available: true, events: { total: 12, incomplete: 1 }, error_code: null,
+      recent: [
+        { time_unix_ms: 0, event_code: "relay.command.completed", command: "system.echo", error_code: "VALIDATION_FAILED" },
+        { time_unix_ms: 1, event_code: "relay.host.component.failed", command: null, error_code: "PARSER_SOURCE_UNREADABLE" }
+      ]
     },
     "usage.summary": { command_count: 8, failure_count: 1, remote_calls: 0, model_tokens_in: 0, model_tokens_out: 0 },
     "transaction.list": { transactions: [{ command: "project.register", state: "verified" }] },
@@ -109,6 +114,9 @@ test("refresh uses read-only commands and renders named failures as text", async
   assert.equal(page.nodes["#next-action"].hidden, false);
   assert.equal(page.nodes["#diagnostic-events"].textContent, "12");
   assert.equal(page.nodes["#diagnostic-incomplete"].textContent, "1");
+  assert.equal(page.nodes["#diagnostic-recent-list"].children.length, 2);
+  assert.match(page.nodes["#diagnostic-recent-list"].children[0].textContent, /Code: PARSER_SOURCE_UNREADABLE/);
+  assert.match(page.nodes["#diagnostic-recent-list"].children[1].textContent, /system.echo · Code: VALIDATION_FAILED/);
   assert.equal(page.nodes["#activity-list"].children[0].textContent, "project.register: verified");
   assert.equal(page.nodes["#results-list"].children[0].textContent, "UEFN_STATIC · 2,048 bytes · RELAY 0.1.0");
   assert.equal(page.nodes["#jobs-list"].children[0].textContent, "fixture.work: CHECKPOINTED");
@@ -128,6 +136,9 @@ test("a failed refresh clears stale health, projects, and advanced output", asyn
   assert.equal(page.nodes["#selected-project"].textContent, "No current project selection available.");
   assert.equal(page.nodes["#next-action"].hidden, true);
   assert.equal(page.nodes["#diagnostic-events"].textContent, "Unavailable");
+  assert.equal(page.nodes["#diagnostic-recent-list"].children.length, 0);
+  assert.equal(page.nodes["#tests-add-file-save"].disabled, true);
+  assert.match(page.nodes["#tests-add-file-status"].textContent, /unavailable/);
   assert.equal(page.nodes["#activity-summary"].textContent, "Recent activity is unavailable.");
   assert.equal(page.nodes["#usage-summary"].textContent, "Usage information is unavailable.");
   assert.equal(page.nodes["#details"].textContent, "No current details available.");
@@ -143,6 +154,23 @@ test("expired dashboard token gives a plain next step", async () => {
   assert.equal(page.nodes["#status-message"].textContent,
     "Open a fresh dashboard link from RELAY, then try again.");
   assert.equal(page.nodes["#setup-action"].hidden, true);
+});
+
+test("recent diagnostics render only allowlisted labels and code shapes", async () => {
+  const page = await loadDashboard((command) => {
+    if (command !== "diagnostics.summary") return success(command);
+    return { ok: true, json: async () => ({ ok: true, result: {
+      available: true, events: { total: 3, incomplete: 0 }, recent: [
+        { time_unix_ms: 0, event_code: "C:\\private\\project", command: "secret", error_code: "PRIVATE" },
+        { time_unix_ms: 0, event_code: "relay.command.completed", command: "C:\\private\\project", error_code: "C:\\private\\secret" },
+        { time_unix_ms: 0, event_code: "relay.core.started", command: null, error_code: null }
+      ]
+    } }) };
+  });
+  assert.equal(page.nodes["#diagnostic-recent-list"].children.length, 2);
+  const visible = page.nodes["#diagnostic-recent-list"].children.map((entry) => entry.textContent).join(" ");
+  assert.doesNotMatch(visible, /private|secret|PRIVATE/);
+  assert.match(visible, /RELAY started/);
 });
 
 test("project import, selection, and index build use the shared command path", async () => {
@@ -623,6 +651,159 @@ test("catalog registration uses the current revision and hides local path conten
   assert.match(page.nodes["#tests-catalog-status"].textContent, /revision 4/);
   assert.equal(page.nodes["#tests-catalog-status"].focused, true);
   assert.doesNotMatch(page.nodes["#tests-catalog-status"].textContent, /Maps\/|private-id/);
+});
+
+test("simple file check appends a direct indexed assertion at the loaded revision", async () => {
+  let revision = 3;
+  let stored = catalog;
+  let savedArguments;
+  const page = await loadDashboard((command, args) => {
+    if (command === "project.check_catalog.get") return commandReply({
+      project_id: "private-id", revision, index_generation: 6, catalog: stored
+    });
+    if (command === "project.check_catalog.put") {
+      savedArguments = args;
+      revision = 4;
+      stored = args.catalog;
+      return commandReply({ project_id: "private-id", revision, index_generation: 6,
+        check_count: stored.checks.length });
+    }
+    return success(command);
+  });
+  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
+  page.nodes["#tests-add-file-id"].value = "project.marker";
+  page.nodes["#tests-add-file-path"].value = "Project/Private.uefnproject";
+  await page.nodes["#tests-add-file-form"].listener({ preventDefault() {} });
+  assert.equal(savedArguments.expected_revision, 3);
+  assert.deepEqual(savedArguments.catalog.checks[2], {
+    id: "project.marker", roots: ["Project/Private.uefnproject"], leaves: [],
+    dependency_mode: "direct",
+    assertion: { kind: "indexed_file_present", path: "Project/Private.uefnproject" }
+  });
+  assert.match(page.nodes["#tests-add-file-status"].textContent, /saved at revision 4.*index only.*UNTESTED/);
+  assert.equal(page.nodes["#tests-add-file-status"].focused, true);
+  assert.equal(page.nodes["#tests-add-file-id"].value, "");
+  assert.equal(page.nodes["#tests-plan"].disabled, false);
+  assert.doesNotMatch(page.nodes["#tests-catalog-list"].children.map((item) => item.textContent).join(" ") +
+    page.nodes["#tests-add-file-status"].textContent, /Private\.uefnproject|private-id/);
+});
+
+test("simple file check creates the first catalog after a confirmed missing read", async () => {
+  let stored = null;
+  let expectedRevision = -1;
+  const page = await loadDashboard((command, args) => {
+    if (command === "project.check_catalog.get") return stored
+      ? commandReply({ project_id: "private-id", revision: 1, index_generation: 2, catalog: stored })
+      : commandError("CHECK_CATALOG_MISSING");
+    if (command === "project.check_catalog.put") {
+      expectedRevision = args.expected_revision;
+      stored = args.catalog;
+      return commandReply({ project_id: "private-id", revision: 1, index_generation: 2, check_count: 1 });
+    }
+    return success(command);
+  });
+  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
+  assert.equal(page.nodes["#tests-add-file-save"].disabled, false);
+  page.nodes["#tests-add-file-id"].value = "marker";
+  page.nodes["#tests-add-file-path"].value = "project.uefnproject";
+  await page.nodes["#tests-add-file-form"].listener({ preventDefault() {} });
+  assert.equal(expectedRevision, 0);
+  assert.equal(stored.checks.length, 1);
+  assert.match(page.nodes["#tests-add-file-status"].textContent, /saved at revision 1/);
+});
+
+test("an unconfirmed reread after saving requires refresh before another file check", async () => {
+  let saved = false;
+  const page = await loadDashboard((command, args) => {
+    if (command === "project.check_catalog.get") return saved
+      ? commandError("CHECK_CATALOG_MISSING")
+      : commandReply({ project_id: "private-id", revision: 1, index_generation: 2, catalog });
+    if (command === "project.check_catalog.put") {
+      saved = true;
+      return commandReply({ project_id: args.project_id, revision: 2, index_generation: 2, check_count: 3 });
+    }
+    return success(command);
+  });
+  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
+  page.nodes["#tests-add-file-id"].value = "new.map";
+  page.nodes["#tests-add-file-path"].value = "Maps/New.umap";
+  await page.nodes["#tests-add-file-form"].listener({ preventDefault() {} });
+  assert.match(page.nodes["#tests-add-file-status"].textContent, /needs review.*Refresh/);
+  assert.equal(page.nodes["#tests-add-file-save"].disabled, true);
+  assert.equal(page.nodes["#tests-plan"].disabled, true);
+});
+
+test("simple file check refuses duplicate or escaping paths before a write", async () => {
+  let puts = 0;
+  const page = await loadDashboard((command) => {
+    if (command === "project.check_catalog.get") return commandReply({
+      project_id: "private-id", revision: 1, index_generation: 2, catalog
+    });
+    if (command === "project.check_catalog.put") puts++;
+    return success(command);
+  });
+  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
+  page.nodes["#tests-add-file-id"].value = "map.index";
+  page.nodes["#tests-add-file-path"].value = "Maps/New.umap";
+  await page.nodes["#tests-add-file-form"].listener({ preventDefault() {} });
+  assert.match(page.nodes["#tests-add-file-status"].textContent, /already exists/);
+  page.nodes["#tests-add-file-id"].value = "new.map";
+  page.nodes["#tests-add-file-path"].value = "../Private.umap";
+  await page.nodes["#tests-add-file-form"].listener({ preventDefault() {} });
+  assert.match(page.nodes["#tests-add-file-status"].textContent, /project-relative/);
+  assert.equal(puts, 0);
+});
+
+test("simple file check requires refresh after conflict, unavailable index, or uncertain save", async () => {
+  for (const code of ["CHECK_CATALOG_CONFLICT", "INDEX_BASELINE_MISSING", "uncertain"]) {
+    const page = await loadDashboard((command) => {
+      if (command === "project.check_catalog.get") return commandReply({
+        project_id: "private-id", revision: 1, index_generation: 2, catalog
+      });
+      if (command === "project.check_catalog.put") {
+        if (code === "uncertain") throw new Error("network dropped");
+        return commandError(code);
+      }
+      return success(command);
+    });
+    await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
+    page.nodes["#tests-add-file-id"].value = "new.map";
+    page.nodes["#tests-add-file-path"].value = "Maps/New.umap";
+    await page.nodes["#tests-add-file-form"].listener({ preventDefault() {} });
+    assert.equal(page.nodes["#tests-add-file-save"].disabled, true);
+    assert.equal(page.nodes["#tests-plan"].disabled, true);
+    assert.equal(page.nodes["#tests-add-file-status"].focused, true);
+    assert.match(page.nodes["#tests-add-file-status"].textContent,
+      code === "CHECK_CATALOG_CONFLICT" ? /changed.*Refresh/ :
+      code === "INDEX_BASELINE_MISSING" ? /Build.*file index.*refresh/ : /uncertain.*Refresh/);
+    assert.equal(page.nodes["#tests-add-file-id"].value, "new.map");
+  }
+});
+
+test("a project switch cannot apply an earlier project's file-check response", async () => {
+  let finishPut;
+  const page = await loadDashboard((command, args) => {
+    if (command === "project.list") return commandReply({ projects: [
+      { id: "first", name: "First" }, { id: "second", name: "Second" }
+    ] });
+    if (command === "project.check_catalog.get") return commandReply({
+      project_id: args.project_id, revision: 1, index_generation: 2, catalog
+    });
+    if (command === "project.check_catalog.put") return new Promise((resolve) => { finishPut = resolve; });
+    return success(command);
+  });
+  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
+  page.nodes["#tests-add-file-id"].value = "new.map";
+  page.nodes["#tests-add-file-path"].value = "Maps/Private.umap";
+  const pending = page.nodes["#tests-add-file-form"].listener({ preventDefault() {} });
+  await new Promise(setImmediate);
+  await page.nodes["#projects"].children[1].children.find((child) => child.textContent === "Select").listener();
+  finishPut(commandReply({ project_id: "first", revision: 2, index_generation: 2, check_count: 3 }));
+  await pending;
+  assert.equal(page.nodes["#tests-add-file-id"].value, "");
+  assert.equal(page.nodes["#tests-add-file-path"].value, "");
+  assert.match(page.nodes["#tests-add-file-status"].textContent, /Ready to add/);
+  assert.doesNotMatch(page.nodes["#tests-add-file-status"].textContent, /saved|Private/);
 });
 
 test("fallback plans stay untested and stale execution requires refresh", async () => {

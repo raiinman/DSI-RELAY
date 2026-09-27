@@ -1297,12 +1297,17 @@ try {
                     }
                     'report.evidence_capture' {
                         $summary = Require-Relay 'diagnostics.summary' @{}
+                        $recentJson = ConvertTo-Json -InputObject @($summary.recent) -Depth 8 -Compress
+                        $recentValid = $summary.recent -is [array] -and @($summary.recent).Count -le 12 -and
+                            $recentJson.Length -le 4096 -and
+                            -not $recentJson.Contains($script:ownedFull, [StringComparison]::OrdinalIgnoreCase) -and
+                            (-not $ProjectRoot -or -not $recentJson.Contains($ProjectRoot, [StringComparison]::OrdinalIgnoreCase))
                         $hashesValid = $true
                         foreach ($entry in $script:journal) {
                             if ((Get-TextHash $entry.entry_json) -ne $entry.entry_sha256) { $hashesValid = $false; break }
                         }
                         $hasResource = @($script:results | Where-Object { $_.resource_use -and $_.resource_use.peak_rss_bytes }).Count -gt 0
-                        $status = if ($summary.available -eq $true -and $hashesValid -and $hasResource) { 'passed' } else { 'failed' }
+                        $status = if ($summary.available -eq $true -and $recentValid -and $hashesValid -and $hasResource) { 'passed' } else { 'failed' }
                         $reason = if ($status -eq 'passed') { 'SAFE_EVIDENCE_CAPTURED' } else { 'EVIDENCE_CAPTURE_INCOMPLETE' }
                         $evidenceEligible = $true
                     }

@@ -27,6 +27,7 @@ Own the one end-of-build integrated validation runner and its bounded workflow p
 - The separate Phase 10 direct-index fixture creates two tiny files only inside the owned disposable run root, registers a direct-only catalog, checks both baseline assertions, changes one file, reconciles, and verifies that only the affected check executes with durable indexed-snapshot evidence. Its PASS is a local generic algorithm/transport check; it does not certify UEFN, creator-app, or the supplied project.
 - The Phase 8 Krita recovery fixture uses an unverified local file pair to check durable candidate and replay handling. Native Krita origin and workflow remain untested.
 - The Phase 9 local gateway result scenario uses authenticated loopback MCP list, describe, and context tools to verify project-scoped metadata and one bounded exact stored fact by result ID. Its one `local_mcp_http` transport metric sums application JSON bytes and elapsed request time across those three calls. A local pass proves these local transport paths only; a remote or ChatGPT client remains `untested` without its own live session.
+- The evidence-capture workflow checks the bounded safe recent diagnostic event projection for count, serialized size, and absence of the run and selected project roots. It never reads raw diagnostic log lines into the integrated report.
 
 # Work Guidance
 

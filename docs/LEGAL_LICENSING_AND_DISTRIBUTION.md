@@ -303,7 +303,7 @@ Examples:
 
 Before a public beta/release:
 
-- include the RELAY Core MIT license and RAiiNMAN credit in the release artifact
+- include the first-party RELAY MIT license and RAiiNMAN credit in the release artifact
 - complete dependency/license inventory
 - generate required notices/attributions
 - review licenses for each first-party companion

@@ -14,6 +14,7 @@ pub const DEFAULT_MAX_FILE_BYTES: u64 = 512 * 1024;
 pub const DEFAULT_MAX_FILES: usize = 4;
 pub const DEFAULT_SYNC_EVERY: u64 = 16;
 pub const DETAIL_MAX_DURATION_MS: u64 = 15 * 60 * 1000;
+pub const RECENT_SUMMARY_LIMIT: usize = 12;
 
 const CURRENT_FILE: &str = "relay-diagnostics.jsonl";
 const META_FILE: &str = "relay-diagnostics.meta.json";
@@ -288,8 +289,62 @@ pub struct DiagnosticAggregate {
     pub by_severity: BTreeMap<String, u64>,
     pub by_component: BTreeMap<String, u64>,
     pub by_event_id: BTreeMap<String, u64>,
+    pub recent: Vec<SafeDiagnosticEvent>,
     pub retention_evicted_events: u64,
     pub retention_evicted_files: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SafeDiagnosticEvent {
+    pub time_unix_ms: u64,
+    pub severity: Severity,
+    pub event_code: &'static str,
+    pub command: Option<String>,
+    pub error_code: Option<String>,
+}
+
+fn safe_recent_event(event: &DiagnosticEvent) -> Option<SafeDiagnosticEvent> {
+    let (event_code, command, error_code) = match event.event_id.as_str() {
+        "relay.core.started" => ("relay.core.started", None, None),
+        "relay.host.component.failed" | "relay.host.component.recovered" => {
+            let code = event.attributes.get("error_code")?.as_str()?;
+            let known = matches!(code,
+                "PARSER_INSTALLATION_INVALID" | "ADAPTER_QUARANTINED" |
+                "PARSER_VERSION_MISMATCH" | "PARSER_NOT_INSTALLED" |
+                "PARSER_PROJECT_UNAVAILABLE" | "PARSER_SOURCE_SCOPE_INVALID" |
+                "PARSER_SOURCE_UNREADABLE" | "PARSER_INPUT_UNSUPPORTED" |
+                "PARSER_OBSERVATION_INVALID" | "PARSER_TARGET_NOT_INDEXED" |
+                "PARSER_EDGE_REJECTED" | "PARSER_RECOVERED");
+            if !known { return None; }
+            (if event.event_id == "relay.host.component.failed" {
+                "relay.host.component.failed"
+            } else {
+                "relay.host.component.recovered"
+            }, None, Some(code.to_string()))
+        }
+        "relay.command.completed" => {
+            if event.attributes.get("ok")?.as_bool()? { return None; }
+            let code = event.attributes.get("error_code")?.as_str()?;
+            let known_code = relay_contracts::registry::registry().common_errors.iter()
+                .any(|known| known == code)
+                || relay_contracts::registry::registry().commands.iter()
+                    .any(|spec| spec.errors.iter().any(|known| known == code))
+                || matches!(code, "VALIDATION_FAILED" | "RESULT_SCHEMA_VIOLATION");
+            if !known_code { return None; }
+            let command = event.attributes.get("command")?.as_str()?;
+            let safe_command = relay_contracts::registry::resolve_command(command, None)
+                .ok().map(|_| command.to_string());
+            ("relay.command.completed", safe_command, Some(code.to_string()))
+        }
+        _ => return None,
+    };
+    Some(SafeDiagnosticEvent {
+        time_unix_ms: event.time_unix_ms,
+        severity: event.severity,
+        event_code,
+        command,
+        error_code,
+    })
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -904,6 +959,7 @@ fn aggregate_paths(
     let mut by_severity = BTreeMap::new();
     let mut by_component = BTreeMap::new();
     let mut by_event_id = BTreeMap::new();
+    let mut recent = Vec::new();
 
     for path in paths {
         let file = File::open(path).map_err(|error| {
@@ -932,6 +988,10 @@ fn aggregate_paths(
                 .or_insert(0) += 1;
             *by_component.entry(event.component.clone()).or_insert(0) += 1;
             *by_event_id.entry(event.event_id.clone()).or_insert(0) += 1;
+            if let Some(safe) = safe_recent_event(&event) {
+                if recent.len() == RECENT_SUMMARY_LIMIT { recent.remove(0); }
+                recent.push(safe);
+            }
             if !event.completeness.complete {
                 incomplete_events = incomplete_events.saturating_add(1);
             }
@@ -957,6 +1017,7 @@ fn aggregate_paths(
         by_severity,
         by_component,
         by_event_id,
+        recent,
         retention_evicted_events: evicted_events,
         retention_evicted_files: evicted_files,
     })
@@ -1112,6 +1173,59 @@ mod tests {
         let serialized = serde_json::to_string(&summary).unwrap();
         assert!(!serialized.contains("never-export-this"));
         assert!(!serialized.contains("fixture event 3"));
+        drop(diagnostics);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn recent_summary_keeps_only_fixed_local_event_codes_and_known_failures() {
+        let dir = temp_dir("recent-safe");
+        let mut diagnostics = JsonlDiagnostics::open(DiagnosticConfig::new(&dir)).unwrap();
+        let mut failure = DiagnosticEvent::new(
+            "relay.command.completed", Severity::Warn, "core.command", "private message",
+        );
+        failure.attributes.insert("command".into(), json!("system.echo"));
+        failure.attributes.insert("ok".into(), json!(false));
+        failure.attributes.insert("error_code".into(), json!("VALIDATION_FAILED"));
+        failure.attributes.insert("path".into(), json!(r"C:\private\project"));
+        diagnostics.append(failure).unwrap();
+        let mut forged = DiagnosticEvent::new(
+            "relay.command.completed", Severity::Warn, "core.command", "private message",
+        );
+        forged.attributes.insert("command".into(), json!("system.echo"));
+        forged.attributes.insert("ok".into(), json!(false));
+        forged.attributes.insert("error_code".into(), json!("PRIVATE_SECRET"));
+        diagnostics.append(forged).unwrap();
+        diagnostics.append(sample_event(1)).unwrap();
+
+        let recent = diagnostics.support_summary().unwrap().aggregate.recent;
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].event_code, "relay.command.completed");
+        assert_eq!(recent[0].command.as_deref(), Some("system.echo"));
+        assert_eq!(recent[0].error_code.as_deref(), Some("VALIDATION_FAILED"));
+        let encoded = serde_json::to_string(&recent).unwrap();
+        assert!(!encoded.contains("private"));
+        assert!(!encoded.contains("PRIVATE_SECRET"));
+        drop(diagnostics);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn recent_summary_keeps_only_the_newest_twelve_safe_events() {
+        let dir = temp_dir("recent-bound");
+        let mut diagnostics = JsonlDiagnostics::open(DiagnosticConfig::new(&dir)).unwrap();
+        for index in 0..15 {
+            let mut event = DiagnosticEvent::new(
+                "relay.host.component.failed", Severity::Warn, "host.component", "fixed",
+            );
+            event.time_unix_ms = index;
+            event.attributes.insert("error_code".into(), json!("PARSER_SOURCE_UNREADABLE"));
+            diagnostics.append(event).unwrap();
+        }
+        let recent = diagnostics.support_summary().unwrap().aggregate.recent;
+        assert_eq!(recent.len(), RECENT_SUMMARY_LIMIT);
+        assert_eq!(recent.first().unwrap().time_unix_ms, 3);
+        assert_eq!(recent.last().unwrap().time_unix_ms, 14);
         drop(diagnostics);
         fs::remove_dir_all(dir).unwrap();
     }

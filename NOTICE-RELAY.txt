@@ -2,6 +2,6 @@ DSI RELAY
 Created by RAiiNMAN
 Copyright (c) 2026 RAiiNMAN
 
-RELAY's first-party Core, daemon, CLI, and documentation are offered under the
-MIT License in LICENSE. Third-party components retain their own licenses and
+RELAY's first-party source code and documentation are offered under the MIT
+License in LICENSE. Third-party components retain their own licenses and
 copyright notices. Distribution bundles must include their applicable notices.

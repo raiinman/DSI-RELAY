@@ -168,7 +168,7 @@
       "id": "diagnostics.summary",
       "version": 1,
       "stability": "phase5",
-      "summary": "Return bounded diagnostic health and event counts without raw log history.",
+      "summary": "Return bounded diagnostic health, counts, and safe recent local event codes without raw log history.",
       "effect_class": "observe",
       "permission": "read",
       "idempotency": "safe",
@@ -202,6 +202,22 @@
               "by_severity": { "type": "object" }
             },
             "additionalProperties": false
+          },
+          "recent": {
+            "type": ["array", "null"],
+            "maxItems": 12,
+            "items": {
+              "type": "object",
+              "required": ["time_unix_ms", "severity", "event_code", "command", "error_code"],
+              "properties": {
+                "time_unix_ms": { "type": "integer", "minimum": 0 },
+                "severity": { "type": "string", "enum": ["trace", "debug", "info", "warn", "error", "critical"] },
+                "event_code": { "type": "string", "enum": ["relay.core.started", "relay.command.completed", "relay.host.component.failed", "relay.host.component.recovered"] },
+                "command": { "type": ["string", "null"] },
+                "error_code": { "type": ["string", "null"] }
+              },
+              "additionalProperties": false
+            }
           },
           "error_code": { "type": ["string", "null"] },
           "automation_mode": { "type": "string", "enum": ["running", "paused", "unavailable"] }

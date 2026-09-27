@@ -56,6 +56,9 @@ li { border-top: 1px solid #e3ece7; padding: .7rem 0; }
 .test-workflow { border-top: 1px solid #e3ece7; padding: 1rem 0; }
 .test-workflow h3 { margin: 0 0 .7rem; font-size: 1rem; }
 .test-workflow label { display: block; font-weight: 700; }
+.test-workflow h4 { margin: 1rem 0 .4rem; }
+.test-workflow input[type="text"] { display: block; width: 100%; border: 1px solid #879e93; border-radius: .5rem; padding: .65rem; margin: .4rem 0 .8rem; font: inherit; }
+.test-workflow input[type="text"]:focus-visible { outline: 3px solid #efb03c; outline-offset: 2px; }
 .test-workflow input[type="file"] { display: block; max-width: 100%; margin: .5rem 0 .8rem; }
 .test-workflow button { margin: .2rem 0 .6rem; min-height: 2.75rem; }
 .test-workflow li { overflow-wrap: anywhere; }

@@ -413,6 +413,21 @@ function safeResultId(value) {
   return typeof value === "string" && /^RES-[a-f0-9]{32}$/.test(value) ? value : null;
 }
 
+function safeProjectRelativeFilePath(value) {
+  if (typeof value !== "string" || !value || value !== value.trim() ||
+      new TextEncoder().encode(value).byteLength > 4096 ||
+      value.includes("\\") || value.includes(":") || /[\u0000-\u001f]/.test(value)) return null;
+  const parts = value.split("/");
+  return parts.every((part) => part && part !== "." && part !== ".." &&
+    !/[<>"|?*]/.test(part) && !/[. ]$/.test(part)) ? value : null;
+}
+
+function updateAddFileCheckButton() {
+  $("#tests-add-file-save").disabled = checkWorkflowBusy || !selectedActiveProject(selectedProjectId) ||
+    (!checkCatalog && !checkCatalogMissingConfirmed) ||
+    (checkCatalog?.catalog?.checks.length ?? 0) >= 128;
+}
+
 function assertionLabel(assertion) {
   if (assertion?.kind === "indexed_file_present") return "Indexed file present (path hidden)";
   if (assertion?.kind === "indexed_file_digest") return "Indexed file digest matches (path hidden)";
@@ -433,6 +448,8 @@ async function loadCheckCatalog(projectId) {
   const epoch = ++checkWorkflowEpoch;
   if (checkDisplayedProjectId !== projectId) {
     $("#tests-catalog-file").value = "";
+    $("#tests-add-file-id").value = "";
+    $("#tests-add-file-path").value = "";
     checkDisplayedProjectId = projectId;
   }
   checkCatalog = null;
@@ -440,12 +457,15 @@ async function loadCheckCatalog(projectId) {
   resetCheckPlan();
   $("#tests-catalog-list").replaceChildren();
   $("#tests-catalog-save").disabled = true;
+  updateAddFileCheckButton();
   if (!projectId || !selectedActiveProject(projectId)) {
+    $("#tests-add-file-status").textContent = "Select an active project to add a file check.";
     $("#tests-catalog-status").textContent = projectId
       ? "Select an active project to register and plan checks."
       : "Select an active project to inspect its declared checks.";
     return;
   }
+  $("#tests-add-file-status").textContent = "Loading current checks before adding a file check…";
   $("#tests-catalog-status").textContent = "Loading declared checks…";
   try {
     const record = await command("project.check_catalog.get", { project_id: projectId });
@@ -458,6 +478,10 @@ async function loadCheckCatalog(projectId) {
       throw new Error("CHECK_CATALOG_INVALID");
     }
     checkCatalog = record;
+    updateAddFileCheckButton();
+    $("#tests-add-file-status").textContent = record.catalog.checks.length >= 128
+      ? "This catalog is full. Use the RELAY CLI to replace or manage checks."
+      : "Ready to add an indexed-file presence check. Native and live workflows remain UNTESTED.";
     $("#tests-catalog-save").disabled = !$("#tests-catalog-file").files?.[0];
     $("#tests-catalog-status").textContent = `${record.catalog.checks.length} declared checks · revision ${record.revision} · registered at index generation ${record.index_generation}. Paths stay hidden. Select a new local JSON file to replace this catalog.`;
     for (const check of record.catalog.checks) {
@@ -469,10 +493,107 @@ async function loadCheckCatalog(projectId) {
   } catch (problem) {
     if (epoch !== checkWorkflowEpoch || selectedProjectId !== projectId) return;
     checkCatalogMissingConfirmed = problem.message === "CHECK_CATALOG_MISSING";
+    updateAddFileCheckButton();
+    $("#tests-add-file-status").textContent = checkCatalogMissingConfirmed
+      ? "No checks are registered yet. Add the first indexed-file presence check. A built file index is required."
+      : "Current checks are unavailable. Refresh before adding a file check.";
     $("#tests-catalog-save").disabled = !checkCatalogMissingConfirmed || !$("#tests-catalog-file").files?.[0];
     $("#tests-catalog-status").textContent = problem.message === "CHECK_CATALOG_MISSING"
       ? "No checks registered for this project. Select a local check catalog JSON file and register it."
       : "Could not inspect current checks. Refresh this page, then try again.";
+  }
+}
+
+async function addFileCheck(event) {
+  event.preventDefault();
+  const projectId = selectedProjectId;
+  const status = $("#tests-add-file-status");
+  if (checkWorkflowBusy || !selectedActiveProject(projectId) ||
+      (!checkCatalog && !checkCatalogMissingConfirmed)) return;
+  const id = $("#tests-add-file-id").value.trim();
+  const path = safeProjectRelativeFilePath($("#tests-add-file-path").value);
+  if (!safeCheckId(id)) {
+    status.textContent = "Use a check ID of up to 64 letters, numbers, dots, underscores, or dashes.";
+    status.focus();
+    return;
+  }
+  if (!path) {
+    status.textContent = "Enter a project-relative file path with forward slashes and no parent-folder steps.";
+    status.focus();
+    return;
+  }
+  const existing = checkCatalog?.catalog?.checks ?? [];
+  if (existing.length >= 128) {
+    status.textContent = "This catalog is full. Use the RELAY CLI to manage its checks.";
+    status.focus();
+    return;
+  }
+  if (existing.some((check) => check.id === id)) {
+    status.textContent = "That check ID already exists. Choose another ID or review the declared checks.";
+    status.focus();
+    return;
+  }
+  const expectedRevision = checkCatalog?.revision ?? 0;
+  const nextCatalog = { format_version: 1, checks: [...existing, {
+    id, roots: [path], leaves: [], dependency_mode: "direct",
+    assertion: { kind: "indexed_file_present", path }
+  }] };
+  if (!validLocalCatalog(nextCatalog) ||
+      new TextEncoder().encode(JSON.stringify(nextCatalog)).byteLength > 24 * 1024) {
+    status.textContent = "The updated catalog is too large for this form. Use the RELAY CLI to manage it.";
+    status.focus();
+    return;
+  }
+  const requestEpoch = checkWorkflowEpoch;
+  let expectedEpoch = requestEpoch;
+  checkWorkflowBusy = true;
+  resetCheckPlan();
+  updateAddFileCheckButton();
+  $("#tests-catalog-save").disabled = true;
+  status.textContent = "Saving the file check…";
+  try {
+    const saved = await command("project.check_catalog.put", {
+      project_id: projectId, expected_revision: expectedRevision, catalog: nextCatalog
+    });
+    if (requestEpoch !== checkWorkflowEpoch || selectedProjectId !== projectId) return;
+    if (saved.project_id !== projectId || saved.revision !== expectedRevision + 1 ||
+        saved.check_count !== nextCatalog.checks.length ||
+        !Number.isSafeInteger(saved.index_generation) || saved.index_generation < 1) {
+      throw new Error("CHECK_SAVE_UNCERTAIN");
+    }
+    expectedEpoch = requestEpoch + 1;
+    await loadCheckCatalog(projectId);
+    if (checkWorkflowEpoch !== expectedEpoch || selectedProjectId !== projectId) return;
+    const recorded = checkCatalog?.catalog?.checks.find((check) => check.id === id);
+    if (!recorded || recorded.dependency_mode !== "direct" ||
+        recorded.assertion?.kind !== "indexed_file_present" || recorded.assertion.path !== path) {
+      checkCatalog = null;
+      checkCatalogMissingConfirmed = false;
+      resetCheckPlan();
+      status.textContent = "The save outcome needs review. Refresh current checks before trying again.";
+      return;
+    }
+    $("#tests-add-file-id").value = "";
+    $("#tests-add-file-path").value = "";
+    status.textContent = `File check ${id} saved at revision ${checkCatalog.revision}. Plan it before running. Its result covers the file index only; native and live workflows remain UNTESTED.`;
+  } catch (problem) {
+    if (checkWorkflowEpoch !== expectedEpoch || selectedProjectId !== projectId) return;
+    checkCatalog = null;
+    checkCatalogMissingConfirmed = false;
+    resetCheckPlan();
+    status.textContent = problem.message === "CHECK_CATALOG_CONFLICT"
+      ? "Checks changed since this page loaded. Refresh and review the current catalog before saving again."
+      : problem.message === "INDEX_BASELINE_MISSING"
+        ? "Build this project's file index, then refresh before adding a check. No workflow has been tested."
+        : problem.message === "CHECK_CATALOG_INVALID"
+          ? "The check was not accepted. Review its ID and relative file path, then refresh current checks."
+          : "The save outcome is uncertain. Refresh current checks before retrying; the check may already be saved.";
+  } finally {
+    checkWorkflowBusy = false;
+    if (checkWorkflowEpoch === expectedEpoch && selectedProjectId === projectId) {
+      updateAddFileCheckButton();
+      status.focus();
+    }
   }
 }
 
@@ -944,6 +1065,39 @@ function renderDiagnostics(status, doctor, summary) {
     : doctor.healthy === false
       ? "A component needs attention. Review Health and the suggested next step above."
       : "Diagnostic capture is available. A full workflow run must be checked separately.";
+  const recent = $("#diagnostic-recent-list");
+  recent.replaceChildren();
+  if (!summary.available || !Array.isArray(summary.recent)) {
+    $("#diagnostic-recent-summary").textContent = "Recent local events are unavailable.";
+  } else {
+    const labels = {
+      "relay.core.started": "RELAY started",
+      "relay.command.completed": "Command failed",
+      "relay.host.component.failed": "Local component needs attention",
+      "relay.host.component.recovered": "Local component recovered"
+    };
+    for (const event of summary.recent.slice(-12).reverse()) {
+      const label = Object.hasOwn(labels, event?.event_code) ? labels[event.event_code] : null;
+      if (!label) continue;
+      const code = typeof event.error_code === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(event.error_code)
+        ? event.error_code : null;
+      const commandName = typeof event.command === "string" && /^[a-z][a-z0-9._]{0,63}$/.test(event.command)
+        ? event.command : null;
+      const eventTime = Number.isSafeInteger(event.time_unix_ms) && event.time_unix_ms >= 0
+        ? new Date(event.time_unix_ms) : null;
+      const time = eventTime && Number.isFinite(eventTime.getTime())
+        ? eventTime.toLocaleString() : "Time unavailable";
+      const parts = [time, label];
+      if (commandName) parts.push(commandName);
+      if (code) parts.push(`Code: ${code}`);
+      const item = document.createElement("li");
+      item.textContent = parts.join(" · ");
+      recent.append(item);
+    }
+    $("#diagnostic-recent-summary").textContent = recent.children.length
+      ? `${recent.children.length} retained local event${recent.children.length === 1 ? "" : "s"}. These are observations, not workflow test results.`
+      : "No retained failure or recovery events. This does not confirm that workflows passed.";
+  }
   details.textContent = JSON.stringify({
     relay_version: typeof status.version === "string" ? status.version : null,
     protocol_version: Number.isSafeInteger(status.protocol?.negotiated) ? status.protocol.negotiated : null,
@@ -970,6 +1124,8 @@ function clearDiagnostics() {
     "#relay-version", "#relay-uptime"
   ]) $(selector).textContent = "Unavailable";
   $("#diagnostic-guidance").textContent = "Current diagnostic information is unavailable.";
+  $("#diagnostic-recent-summary").textContent = "Recent local events are unavailable.";
+  $("#diagnostic-recent-list").replaceChildren();
   details.textContent = "No current details available.";
 }
 
@@ -1190,6 +1346,10 @@ async function refresh() {
     ++checkWorkflowEpoch;
     checkCatalog = null;
     checkCatalogMissingConfirmed = false;
+    $("#tests-add-file-id").value = "";
+    $("#tests-add-file-path").value = "";
+    $("#tests-add-file-status").textContent = "Current checks are unavailable. Refresh after RELAY is running.";
+    updateAddFileCheckButton();
     resetCheckPlan();
     $("#tests-catalog-save").disabled = true;
     $("#tests-catalog-list").replaceChildren();
@@ -1230,6 +1390,7 @@ $("#tests-catalog-file").addEventListener("change", () => {
     : "No local catalog selected.";
 });
 $("#tests-catalog-save").addEventListener("click", registerCheckCatalog);
+$("#tests-add-file-form").addEventListener("submit", addFileCheck);
 $("#tests-plan").addEventListener("click", planDeclaredChecks);
 $("#tests-run").addEventListener("click", runDeclaredChecks);
 $("#asset-manifest").addEventListener("change", () => {

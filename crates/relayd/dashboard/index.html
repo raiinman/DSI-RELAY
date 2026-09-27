@@ -82,6 +82,17 @@
         <p class="section-intro">Declare local file checks, review the current plan, then run it explicitly. These checks inspect RELAY's file index; creator-app behavior needs a separate live test.</p>
         <div class="test-workflow" role="group" aria-labelledby="tests-catalog-title">
           <h3 id="tests-catalog-title">Declared checks</h3>
+          <p>Add a simple check for a file in the selected project's index. Its result covers indexed-file presence only; creator-app and live UEFN behavior remain UNTESTED.</p>
+          <form id="tests-add-file-form">
+            <label for="tests-add-file-id">Check name or ID</label>
+            <input id="tests-add-file-id" type="text" maxlength="64" autocomplete="off" spellcheck="false" required aria-describedby="tests-add-file-help">
+            <label for="tests-add-file-path">File path within this project</label>
+            <input id="tests-add-file-path" type="text" maxlength="4096" autocomplete="off" spellcheck="false" required placeholder="Maps/Main.umap" aria-describedby="tests-add-file-help">
+            <p id="tests-add-file-help">Use a short ID with letters, numbers, dots, underscores, or dashes. Enter a relative path with forward slashes. The path stays hidden in saved check summaries.</p>
+            <button id="tests-add-file-save" type="submit" disabled>Add file check</button>
+          </form>
+          <p id="tests-add-file-status" role="status" aria-live="polite" tabindex="-1">Select an active project to add a file check.</p>
+          <h4>Advanced: replace the full catalog</h4>
           <p>Choose a version 1 JSON catalog with check IDs, project-relative inputs, and optional indexed-file assertions. Up to 128 checks fit here; larger catalogs can use the RELAY CLI.</p>
           <label for="tests-catalog-file">Check catalog (JSON)</label>
           <input id="tests-catalog-file" type="file" accept=".json,application/json">
@@ -139,6 +150,10 @@
         <div><dt>Running for</dt><dd id="relay-uptime">Checking…</dd></div>
       </dl>
       <p id="diagnostic-guidance" class="diagnostic-guidance" role="status" aria-live="polite"></p>
+      <h3>Recent local events</h3>
+      <p id="diagnostic-recent-summary">Checking…</p>
+      <ul id="diagnostic-recent-list"></ul>
+      <p>These are retained local observations and failure codes. Creator-app and live UEFN workflows remain UNTESTED until the integrated run can exercise them.</p>
       <h3>Integrated test report</h3>
       <p>Choose the privacy-safe report JSON from a completed local run. This preview stays in this browser tab.</p>
       <label for="integrated-report">Integrated report (JSON)</label>

@@ -1,6 +1,6 @@
 # DSI RELAY
 
-Created by **RAiiNMAN**. The first-party RELAY Core, daemon, CLI, and documentation are licensed under [MIT](LICENSE); see [creator credit](NOTICE-RELAY.txt).
+Created by **RAiiNMAN**. RELAY's first-party source code and documentation are licensed under [MIT](LICENSE); see [creator credit](NOTICE-RELAY.txt).
 
 Project readers can review the [privacy statement](PRIVACY.md), [support guide](SUPPORT.md), and [security reporting policy](SECURITY.md). The held preview binary is not available for installation.
 
@@ -10,7 +10,7 @@ The product exists to make AI-assisted development cheaper, more reliable, and e
 
 ## Status
 
-Phases 0–2 are complete. Construction continues on `development/relay-v0.1`, using [the roadmap](docs/ROADMAP.md) to order Phases 3–11. Phase 3 has a generic project index, watcher recovery, parser dispatch, and durable project lifecycle controls. Phase 4 compiles bounded stored-result and current task context. The local dashboard covers project approvals, diagnostics, and declared checks. Other foundations include static UEFN inspection and separate local-editor discovery, project-local Verse log analysis, asset manifest and bounded Blender/Krita commands, first-run discovery, guarded indexed-check execution including direct file selection, and authenticated local MCP result reads. Interrupted Krita exports can be recorded as unverified recovery candidates. Unsigned local update and rollback now inspect actual storage schema before changing the active version. The final integrated run and real creator-app, hardware, clean-account, and signed-distribution checks remain open. These foundations do not close the phases or establish a production release.
+Phases 0–2 are complete. Construction continues on `development/relay-v0.1`, using [the roadmap](docs/ROADMAP.md) to order Phases 3–11. Phase 3 has a generic project index, watcher recovery, parser dispatch, and durable project lifecycle controls. Phase 4 compiles bounded stored-result and current task context. The local dashboard covers project approvals, diagnostics with safe recent events, and declared checks. Other foundations include static UEFN inspection and separate local-editor discovery, project-local Verse log analysis, asset manifest and bounded Blender/Krita commands, first-run discovery, guarded indexed-check execution including direct file selection, and authenticated local MCP result reads. Interrupted Krita exports can be recorded as unverified recovery candidates. Unsigned local update and rollback inspect actual storage schema before changing the active version; disposable activation also checks daemon health. The final integrated run and real creator-app, hardware, clean-account, and signed-distribution checks remain open. These foundations do not close the phases or establish a production release.
 
 The build plan is to complete the documented workflows first, then run one integrated acceptance pass. Missing UEFN, creator-app, or specific hardware evidence will be reported **UNTESTED**. With the daemon running, `relay dashboard-url` opens the local health and project view. The unpublished preview binary stays on hold; `main` remains unmerged.
 
@@ -92,4 +92,4 @@ The [integrated run plan](validation/run-plan.json) and [runner](validation/Run-
 
 ## Public-release posture
 
-Public release is a design constraint from the beginning, not a promise of immediate release. RELAY must avoid personal paths, private credentials, user-specific defaults, and single-project assumptions. MIT and RAiiNMAN attribution are selected for the first-party Core, daemon, CLI, and documentation. Packaging, update distribution, companion licenses, and contribution policy still need release work.
+Public release is a design constraint from the beginning, not a promise of immediate release. RELAY must avoid personal paths, private credentials, user-specific defaults, and single-project assumptions. MIT and RAiiNMAN attribution apply to first-party RELAY source and documentation. Packaging, update distribution, third-party component licenses, and contribution policy still need release work.

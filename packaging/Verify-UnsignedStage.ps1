@@ -79,7 +79,7 @@ if (-not $licenseText.Contains('MIT License') -or -not $licenseText.Contains('RA
 $expected['bundle-manifest.json'] = Get-Hash $manifestPath
 $seenSums = @{}
 foreach ($line in Get-Content -LiteralPath $sumsPath) {
-    if ($line -notmatch '^([0-9a-f]{64})  ([A-Za-z0-9._/-]+)$') { throw 'Malformed checksum row' }
+    if (-not ($line -match '^([0-9a-f]{64})  ([A-Za-z0-9._/-]+)$')) { throw 'Malformed checksum row' }
     $relative = $Matches[2]
     Assert-Relative $relative
     if ($seenSums.ContainsKey($relative) -or -not $expected.ContainsKey($relative) -or

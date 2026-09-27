@@ -13,6 +13,7 @@ param(
     [ValidateSet('unknown', 'available', 'unavailable')][string]$BlenderAvailability = 'unknown',
     [ValidateSet('unknown', 'available', 'unavailable')][string]$KritaAvailability = 'unknown',
     [ValidateSet('unknown', 'available', 'unavailable')][string]$MinimumPcAvailability = 'unknown',
+    [ValidateSet('unknown', 'minimum_candidate', 'recommended_candidate')][string]$SupportedHostTier = 'unknown',
     [ValidateRange(1000, 600000)][int]$CommandTimeoutMs = 180000,
     [ValidateRange(1000, 60000)][int]$HostReadyTimeoutMs = 15000
 )
@@ -24,9 +25,10 @@ $startedUnixMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 $planPath = Join-Path $PSScriptRoot 'run-plan.json'
 $plan = Get-Content -LiteralPath $planPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $known = @(
-    'host.health', 'project.import_index', 'project.lifecycle', 'context.result_storage',
-    'context.compile_multi_result', 'context.conflict_handling', 'context.cost_benchmark',
-    'dashboard.browser', 'dashboard.accessibility',
+    'host.health', 'project.import_index', 'project.supported_host_resource', 'project.lifecycle', 'context.result_storage',
+    'project.foreground_interference',
+    'context.compile_multi_result', 'context.task_snapshot', 'context.conflict_handling', 'context.cost_benchmark',
+    'dashboard.browser', 'dashboard.approval_review', 'dashboard.accessibility',
     'uefn.static_inspection', 'uefn.mcp_discovery', 'uefn.spawn_audit', 'verse.imported_analysis', 'verse.project_file_analysis',
     'uefn.live_runtime', 'uefn.live_capture_assertions', 'assets.local_links', 'assets.impact_analysis',
     'krita.declared_formats', 'blender.mesh_validation', 'blender.native_mesh', 'krita.native_export',
@@ -113,14 +115,62 @@ function Get-Availability {
 
 function Get-ProcessSample {
     param($Process)
-    if (-not $Process) { return @{ peak_rss_bytes = $null; cpu_ms = $null } }
+    if (-not $Process) { return @{ peak_rss_bytes = $null; working_set_bytes = $null; cpu_ms = $null } }
     try {
         $Process.Refresh()
         return @{
             peak_rss_bytes = [long]$Process.PeakWorkingSet64
+            working_set_bytes = [long]$Process.WorkingSet64
             cpu_ms = [long]$Process.TotalProcessorTime.TotalMilliseconds
         }
-    } catch { return @{ peak_rss_bytes = $null; cpu_ms = $null } }
+    } catch { return @{ peak_rss_bytes = $null; working_set_bytes = $null; cpu_ms = $null } }
+}
+
+function Get-HostHardwareProbe {
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    try {
+        $computer = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+        $processors = @(Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop)
+        $physical = [long](($processors | Measure-Object -Property NumberOfCores -Sum).Sum)
+        $logical = [long](($processors | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum)
+        $memory = [long]$computer.TotalPhysicalMemory
+        if ($physical -lt 1 -or $logical -lt $physical -or $memory -lt 1073741824) { throw 'HOST_PROBE_INVALID' }
+        return [pscustomobject]@{ available = $true; physical_cores = $physical;
+            logical_processors = $logical; memory_bytes = $memory; overhead_ms = [long]$watch.ElapsedMilliseconds }
+    } catch {
+        return [pscustomobject]@{ available = $false; overhead_ms = [long]$watch.ElapsedMilliseconds }
+    } finally { $watch.Stop() }
+}
+
+function Initialize-ForegroundProbe {
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    try {
+        if (-not ('RelayValidationForegroundProbe' -as [type])) {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class RelayValidationForegroundProbe {
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+}
+'@ -ErrorAction Stop
+        }
+        return [pscustomobject]@{ available = $true; overhead_ms = [long]$watch.ElapsedMilliseconds }
+    } catch {
+        return [pscustomobject]@{ available = $false; overhead_ms = [long]$watch.ElapsedMilliseconds }
+    } finally { $watch.Stop() }
+}
+
+function Get-ForegroundCreatorPresence {
+    try {
+        $window = [RelayValidationForegroundProbe]::GetForegroundWindow()
+        if ($window -eq [IntPtr]::Zero) { return $false }
+        [uint32]$processId = 0
+        $null = [RelayValidationForegroundProbe]::GetWindowThreadProcessId($window, [ref]$processId)
+        if ($processId -eq 0) { return $false }
+        $name = [System.Diagnostics.Process]::GetProcessById([int]$processId).ProcessName.ToLowerInvariant()
+        return ($name -like 'unrealeditorfortnite*' -or $name -eq 'blender' -or $name -eq 'krita')
+    } catch { return $null }
 }
 
 function Read-BoundedInput {
@@ -130,13 +180,37 @@ function Read-BoundedInput {
     return [System.IO.File]::ReadAllText($file.FullName, $utf8)
 }
 
+function Add-IndexResourceSample {
+    param($Capture, $DaemonProcess, $CliProcess, [bool]$ProbeForeground)
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    $daemonSample = Get-ProcessSample $DaemonProcess
+    $cliSample = Get-ProcessSample $CliProcess
+    $Capture.daemon_peak_working_set_bytes = [Math]::Max([long]$Capture.daemon_peak_working_set_bytes,
+        [long]$daemonSample.working_set_bytes)
+    $Capture.cli_peak_working_set_bytes = [Math]::Max([long]$Capture.cli_peak_working_set_bytes,
+        [long]$cliSample.working_set_bytes)
+    if ($null -ne $daemonSample.cpu_ms) { $Capture.last_daemon_cpu_ms = [long]$daemonSample.cpu_ms }
+    if ($null -ne $cliSample.cpu_ms) { $Capture.last_cli_cpu_ms = [long]$cliSample.cpu_ms }
+    if ($ProbeForeground) {
+        $presence = Get-ForegroundCreatorPresence
+        if ($null -ne $presence) {
+            $Capture.foreground_observed_samples++
+            if ($presence) { $Capture.foreground_creator_samples++ }
+        }
+    }
+    $Capture.sample_count++
+    $watch.Stop()
+    $Capture.sampling_overhead_ms += [long]$watch.ElapsedMilliseconds
+}
+
 function Invoke-Relay {
-    param([string]$CommandId, [hashtable]$CommandArguments, [bool]$Keyed = $false)
+    param([string]$CommandId, [hashtable]$CommandArguments, [bool]$Keyed = $false,
+        [int]$CommandVersion = 1, [bool]$SampleResources = $false)
     $requestId = 'VALID-' + [Guid]::NewGuid().ToString('N')
     $request = [ordered]@{
         request_id = $requestId
         command = $CommandId
-        command_version = 1
+        command_version = $CommandVersion
         arguments = $CommandArguments
     }
     if ($Keyed) { $request.idempotency_key = 'IDEMP-' + $requestId }
@@ -148,6 +222,12 @@ function Invoke-Relay {
     $cliSample = @{ peak_rss_bytes = $null; cpu_ms = $null }
     $requestBytes = $null
     $responseBytes = $null
+    $resourceCapture = if ($SampleResources) { [ordered]@{
+        daemon_peak_working_set_bytes = 0L; cli_peak_working_set_bytes = 0L
+        sample_count = 0; sampling_overhead_ms = 0L
+        foreground_observed_samples = 0; foreground_creator_samples = 0
+        last_daemon_cpu_ms = $null; last_cli_cpu_ms = $null
+    } } else { $null }
     try {
         $inputJson = $request | ConvertTo-Json -Depth 20 -Compress
         $requestBytes = $utf8.GetByteCount($inputJson)
@@ -167,9 +247,24 @@ function Invoke-Relay {
         $null = $child.Start()
         $stdoutTask = $child.StandardOutput.ReadToEndAsync()
         $stderrTask = $child.StandardError.ReadToEndAsync()
+        if ($SampleResources) {
+            Add-IndexResourceSample $resourceCapture $script:daemon $child $script:foregroundProbeAvailable
+        }
         $child.StandardInput.WriteLine($inputJson)
         $child.StandardInput.Close()
-        if (-not $child.WaitForExit($CommandTimeoutMs)) {
+        $finished = $false
+        if ($SampleResources) {
+            $samplingWindow = [System.Diagnostics.Stopwatch]::StartNew()
+            Add-IndexResourceSample $resourceCapture $script:daemon $child $script:foregroundProbeAvailable
+            while (-not ($finished = $child.WaitForExit(100))) {
+                Add-IndexResourceSample $resourceCapture $script:daemon $child $script:foregroundProbeAvailable
+                if ($samplingWindow.ElapsedMilliseconds -ge $CommandTimeoutMs) { break }
+            }
+            Add-IndexResourceSample $resourceCapture $script:daemon $child $script:foregroundProbeAvailable
+            if (-not $finished -and $child.HasExited) { $finished = $true }
+            $samplingWindow.Stop()
+        } else { $finished = $child.WaitForExit($CommandTimeoutMs) }
+        if (-not $finished) {
             $errorCode = 'CLI_TIMEOUT'
             try { $child.Kill() } catch { }
             $null = $child.WaitForExit(5000)
@@ -198,11 +293,25 @@ function Invoke-Relay {
     }
     $afterDaemon = Get-ProcessSample $script:daemon
     $duration = [Math]::Max(0, ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - $started))
-    $daemonCpu = if ($null -ne $beforeDaemon.cpu_ms -and $null -ne $afterDaemon.cpu_ms) {
-        [Math]::Max(0, ($afterDaemon.cpu_ms - $beforeDaemon.cpu_ms))
+    $lastDaemonCpu = if ($null -ne $afterDaemon.cpu_ms) { $afterDaemon.cpu_ms }
+        elseif ($SampleResources) { $resourceCapture.last_daemon_cpu_ms } else { $null }
+    $daemonCpu = if ($null -ne $beforeDaemon.cpu_ms -and $null -ne $lastDaemonCpu) {
+        [Math]::Max(0, ($lastDaemonCpu - $beforeDaemon.cpu_ms))
     } else { 0 }
-    $cliCpu = if ($null -ne $cliSample.cpu_ms) { $cliSample.cpu_ms } else { 0 }
+    $cliCpu = if ($null -ne $cliSample.cpu_ms) { $cliSample.cpu_ms }
+        elseif ($SampleResources -and $null -ne $resourceCapture.last_cli_cpu_ms) {
+            $resourceCapture.last_cli_cpu_ms
+        } else { 0 }
     $peak = [Math]::Max([long]$cliSample.peak_rss_bytes, [long]$afterDaemon.peak_rss_bytes)
+    if ($SampleResources) {
+        $resourceCapture.daemon_peak_working_set_bytes = [Math]::Max(
+            [long]$resourceCapture.daemon_peak_working_set_bytes, [long]$afterDaemon.working_set_bytes)
+        $resourceCapture.cli_peak_working_set_bytes = [Math]::Max(
+            [long]$resourceCapture.cli_peak_working_set_bytes, [long]$cliSample.working_set_bytes)
+        $resourceCapture.daemon_cpu_ms = [long]$daemonCpu
+        $resourceCapture.cli_cpu_ms = [long]$cliCpu
+        $resourceCapture.index_command_elapsed_ms = [long]$duration
+    }
     $entry = [ordered]@{
         command_id = $CommandId
         ok = ($null -eq $errorCode)
@@ -216,7 +325,8 @@ function Invoke-Relay {
     $null = $script:activeCommands.Add($entry)
     return [pscustomobject]@{ ok = ($null -eq $errorCode); result = $response.result; error_code = $errorCode;
         transport_metric = [ordered]@{ path_id = 'cli_stdin'; byte_scope = 'application_json';
-            request_bytes = $requestBytes; response_bytes = $responseBytes; elapsed_ms = [long]$duration } }
+            request_bytes = $requestBytes; response_bytes = $responseBytes; elapsed_ms = [long]$duration };
+        resource_capture = $resourceCapture }
 }
 
 function Invoke-LocalMcpDiscovery {
@@ -413,12 +523,18 @@ function Complete-Workflow {
     if ($script:transportMetrics.Count -gt 0) {
         $workflowResult.transport_metrics = @($script:transportMetrics.ToArray())
     }
+    if ($script:contextCostMetric) {
+        $workflowResult.context_cost_metric = $script:contextCostMetric
+    }
+    if ($script:hostResourceMetric) {
+        $workflowResult.host_resource_metric = $script:hostResourceMetric
+    }
     return $workflowResult
 }
 
 function Require-Relay {
-    param([string]$CommandId, [hashtable]$CommandArguments, [bool]$Keyed = $false)
-    $exchange = Invoke-Relay $CommandId $CommandArguments $Keyed
+    param([string]$CommandId, [hashtable]$CommandArguments, [bool]$Keyed = $false, [int]$CommandVersion = 1)
+    $exchange = Invoke-Relay $CommandId $CommandArguments $Keyed $CommandVersion
     if (-not $exchange.ok) {
         $script:lastFailureCode = Get-SafeCode $exchange.error_code
         throw 'WORKFLOW_COMMAND_FAILED'
@@ -555,6 +671,8 @@ try {
     foreach ($workflow in $plan.workflows) {
         $script:activeCommands = New-Object 'System.Collections.Generic.List[object]'
         $script:transportMetrics = New-Object 'System.Collections.Generic.List[object]'
+        $script:contextCostMetric = $null
+        $script:hostResourceMetric = $null
         $script:workflowStarted = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
         $script:lastFailureCode = 'RUNNER_EXCEPTION'
         $script:hadValidatedResponse = $false
@@ -593,16 +711,109 @@ try {
                         $reason = if ($script:projectReady) { 'INDEX_READY' } else { 'INDEX_NOT_READY' }
                         $evidenceEligible = $true
                     }
+                    'project.supported_host_resource' {
+                        if ($SupportedHostTier -eq 'unknown') {
+                            $status = 'untested'; $reason = 'SUPPORTED_HOST_TIER_NOT_DECLARED'; break
+                        }
+                        if (-not $script:projectReady) {
+                            $status = 'blocked'; $reason = 'PROJECT_BASELINE_MISSING'; break
+                        }
+                        $hardware = Get-HostHardwareProbe
+                        if (-not $hardware.available) {
+                            $status = 'untested'; $reason = 'HOST_HARDWARE_PROBE_UNAVAILABLE'; break
+                        }
+                        if ($hardware.physical_cores -lt 4 -or $hardware.memory_bytes -lt 17179869184 -or
+                            ($SupportedHostTier -eq 'recommended_candidate' -and
+                                $hardware.memory_bytes -lt 34359738368)) {
+                            $status = 'untested'; $reason = 'SUPPORTED_HOST_PROFILE_MISMATCH'; break
+                        }
+                        $foregroundProbe = Initialize-ForegroundProbe
+                        $script:foregroundProbeAvailable = $foregroundProbe.available
+                        $exchange = Invoke-Relay 'project.index.build' @{ project_id = $ProjectId } $true 1 $true
+                        if (-not $exchange.ok) {
+                            $status = 'failed'; $reason = Get-SafeCode $exchange.error_code
+                            $evidenceEligible = $script:hadValidatedResponse
+                            break
+                        }
+                        $capture = $exchange.resource_capture
+                        if ($null -eq $capture -or $capture.sample_count -lt 2 -or
+                            $capture.daemon_peak_working_set_bytes -le 0 -or
+                            $capture.cli_peak_working_set_bytes -le 0 -or
+                            $exchange.result.generation -lt 1) {
+                            $status = 'failed'; $reason = 'HOST_RESOURCE_SAMPLE_INCOMPLETE';
+                            $evidenceEligible = $true; break
+                        }
+                        $memoryClass = if ($hardware.memory_bytes -ge 34359738368) { 'at_least32_gib' }
+                            elseif ($hardware.memory_bytes -ge 17179869184) { 'at_least16_gib' }
+                            else { 'below16_gib' }
+                        $cpuClass = if ($hardware.physical_cores -ge 4) {
+                            'at_least_four_physical_cores'
+                        } else { 'below_four_physical_cores' }
+                        $foregroundObservation = if ($capture.foreground_observed_samples -eq 0) {
+                            'unavailable'
+                        } elseif ($capture.foreground_creator_samples -gt 0) { 'seen' } else { 'not_seen' }
+                        $script:hostResourceMetric = [ordered]@{
+                            host_tier_declaration = $SupportedHostTier
+                            support_tier_budget_status = 'untested'
+                            physical_core_count = [int]$hardware.physical_cores
+                            logical_processor_count = [int]$hardware.logical_processors
+                            physical_memory_bytes = [long]$hardware.memory_bytes
+                            observed_memory_class = $memoryClass
+                            observed_cpu_class = $cpuClass
+                            index_command_elapsed_ms = [long]$capture.index_command_elapsed_ms
+                            daemon_cpu_ms = [long]$capture.daemon_cpu_ms
+                            cli_cpu_ms = [long]$capture.cli_cpu_ms
+                            daemon_peak_working_set_bytes = [long]$capture.daemon_peak_working_set_bytes
+                            cli_peak_working_set_bytes = [long]$capture.cli_peak_working_set_bytes
+                            sample_count = [int]$capture.sample_count
+                            sample_interval_ms = 100
+                            sampling_overhead_ms = [long]$capture.sampling_overhead_ms
+                            host_probe_overhead_ms = [long]$hardware.overhead_ms
+                            foreground_probe_overhead_ms = [long]$foregroundProbe.overhead_ms
+                            foreground_observation = $foregroundObservation
+                            foreground_creator_samples = [int]$capture.foreground_creator_samples
+                            foreground_interference_status = 'untested'
+                        }
+                        $status = 'passed'; $reason = 'LOCAL_HOST_RESOURCE_MEASURED'
+                        $evidenceEligible = $true
+                    }
+                    'project.foreground_interference' {
+                        $status = 'untested'
+                        $reason = 'PAIRED_PROLONGED_CREATOR_TRACE_REQUIRED'
+                    }
                     'project.lifecycle' {
                         if (-not $ProjectRoot) { $status = 'untested'; $reason = 'PROJECT_ROOT_NOT_SUPPLIED'; break }
                         $null = Require-Relay 'project.import' @{ id = $lifeId; name = 'Lifecycle Validation Project'; root_path = $ProjectRoot } $true
                         $archived = Require-Relay 'project.archive' @{ project_id = $lifeId } $true
                         $restored = Require-Relay 'project.restore' @{ project_id = $lifeId } $true
-                        $removed = Require-Relay 'project.remove' @{ project_id = $lifeId; confirm_project_id = $lifeId } $true
+                        $removalPlan = Require-Relay 'project.removal.plan' @{ project_id = $lifeId } $true
+                        if ($removalPlan.state -ne 'pending' -or -not $removalPlan.approval_id) {
+                            $status = 'failed'; $reason = 'REMOVAL_PLAN_INVALID'; break
+                        }
+                        $removalRead = Require-Relay 'project.removal.get' @{
+                            project_id = $lifeId; approval_id = [string]$removalPlan.approval_id
+                        }
+                        if ($removalRead.state -ne 'pending' -or $removalRead.approval_id -ne $removalPlan.approval_id) {
+                            $status = 'failed'; $reason = 'REMOVAL_REVIEW_INVALID'; break
+                        }
+                        $decision = Invoke-Relay 'project.removal.decide' @{
+                            project_id = $lifeId; approval_id = [string]$removalPlan.approval_id; decision = 'approve'
+                        } $true
+                        if (-not $decision.ok) {
+                            $status = if ($decision.error_code -in @('APPROVAL_DENIED','APPROVAL_REQUIRED','POLICY_DENIED')) { 'untested' } else { 'failed' }
+                            $reason = if ($status -eq 'untested') { 'TRUSTED_APPROVAL_UNAVAILABLE' } else { Get-SafeCode $decision.error_code }
+                            break
+                        }
+                        if ($decision.result.state -ne 'approved_pending_execution') {
+                            $status = 'failed'; $reason = 'REMOVAL_DECISION_INVALID'; break
+                        }
+                        $removed = Require-Relay 'project.remove' @{
+                            project_id = $lifeId; approval_id = [string]$removalPlan.approval_id
+                        } $true 2
                         $listing = Require-Relay 'project.list' @{ include_inactive = $true }
                         $present = @($listing.projects | Where-Object { $_.id -eq $lifeId -and $_.lifecycle_state -eq 'removed' }).Count -eq 1
-                        $status = if ($archived.lifecycle_state -eq 'archived' -and $restored.lifecycle_state -eq 'active' -and $removed.lifecycle_state -eq 'removed' -and $present) { 'passed' } else { 'failed' }
-                        $reason = if ($status -eq 'passed') { 'LIFECYCLE_VERIFIED' } else { 'LIFECYCLE_MISMATCH' }
+                        $status = if ($archived.lifecycle_state -eq 'archived' -and $restored.lifecycle_state -eq 'active' -and $removed.state -eq 'executed' -and $removed.executed -eq $true -and $present) { 'passed' } else { 'failed' }
+                        $reason = if ($status -eq 'passed') { 'LOCAL_APPROVAL_STATE_VERIFIED' } else { 'LIFECYCLE_MISMATCH' }
                         $evidenceEligible = $true
                     }
                     'context.result_storage' {
@@ -624,6 +835,34 @@ try {
                         $reason = if ($status -eq 'passed') { 'MULTI_RESULT_COMPILED' } else { 'CONTEXT_SOURCES_MISSING' }
                         $evidenceEligible = $true
                     }
+                    'context.task_snapshot' {
+                        if (-not $script:projectReady -or -not $script:firstResultId -or -not $script:secondResultId) {
+                            $status = 'blocked'; $reason = 'RESULT_SOURCE_MISSING'; break
+                        }
+                        $planRecord = Require-Relay 'project.removal.plan' @{ project_id = $ProjectId } $true
+                        $decisionRecord = Require-Relay 'project.removal.decide' @{
+                            project_id = $ProjectId; approval_id = [string]$planRecord.approval_id; decision = 'reject'
+                        } $true
+                        $task = Require-Relay 'context.task.compile' @{
+                            project_id = $ProjectId; task_kind = 'review'; max_bytes = 8192
+                            result_ids = @($script:firstResultId, $script:secondResultId)
+                            approval_ids = @([string]$planRecord.approval_id)
+                            required_pointers = @(@{ result_id = $script:firstResultId; pointer = '/file_count' })
+                            focus_terms = @('generation')
+                        }
+                        $hasFact = @($task.result_context.facts | Where-Object {
+                            $_.result_id -eq $script:firstResultId -and $_.pointer -eq '/file_count'
+                        }).Count -eq 1
+                        $hasDecision = @($task.decision_evidence | Where-Object {
+                            $_.record_id -eq $planRecord.approval_id -and $_.state -eq 'rejected' -and
+                            $_.human_presence -eq 'unverified'
+                        }).Count -eq 1
+                        $status = if ($decisionRecord.state -eq 'rejected' -and $hasFact -and $hasDecision -and
+                            $task.project_state.index_state -eq 'ready' -and
+                            $task.result_currentness -eq 'unknown_without_project_generation_link') { 'passed' } else { 'failed' }
+                        $reason = if ($status -eq 'passed') { 'TASK_CONTEXT_SNAPSHOT_VERIFIED' } else { 'TASK_CONTEXT_MISMATCH' }
+                        $evidenceEligible = $true
+                    }
                     'context.conflict_handling' {
                         if (-not $script:projectReady) { $status = 'blocked'; $reason = 'PROJECT_BASELINE_MISSING'; break }
                         $left = Require-Relay 'result.put' @{ project_id = $ProjectId; kind = 'RELAY_VALIDATION_CONFLICT'; payload = @{ state = 'left' } } $true
@@ -631,6 +870,59 @@ try {
                         $compiled = Require-Relay 'context.compile' @{ project_id = $ProjectId; result_ids = @([string]$left.id, [string]$right.id); max_bytes = 4096 }
                         $status = if ($compiled.conflict_count -ge 1) { 'passed' } else { 'failed' }
                         $reason = if ($status -eq 'passed') { 'CONFLICT_PRESERVED' } else { 'CONFLICT_NOT_REPORTED' }
+                        $evidenceEligible = $true
+                    }
+                    'context.cost_benchmark' {
+                        if (-not $script:firstResultId -or -not $script:secondResultId) {
+                            $status = 'blocked'; $reason = 'RESULT_SOURCE_MISSING'; break
+                        }
+                        $sourceIds = @($script:firstResultId, $script:secondResultId)
+                        $fullBytes = 0L
+                        $fullElapsed = 0L
+                        foreach ($sourceId in $sourceIds) {
+                            $exchange = Invoke-Relay 'result.get' @{ result_id = $sourceId }
+                            if (-not $exchange.ok) {
+                                $script:lastFailureCode = Get-SafeCode $exchange.error_code
+                                throw 'WORKFLOW_COMMAND_FAILED'
+                            }
+                            if ($exchange.result.id -ne $sourceId -or $null -eq $exchange.result.payload) {
+                                $script:lastFailureCode = 'RESULT_SOURCE_INVALID'
+                                throw 'WORKFLOW_COMMAND_FAILED'
+                            }
+                            $payloadJson = ConvertTo-Json -InputObject $exchange.result.payload -Depth 20 -Compress
+                            $fullBytes += [long]$utf8.GetByteCount($payloadJson)
+                            $fullElapsed += [long]$exchange.transport_metric.elapsed_ms
+                        }
+                        $exchange = Invoke-Relay 'context.compile' @{
+                            project_id = $ProjectId; result_ids = $sourceIds; max_bytes = 4096
+                        }
+                        if (-not $exchange.ok) {
+                            $script:lastFailureCode = Get-SafeCode $exchange.error_code
+                            throw 'WORKFLOW_COMMAND_FAILED'
+                        }
+                        if (@($exchange.result.sources).Count -ne $sourceIds.Count -or $fullBytes -le 0) {
+                            $script:lastFailureCode = 'CONTEXT_BENCHMARK_INVALID'
+                            throw 'WORKFLOW_COMMAND_FAILED'
+                        }
+                        $compiledJson = ConvertTo-Json -InputObject $exchange.result -Depth 20 -Compress
+                        $compiledBytes = [long]$utf8.GetByteCount($compiledJson)
+                        if ($compiledBytes -le 0) {
+                            $script:lastFailureCode = 'CONTEXT_BENCHMARK_INVALID'
+                            throw 'WORKFLOW_COMMAND_FAILED'
+                        }
+                        $script:contextCostMetric = [ordered]@{
+                            byte_scope = 'sum_of_stored_payload_json_vs_compiled_result_json'
+                            source_count = $sourceIds.Count
+                            full_payload_json_bytes = $fullBytes
+                            compiled_context_json_bytes = $compiledBytes
+                            compiled_to_full_ratio_milli = [long][Math]::Floor(($compiledBytes * 1000.0) / $fullBytes)
+                            full_payload_elapsed_ms = $fullElapsed
+                            compiled_context_elapsed_ms = [long]$exchange.transport_metric.elapsed_ms
+                            token_estimate_status = 'not_measured'
+                            model_answer_quality_status = 'untested'
+                            remote_cost_status = 'untested'
+                        }
+                        $status = 'passed'; $reason = 'LOCAL_CONTEXT_BYTES_MEASURED'
                         $evidenceEligible = $true
                     }
                     'uefn.static_inspection' {
@@ -839,6 +1131,8 @@ try {
         if ($resultIds.ContainsKey($workflow.workflow_id)) { continue }
         $script:activeCommands = New-Object 'System.Collections.Generic.List[object]'
         $script:transportMetrics = New-Object 'System.Collections.Generic.List[object]'
+        $script:contextCostMetric = $null
+        $script:hostResourceMetric = $null
         $script:workflowStarted = $completedUnixMs
         $canRecordFailure = @($workflow.requires).Count -eq 0
         $status = if (-not $failureAssigned -and $canRecordFailure) { 'failed' } elseif ($workflow.execution -eq 'manual' -or -not $canRecordFailure) { 'untested' } else { 'blocked' }

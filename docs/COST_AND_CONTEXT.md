@@ -95,6 +95,8 @@ The Context Compiler is not a generic summarizer. It builds a task-specific, tra
 - conflicts between historical and current state
 - memory quality/confidence where available
 
+The current `context.task.compile@1` foundation takes one project and a fixed task kind, then reads registration revision, index continuity, declared adapter configuration, explicitly selected stored results, and explicitly selected durable project-removal confirmation records in one local database snapshot. It preserves exact eligible facts, result digests/trust, and same-kind conflicts under one serialized byte budget. It marks result currentness unknown without a source-to-index generation link; missing/stale index is explicit. Removal confirmation is labeled local permission evidence with human presence unverified. Fixed task kinds add deterministic ranking terms (diagnose: error/failure; implement: version/generation; review: status/passed; project administration: state/revision), and caller focus terms add to those terms. They cannot select new sources, expand safe fact eligibility, or grant authority. General decision memory, documentation/version retrieval, interaction memory, remote egress lineage, and measured model-quality or token-cost gains remain future work.
+
 It should maximize:
 
 - relevance

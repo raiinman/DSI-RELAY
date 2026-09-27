@@ -206,6 +206,10 @@ fn allowed_command(command: &str) -> bool {
             | "project.archive"
             | "project.restore"
             | "project.remove"
+            | "project.removal.plan"
+            | "project.removal.get"
+            | "project.removal.list"
+            | "project.removal.decide"
             | "project.capabilities"
             | "uefn.static.inspect"
             | "uefn.mcp.discover"
@@ -284,7 +288,7 @@ fn handle_request(
             let command_request = CommandRequest {
                 request_id: format!("DASH-{}-{now}", std::process::id()),
                 command: command.to_string(),
-                command_version: Some(1),
+                command_version: Some(if command == "project.remove" { 2 } else { 1 }),
                 arguments,
                 idempotency_key: if matches!(
                     command,
@@ -293,6 +297,8 @@ fn handle_request(
                         | "project.archive"
                         | "project.restore"
                         | "project.remove"
+                        | "project.removal.plan"
+                        | "project.removal.decide"
                 ) {
                     Some(format!("DASH-{}-{now}", std::process::id()))
                 } else {
@@ -499,11 +505,6 @@ mod tests {
                 json!({ "project_id": project_id }),
                 "archived",
             ),
-            (
-                "project.remove",
-                json!({ "project_id": project_id, "confirm_project_id": project_id }),
-                "removed",
-            ),
         ] {
             let body = json!({ "command": command, "arguments": arguments }).to_string();
             let raw = http(
@@ -519,6 +520,19 @@ mod tests {
             assert_eq!(result["ok"], true);
             assert_eq!(result["result"]["lifecycle_state"], expected);
         }
+        let plan_body = json!({ "command": "project.removal.plan", "arguments": { "project_id": project_id } }).to_string();
+        let plan_raw = http(port, "POST", "/api/execute", Some(&server.token), None, &plan_body);
+        let plan: Value = serde_json::from_str(plan_raw.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        assert_eq!(plan["ok"], true);
+        let approval_id = plan["result"]["approval_id"].as_str().unwrap();
+        let decide_body = json!({ "command": "project.removal.decide", "arguments": { "project_id": project_id, "approval_id": approval_id, "decision": "approve" } }).to_string();
+        let decide_raw = http(port, "POST", "/api/execute", Some(&server.token), None, &decide_body);
+        let decided: Value = serde_json::from_str(decide_raw.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        assert_eq!(decided["result"]["state"], "approved_pending_execution");
+        let remove_body = json!({ "command": "project.remove", "arguments": { "project_id": project_id, "approval_id": approval_id } }).to_string();
+        let remove_raw = http(port, "POST", "/api/execute", Some(&server.token), None, &remove_body);
+        let removed: Value = serde_json::from_str(remove_raw.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        assert_eq!(removed["result"]["state"], "executed");
         let list_body = json!({
             "command": "project.list",
             "arguments": { "include_inactive": true }

@@ -186,7 +186,7 @@ fn execute_human(request: CommandRequest, json_output: bool, view: &str) -> Resu
 fn run(args: &[String]) -> Result<i32, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Err(
-            "usage: relay <status|doctor|diagnostics|pause|resume|support-bundle|discover|onboard|dashboard-url|commands|project-list|project-register|project-archive|project-restore|project-remove|check-catalog-put|check-catalog-get|plan-checks|context-compile|uefn-inspect|uefn-audit|uefn-discover|uefn-toolsets|uefn-describe|verse-analyze|verse-record|verse-file-analyze|verse-file-record|asset-validate|asset-impact|blender-mesh-check|krita-inspect|krita-export|parser-install|result-list|result-get|job-list|job-get|shutdown|exec>"
+            "usage: relay <status|doctor|diagnostics|pause|resume|support-bundle|discover|onboard|dashboard-url|commands|project-list|project-register|project-archive|project-restore|project-removal-plan|project-removal-get|project-removal-list|project-removal-approve|project-removal-reject|project-remove|check-catalog-put|check-catalog-get|plan-checks|context-compile|task-context|uefn-inspect|uefn-audit|uefn-discover|uefn-toolsets|uefn-describe|verse-analyze|verse-record|verse-file-analyze|verse-file-record|asset-validate|asset-impact|blender-mesh-check|blender-mesh-record|krita-inspect|krita-export|parser-install|result-list|result-get|job-list|job-get|shutdown|exec>"
                 .to_string(),
         );
     };
@@ -459,18 +459,14 @@ fn run(args: &[String]) -> Result<i32, String> {
                 json!({"project_id": args[1], "after_generation": after_generation}), None),
                 has_json_flag(args), "default")
         }
-        "project-archive" | "project-restore" | "project-remove" => {
+        "project-archive" | "project-restore" => {
             let project_id = args.get(1).filter(|arg| !arg.starts_with("--"))
                 .ok_or_else(|| format!("usage: relay {command} <project-id> [--json]"))?;
             if args.iter().skip(2).any(|arg| arg != "--json") {
                 return Err(format!("usage: relay {command} <project-id> [--json]"));
             }
             let operation = command.strip_prefix("project-").unwrap();
-            let arguments = if operation == "remove" {
-                json!({ "project_id": project_id, "confirm_project_id": project_id })
-            } else {
-                json!({ "project_id": project_id })
-            };
+            let arguments = json!({ "project_id": project_id });
             let req_id = request_id();
             execute_human(CommandRequest {
                 request_id: req_id.clone(),
@@ -480,6 +476,30 @@ fn run(args: &[String]) -> Result<i32, String> {
                 idempotency_key: Some(format!("CLI-{req_id}")),
                 context: RequestContext::default(),
             }, has_json_flag(args), "default")
+        }
+        "project-removal-plan" | "project-removal-list" => {
+            if !matches!(args.len(), 2 | 3) || args[1].starts_with("--") || (args.len() == 3 && args[2] != "--json") {
+                return Err(format!("usage: relay {command} <project-id> [--json]"));
+            }
+            let operation = if command.ends_with("plan") { "plan" } else { "list" };
+            let mut request = make_request(format!("project.removal.{operation}"), json!({"project_id": args[1]}), None);
+            if operation == "plan" { request.idempotency_key = Some(format!("CLI-{}", request.request_id)); }
+            execute_human(request, has_json_flag(args), "default")
+        }
+        "project-removal-get" | "project-removal-approve" | "project-removal-reject" | "project-remove" => {
+            if !matches!(args.len(), 3 | 4) || args[1..3].iter().any(|arg| arg.starts_with("--")) || (args.len() == 4 && args[3] != "--json") {
+                return Err(format!("usage: relay {command} <project-id> <approval-id> [--json]"));
+            }
+            let (operation, arguments) = match command {
+                "project-removal-get" => ("project.removal.get", json!({"project_id": args[1], "approval_id": args[2]})),
+                "project-removal-approve" => ("project.removal.decide", json!({"project_id": args[1], "approval_id": args[2], "decision": "approve"})),
+                "project-removal-reject" => ("project.removal.decide", json!({"project_id": args[1], "approval_id": args[2], "decision": "reject"})),
+                _ => ("project.remove", json!({"project_id": args[1], "approval_id": args[2]})),
+            };
+            let mut request = make_request(operation, arguments, None);
+            if operation == "project.remove" { request.command_version = Some(2); }
+            if operation != "project.removal.get" { request.idempotency_key = Some(format!("CLI-{}", request.request_id)); }
+            execute_human(request, has_json_flag(args), "default")
         }
         "uefn-inspect" => {
             let project_id = args
@@ -699,8 +719,8 @@ fn run(args: &[String]) -> Result<i32, String> {
                 has_json_flag(args), "default",
             )
         }
-        "blender-mesh-check" => {
-            let usage = "usage: relay blender-mesh-check <project-id> <project-relative.blend> [--json]";
+        "blender-mesh-check" | "blender-mesh-record" => {
+            let usage = "usage: relay <blender-mesh-check|blender-mesh-record> <project-id> <project-relative.blend> [--json]";
             let project_id = args.get(1).filter(|value| !value.starts_with("--"))
                 .ok_or_else(|| usage.to_string())?;
             let blend_path = args.get(2).filter(|value| !value.starts_with("--"))
@@ -708,12 +728,30 @@ fn run(args: &[String]) -> Result<i32, String> {
             if args.iter().skip(3).any(|value| value != "--json") {
                 return Err(usage.to_string());
             }
-            execute_human(
-                make_request("assets.blender.mesh.validate", json!({
+            let validation = invoke(&make_request("assets.blender.mesh.validate", json!({
                     "project_id": project_id, "blend_path": blend_path
-                }), None),
-                has_json_flag(args), "default",
-            )
+                }), None))?;
+            if command == "blender-mesh-check" || !validation.ok {
+                if has_json_flag(args) { print_machine(&validation); } else { print_human(&validation); }
+                return Ok(if validation.ok { 0 } else { 2 });
+            }
+            let payload = validation.result
+                .ok_or_else(|| "Blender validation returned no result".to_string())?;
+            let req_id = request_id();
+            let recorded = invoke(&CommandRequest {
+                request_id: req_id.clone(),
+                command: "result.put".to_string(),
+                command_version: Some(1),
+                arguments: json!({
+                    "project_id": project_id,
+                    "kind": "BLENDER_MESH_VALIDATION",
+                    "payload": payload
+                }),
+                idempotency_key: Some(format!("CLI-{req_id}")),
+                context: RequestContext::default(),
+            })?;
+            if has_json_flag(args) { print_machine(&recorded); } else { print_human(&recorded); }
+            Ok(if recorded.ok { 0 } else { 2 })
         }
         "krita-export" => {
             let usage = "usage: relay krita-export <project-id> <project-relative.kra> <new-project-relative.png> [--json]";
@@ -807,6 +845,48 @@ fn run(args: &[String]) -> Result<i32, String> {
                 "max_bytes": max_bytes,
                 "required_pointers": required,
                 "focus_terms": focus_terms
+            }), None), has_json_flag(args), "default")
+        }
+        "task-context" => {
+            let usage = "usage: relay task-context <project-id> <diagnose|implement|review|project_admin> <max-bytes> [--result <id>] [--approval <id>] [--require <result-id=/pointer>] [--focus <term>] [--json]";
+            if args.len() < 4 || args[1..4].iter().any(|value| value.starts_with("--")) {
+                return Err(usage.to_string());
+            }
+            let max_bytes: u64 = args[3].parse().map_err(|_| usage.to_string())?;
+            let mut result_ids = Vec::new();
+            let mut approval_ids = Vec::new();
+            let mut required = Vec::new();
+            let mut focus_terms = Vec::new();
+            let mut position = 4;
+            while position < args.len() {
+                match args[position].as_str() {
+                    "--json" => position += 1,
+                    "--result" => {
+                        result_ids.push(args.get(position + 1).ok_or_else(|| usage.to_string())?.as_str());
+                        position += 2;
+                    }
+                    "--approval" => {
+                        approval_ids.push(args.get(position + 1).ok_or_else(|| usage.to_string())?.as_str());
+                        position += 2;
+                    }
+                    "--require" => {
+                        let value = args.get(position + 1).ok_or_else(|| usage.to_string())?;
+                        let (result_id, pointer) = value.split_once('=').ok_or_else(|| usage.to_string())?;
+                        if result_id.is_empty() || pointer.is_empty() { return Err(usage.to_string()); }
+                        required.push(json!({"result_id": result_id, "pointer": pointer}));
+                        position += 2;
+                    }
+                    "--focus" => {
+                        focus_terms.push(args.get(position + 1).ok_or_else(|| usage.to_string())?.as_str());
+                        position += 2;
+                    }
+                    _ => return Err(usage.to_string()),
+                }
+            }
+            execute_human(make_request("context.task.compile", json!({
+                "project_id": args[1], "task_kind": args[2], "max_bytes": max_bytes,
+                "result_ids": result_ids, "approval_ids": approval_ids,
+                "required_pointers": required, "focus_terms": focus_terms
             }), None), has_json_flag(args), "default")
         }
         "job-list" => {

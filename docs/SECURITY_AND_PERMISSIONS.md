@@ -176,6 +176,8 @@ Local-only implementations may initially lack ideal agent-native identity suppor
 
 Human approval is not a substitute for authorization design.
 
+The first implementation gates project removal on a durable local confirmation record. `project.remove@1` fails with `APPROVAL_REQUIRED`; `project.remove@2` consumes an approved plan only when its project registration revision and lifecycle still match and it has not expired. The tombstone and approval execution state commit in one SQLite transaction, leaving project files untouched. Requester, approver, and executor references are recorded separately as bounded tokens or hashes. A crash after that commit but before the outer command transaction/idempotency response is finalized can leave the caller uncertain; inspect the approval record (`executed` versus `approved_pending_execution`) before retrying. A retry cannot remove the project twice. The current same-user CLI/dashboard approval permission can be used by local automation and is not human-presence attestation; nonlocal clients do not receive that permission by default.
+
 To reduce consent fatigue:
 
 - batch related actions into a bounded change plan/flight plan

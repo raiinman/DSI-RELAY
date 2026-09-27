@@ -1,10 +1,11 @@
 # Windows per-user install/update plan
 
 `Build-UnsignedStage.ps1` creates local review input only. The companion
-`Install-LocalStage.ps1` and `Uninstall-LocalStage.ps1` exercise the side-by-side
-path only with an explicit unsigned-development opt-in and expected archive
-digest. They do not sign, publish, auto-download, launch the daemon, or clear
-the public release gates.
+`Install-LocalStage.ps1`, `Rollback-LocalStage.ps1`, and
+`Uninstall-LocalStage.ps1` exercise the side-by-side path only with an explicit
+unsigned-development opt-in. Install and rollback additionally require an
+expected archive digest. They do not sign, publish, auto-download, launch the
+daemon, or clear the public release gates.
 
 ## Signed release verification contract
 
@@ -59,7 +60,8 @@ Microsoft references: [Test-FileCatalog](https://learn.microsoft.com/en-us/power
 2. Confirm Windows architecture, version, free space, package version, and
    storage schema compatibility before touching the active pointer.
 3. Extract into a new versioned inactive directory, using path traversal and
-   reparse-point defenses. Re-verify extracted bytes.
+   reparse-point defenses. Re-verify extracted bytes and retain the installed
+   manifest digest in that version's receipt.
 4. Require the per-user daemon to stop cleanly. If it is running or cannot be
    stopped, leave the current version active and defer activation.
 5. Run a pre-activation health check against the staged binaries and a safe
@@ -70,20 +72,35 @@ Microsoft references: [Test-FileCatalog](https://learn.microsoft.com/en-us/power
 
 The local development script verifies the staged package and requires a caller
 supplied observed storage schema (0 only for absent data) before activation.
-It does not launch the daemon or prove that the observed schema came from the
-actual database. Production must read schema and complete post-activation
-health verification through trusted code before this becomes an updater.
+Schema 0 is accepted only for a first activation with no active version.
+Replacement activation requires a positive observed schema and checks it
+against the target package's declared range. The script does not launch the
+daemon or prove that the observed schema came from the actual database.
+Production must read schema and complete post-activation health verification
+through trusted code before this becomes an updater.
 
 ## Rollback and uninstall
 
 - Rollback only to a previously verified version whose declared schema range
   accepts the current data. A downgrade that cannot read the database is
   blocked; it must never silently alter or discard user data.
-- Uninstall stops only the current user's daemon, removes the program pointer
-  and the version directories owned by this installation, and leaves separately
-  owned data and project files untouched.
+- `Rollback-LocalStage.ps1` requires explicit unsigned-development opt-in, the
+  exact immediately previous version, its expected archive SHA-256, and a
+  positive observed current storage schema. It refuses a running daemon,
+  re-verifies the target folder, receipt, and schema range, then atomically
+  switches `current.json`. It never launches the daemon or alters the data
+  root. A failed post-activation health check must be handled by a separate
+  operator action until trusted automated launch/health handling exists.
+- Local-development uninstall requires the daemon to be stopped; it does not
+  terminate any process. It removes only the program pointer and verified
+  version directories owned by this installation, leaving separately owned
+  data and project files untouched.
 - Concurrent versions and an interrupted update must resolve from the active
   pointer without guessing which executable to run.
+- A single-version uninstall refuses the active version and its current
+  rollback target. `-AllVersions` validates every version before removing the
+  owned program inventory; project files and separately owned RELAY data stay
+  untouched.
 
 ## Open release gates
 

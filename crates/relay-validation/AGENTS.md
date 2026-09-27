@@ -15,6 +15,8 @@ Own the versioned report model for one integrated end-of-build RELAY validation 
 - Unknown environment availability, absent observations, and missing live evidence remain visible rather than being counted as passed.
 - An attempted workflow failure remains failed even if a required environment later becomes unavailable; an unattempted unavailable workflow remains untested.
 - Optional transport metrics name only the CLI stdin or local MCP HTTP path and count bounded application-JSON request/response bytes and elapsed milliseconds. They do not estimate model tokens, remote latency, or money saved.
+- The optional Phase 4 context cost metric compares the sum of selected stored payload JSON bytes with compiled-context result JSON bytes under one UTF-8 serializer. Its integer ratio is in thousandths, its times are separate observed CLI round trips, and its model token, answer quality, and remote cost fields explicitly remain unmeasured or untested. Byte reduction is not required for a valid measurement.
+- The optional Phase 3 host resource metric holds only bounded numeric core/RAM, index duration, CPU, working-set, sample-count, and probe-overhead fields plus fixed tier/foreground categories. Its support budget and foreground interference fields remain `untested`; a local measurement outcome cannot assert either release gate.
 - The serialized integrated report can be deserialized for bounded local support-summary extraction; deserialization does not establish evidence authenticity.
 
 # Work Guidance

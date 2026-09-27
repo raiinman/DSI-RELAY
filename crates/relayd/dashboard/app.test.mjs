@@ -187,11 +187,23 @@ test("archive and remove confirm through shared commands and retain a visible to
       assert.equal(argumentsValue.include_inactive, true);
       return { ok: true, json: async () => ({ ok: true, result: { projects } }) };
     }
+    if (command === "project.removal.plan") {
+      return { ok: true, json: async () => ({ ok: true, result: {
+        approval_id: "APR-test", project_id: "project-1", state: "pending", requester_actor: "local-user",
+        requester_client: "relay-dashboard", expires_at_ms: Date.now() + 60000,
+        effect: "Project files remain untouched.", validation: "Registration revision must match.", rollback: "Unavailable."
+      } }) };
+    }
+    if (command === "project.removal.decide") {
+      assert.equal(argumentsValue.approval_id, "APR-test");
+      assert.equal(argumentsValue.decision, "approve");
+      return { ok: true, json: async () => ({ ok: true, result: { approval_id: "APR-test", state: "approved_pending_execution" } }) };
+    }
     if (command === "project.archive" || command === "project.restore" || command === "project.remove") {
       assert.equal(argumentsValue.project_id, "project-1");
-      if (command === "project.remove") assert.equal(argumentsValue.confirm_project_id, "project-1");
+      if (command === "project.remove") assert.equal(argumentsValue.approval_id, "APR-test");
       projects[0].lifecycle_state = command === "project.archive" ? "archived" : command === "project.restore" ? "active" : "removed";
-      return { ok: true, json: async () => ({ ok: true, result: { project_id: "project-1", lifecycle_state: projects[0].lifecycle_state, changed: true } }) };
+      return { ok: true, json: async () => ({ ok: true, result: { project_id: "project-1", approval_id: "APR-test", state: "executed", lifecycle_state: projects[0].lifecycle_state, changed: true } }) };
     }
     return success(command);
   });
@@ -204,8 +216,33 @@ test("archive and remove confirm through shared commands and retain a visible to
   assert.match(page.nodes["#project-action"].textContent, /Sample restored/);
   await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
   await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Remove").listener();
+  assert.deepEqual(page.calls.map((call) => JSON.parse(call.body).command).filter((name) => name.startsWith("project.removal") || name === "project.remove"), ["project.removal.plan", "project.removal.decide", "project.remove"]);
   assert.equal(page.nodes["#projects"].children[0].children[1].textContent, "Removed from RELAY");
   assert.match(page.nodes["#project-action"].textContent, /files and RELAY history were kept/);
+});
+
+test("an approved removal can be finished from the durable plan list", async () => {
+  const projects = [{ id: "project-1", name: "Sample", lifecycle_state: "active" }];
+  const page = await loadDashboard((name, args) => {
+    if (name === "project.list") return { ok: true, json: async () => ({ ok: true, result: { projects } }) };
+    if (name === "project.removal.list") return { ok: true, json: async () => ({ ok: true, result: { approvals: [{
+      approval_id: "APR-restart", state: "approved_pending_execution", expires_at_ms: Date.now() + 60000
+    }] } }) };
+    if (name === "project.remove") {
+      assert.equal(args.approval_id, "APR-restart");
+      projects[0].lifecycle_state = "removed";
+      return { ok: true, json: async () => ({ ok: true, result: { state: "executed" } }) };
+    }
+    return success(name);
+  });
+  await page.nodes["#projects"].children[0].children.find((child) => child.textContent === "Select").listener();
+  const row = page.nodes["#projects"].children[0];
+  await row.children.find((child) => child.textContent === "Removal plans").listener();
+  const region = row.children.at(-1);
+  assert.equal(region.children.find((child) => child.textContent === "Finish approved removal").type, "button");
+  await region.children.find((child) => child.textContent === "Finish approved removal").listener();
+  assert.equal(projects[0].lifecycle_state, "removed");
+  assert.match(page.nodes["#project-action"].textContent, /Files and RELAY history were kept/);
 });
 
 test("asset manifest checks show bounded findings without revealing paths or contents", async () => {
@@ -361,6 +398,49 @@ test("integrated debug preview rejects inconsistent pass evidence", async () => 
   await page.nodes["#integrated-report"].listener();
   assert.match(page.nodes["#integrated-summary"].textContent, /not a supported privacy-safe integrated report/);
   assert.equal(page.nodes["#integrated-workflows"].children.length, 0);
+});
+
+test("integrated debug preview shows measured context bytes without token or cost claims", async () => {
+  const page = await loadDashboard(success);
+  page.nodes["#integrated-report"].files = [{ size: 500, text: async () => JSON.stringify({
+    schema_version: 1, overall_status: "passed", counts: { passed: 1, failed: 0, blocked: 0, untested: 0 },
+    workflows: [{ workflow_id: "context.cost_benchmark", status: "passed", evidence: { kind: "observed" },
+      context_cost_metric: {
+        byte_scope: "sum_of_stored_payload_json_vs_compiled_result_json", source_count: 2,
+        full_payload_json_bytes: 1000, compiled_context_json_bytes: 1200, compiled_to_full_ratio_milli: 1200,
+        full_payload_elapsed_ms: 12, compiled_context_elapsed_ms: 18,
+        token_estimate_status: "not_measured", model_answer_quality_status: "untested", remote_cost_status: "untested",
+        raw_source: "C:\\private"
+      } }]
+  }) }];
+  await page.nodes["#integrated-report"].listener();
+  const visible = page.nodes["#integrated-workflows"].children[0].textContent;
+  assert.match(visible, /1,200 compiled \/ 1,000 source JSON bytes \(120\.0%\)/);
+  assert.match(visible, /Tokens not measured.*remote cost UNTESTED/);
+  assert.doesNotMatch(visible, /private|C:\\/);
+});
+
+test("integrated debug preview keeps host measurements separate from hardware acceptance", async () => {
+  const page = await loadDashboard(success);
+  page.nodes["#integrated-report"].files = [{ size: 700, text: async () => JSON.stringify({
+    schema_version: 1, overall_status: "passed", counts: { passed: 1, failed: 0, blocked: 0, untested: 0 },
+    workflows: [{ workflow_id: "project.supported_host_resource", status: "passed", evidence: { kind: "observed" },
+      host_resource_metric: {
+        host_tier_declaration: "minimum_candidate", support_tier_budget_status: "untested",
+        physical_core_count: 4, logical_processor_count: 8, physical_memory_bytes: 17179869184,
+        index_command_elapsed_ms: 350, daemon_cpu_ms: 50, cli_cpu_ms: 20,
+        daemon_peak_working_set_bytes: 41943040, cli_peak_working_set_bytes: 10485760,
+        sample_count: 4, sample_interval_ms: 100, sampling_overhead_ms: 2,
+        host_probe_overhead_ms: 3, foreground_probe_overhead_ms: 1,
+        foreground_observation: "not_seen", foreground_creator_samples: 0,
+        foreground_interference_status: "untested", raw_process: "C:\\private"
+      } }]
+  }) }];
+  await page.nodes["#integrated-report"].listener();
+  const visible = page.nodes["#integrated-workflows"].children[0].textContent;
+  assert.match(visible, /4 physical cores, 16\.0 GiB RAM · support budget UNTESTED/);
+  assert.match(visible, /Index: 350 ms.*Sampling: 4 at 100 ms.*interference UNTESTED/);
+  assert.doesNotMatch(visible, /private|raw_process|minimum_candidate/);
 });
 
 test("tests view uses selected-project metadata only and keeps live UEFN untested", async () => {

@@ -30,13 +30,27 @@ if (-not $FixtureMode -and $root -ne $defaultRoot) {
 if ($root -eq [IO.Path]::GetPathRoot($root) -or $root.Length -lt 12) {
     throw 'Install root is too broad'
 }
+function Assert-NoReparseAncestors([string]$Path) {
+    $cursor = [IO.Path]::GetFullPath($Path)
+    while ($cursor) {
+        if (Test-Path -LiteralPath $cursor) {
+            if ((Get-Item -LiteralPath $cursor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                throw 'Install path contains a reparse point'
+            }
+        }
+        $parent = [IO.Path]::GetDirectoryName($cursor)
+        if (-not $parent -or $parent -eq $cursor) { break }
+        $cursor = $parent
+    }
+}
+Assert-NoReparseAncestors $root
 $archive = [IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ArchivePath))
 $archiveItem = Get-Item -LiteralPath $archive -Force -ErrorAction Stop
 if ($archiveItem.PSIsContainer -or ($archiveItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
     throw 'Archive must be a regular file'
 }
 $archiveName = [IO.Path]::GetFileNameWithoutExtension($archive)
-if ($archiveName -notmatch '^relay-([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)-windows-x64-unsigned-stage$') {
+if (-not ($archiveName -match '^relay-([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)-windows-x64-unsigned-stage$')) {
     throw 'Archive name is not a RELAY unsigned stage'
 }
 $version = $Matches[1]
@@ -49,6 +63,13 @@ function Assert-Directory([string]$Path) {
     $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
     if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
         throw 'Install path is not a regular directory'
+    }
+}
+
+function Assert-RegularFile([string]$Path) {
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'Install path is not a regular file'
     }
 }
 
@@ -95,6 +116,7 @@ if (Test-Path -LiteralPath $root) {
     if (-not (Test-Path -LiteralPath $markerPath -PathType Leaf)) {
         throw 'Existing install root is not owned by the RELAY local installer'
     }
+    Assert-RegularFile $markerPath
     $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
     if ($marker.schema_version -ne 1 -or $marker.owner -ne 'relay_local_development') {
         throw 'Install root marker is invalid'
@@ -185,6 +207,7 @@ if (-not (Test-Path -LiteralPath $versionPath)) {
         schema_version = 1
         version = $version
         archive_sha256 = $actualHash
+        manifest_sha256 = (Get-FileHash -LiteralPath (Join-Path $versionPath 'bundle-manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()
         storage_schema_min = [int]$manifest.storage_schema_min
         storage_schema_max = [int]$manifest.storage_schema_max
         channel = 'unsigned_local_development'
@@ -197,11 +220,26 @@ else {
     }
     & (Join-Path $PSScriptRoot 'Verify-UnsignedStage.ps1') -PackageDirectory $versionPath
 }
+Assert-RegularFile $receiptPath
 $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
 if ($receipt.schema_version -ne 1 -or $receipt.version -ne $version -or
     $receipt.archive_sha256 -ne $actualHash -or
     $receipt.channel -ne 'unsigned_local_development') {
     throw 'Existing version receipt does not match the archive'
+}
+$manifestPath = Join-Path $versionPath 'bundle-manifest.json'
+Assert-RegularFile $manifestPath
+$installedManifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+if ($installedManifest.version -ne $version -or
+    [int]$receipt.storage_schema_min -lt 1 -or
+    [int]$receipt.storage_schema_max -lt [int]$receipt.storage_schema_min -or
+    [int]$installedManifest.storage_schema_min -ne [int]$receipt.storage_schema_min -or
+    [int]$installedManifest.storage_schema_max -ne [int]$receipt.storage_schema_max) {
+    throw 'Installed manifest does not match its receipt'
+}
+if ($receipt.PSObject.Properties.Name -contains 'manifest_sha256' -and
+    [string]$receipt.manifest_sha256 -ne (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()) {
+    throw 'Installed manifest digest does not match its receipt'
 }
 
 if ($Activate) {
@@ -213,7 +251,8 @@ if ($Activate) {
     }
     $currentPath = Join-Path $root 'current.json'
     $previousVersion = $null
-    if (Test-Path -LiteralPath $currentPath -PathType Leaf) {
+    if (Test-Path -LiteralPath $currentPath) {
+        Assert-RegularFile $currentPath
         $previous = Get-Content -LiteralPath $currentPath -Raw | ConvertFrom-Json
         if ($previous.schema_version -ne 1 -or $previous.channel -ne 'unsigned_local_development' -or
             [string]$previous.active_version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$') {
@@ -225,12 +264,29 @@ if ($Activate) {
         Assert-Within $previousPath $versionsRoot
         Assert-Within $previousReceiptPath $receiptsRoot
         Assert-Directory $previousPath
+        Assert-RegularFile $previousReceiptPath
         $previousReceipt = Get-Content -LiteralPath $previousReceiptPath -Raw -ErrorAction Stop | ConvertFrom-Json
         if ($previousReceipt.version -ne $previousVersion -or
-            $previousReceipt.archive_sha256 -ne $previous.archive_sha256) {
+            $previousReceipt.archive_sha256 -ne $previous.archive_sha256 -or
+            [int]$previousReceipt.storage_schema_min -ne [int]$previous.storage_schema_min -or
+            [int]$previousReceipt.storage_schema_max -ne [int]$previous.storage_schema_max) {
             throw 'Current version receipt is inconsistent'
         }
         & (Join-Path $PSScriptRoot 'Verify-UnsignedStage.ps1') -PackageDirectory $previousPath
+        $previousManifest = Get-Content -LiteralPath (Join-Path $previousPath 'bundle-manifest.json') -Raw | ConvertFrom-Json
+        if ($previousManifest.version -ne $previousVersion -or
+            [int]$previousManifest.storage_schema_min -ne [int]$previousReceipt.storage_schema_min -or
+            [int]$previousManifest.storage_schema_max -ne [int]$previousReceipt.storage_schema_max) {
+            throw 'Current version manifest does not match its receipt'
+        }
+        if ($previousReceipt.PSObject.Properties.Name -contains 'manifest_sha256' -and
+            [string]$previousReceipt.manifest_sha256 -ne
+                (Get-FileHash -LiteralPath (Join-Path $previousPath 'bundle-manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()) {
+            throw 'Current version manifest digest does not match its receipt'
+        }
+    }
+    if ($previousVersion -and $ObservedStorageSchema -eq 0) {
+        throw 'UPDATE_STORAGE_SCHEMA_UNKNOWN: use a positive observed schema when replacing an active version'
     }
     Write-JsonAtomic $currentPath ([ordered]@{
         schema_version = 1

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const STORAGE_SCHEMA_VERSION: i64 = 9;
+pub const STORAGE_SCHEMA_VERSION: i64 = 10;
 static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,6 +67,36 @@ pub struct ProjectRecord {
     pub created_at: String,
     pub updated_at: String,
     pub lifecycle_state: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProjectRemovalApprovalRecord {
+    pub id: String,
+    pub project_id: String,
+    pub state: String,
+    pub project_state_revision: i64,
+    pub project_lifecycle_state: String,
+    pub requester_actor: String,
+    pub requester_client: String,
+    pub requester_delegator: Option<String>,
+    pub approver_actor: Option<String>,
+    pub approver_client: Option<String>,
+    pub executor_actor: Option<String>,
+    pub executor_client: Option<String>,
+    pub created_at_ms: i64,
+    pub expires_at_ms: i64,
+    pub decided_at_ms: Option<i64>,
+    pub executed_at_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TaskContextSnapshot {
+    pub project: ProjectRecord,
+    pub project_state_revision: i64,
+    pub index: Option<ProjectIndexState>,
+    pub configuration: Option<ProjectConfiguration>,
+    pub results: Vec<ResultRecord>,
+    pub removal_approvals: Vec<ProjectRemovalApprovalRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -430,6 +460,82 @@ fn sqlite_now(conn: &Connection) -> Result<String, StorageError> {
     .map_err(|error| StorageError::sqlite("read SQLite clock", error))
 }
 
+fn current_unix_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| i64::try_from(duration.as_millis()).unwrap_or(i64::MAX))
+        .unwrap_or(0)
+}
+
+fn decode_removal_approval(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectRemovalApprovalRecord> {
+    Ok(ProjectRemovalApprovalRecord {
+        id: row.get(0)?,
+        project_id: row.get(1)?,
+        state: row.get(2)?,
+        project_state_revision: row.get(3)?,
+        project_lifecycle_state: row.get(4)?,
+        requester_actor: row.get(5)?,
+        requester_client: row.get(6)?,
+        requester_delegator: row.get(7)?,
+        approver_actor: row.get(8)?,
+        approver_client: row.get(9)?,
+        executor_actor: row.get(10)?,
+        executor_client: row.get(11)?,
+        created_at_ms: row.get(12)?,
+        expires_at_ms: row.get(13)?,
+        decided_at_ms: row.get(14)?,
+        executed_at_ms: row.get(15)?,
+    })
+}
+
+const REMOVAL_APPROVAL_COLUMNS: &str =
+    "id, project_id, state, project_state_revision, project_lifecycle_state,
+     requester_actor, requester_client, requester_delegator, approver_actor,
+     approver_client, executor_actor, executor_client, created_at_ms,
+     expires_at_ms, decided_at_ms, executed_at_ms";
+
+fn read_removal_approval(
+    conn: &Connection,
+    project_id: &str,
+    approval_id: &str,
+) -> Result<Option<ProjectRemovalApprovalRecord>, StorageError> {
+    conn.query_row(
+        &format!("SELECT {REMOVAL_APPROVAL_COLUMNS} FROM project_removal_approvals
+                  WHERE project_id = ?1 AND id = ?2"),
+        params![project_id, approval_id],
+        decode_removal_approval,
+    ).optional().map_err(|error| StorageError::sqlite("read removal approval", error))
+}
+
+fn effective_removal_state(
+    approval: &ProjectRemovalApprovalRecord,
+    project_revision: i64,
+    project_lifecycle: &str,
+    now_ms: i64,
+) -> &'static str {
+    match approval.state.as_str() {
+        "pending" | "approved_pending_execution" => {
+            if approval.project_state_revision != project_revision
+                || approval.project_lifecycle_state != project_lifecycle
+                || project_lifecycle == "removed"
+            {
+                "stale"
+            } else if now_ms >= approval.expires_at_ms {
+                "expired"
+            } else if approval.state == "pending" {
+                "pending"
+            } else {
+                "approved_pending_execution"
+            }
+        }
+        "rejected" => "rejected",
+        "expired" => "expired",
+        "stale" => "stale",
+        "executed" => "executed",
+        _ => "stale",
+    }
+}
+
 impl RelayStorage {
     pub fn open(db_path: impl AsRef<Path>) -> Result<Self, StorageError> {
         let db_path = db_path.as_ref().to_path_buf();
@@ -506,6 +612,9 @@ impl RelayStorage {
         }
         if self.schema_version()? < 9 {
             self.apply_schema_nine()?;
+        }
+        if self.schema_version()? < 10 {
+            self.apply_schema_ten()?;
         }
         Ok(())
     }
@@ -913,6 +1022,44 @@ impl RelayStorage {
         tx.commit().map_err(|error| StorageError::sqlite("commit schema migration 9", error))
     }
 
+    fn apply_schema_ten(&mut self) -> Result<(), StorageError> {
+        let applied_at = sqlite_now(&self.conn)?;
+        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| StorageError::sqlite("begin schema-10 migration", error))?;
+        tx.execute_batch(
+            "ALTER TABLE projects ADD COLUMN state_revision INTEGER NOT NULL DEFAULT 1
+               CHECK(state_revision >= 1);
+             CREATE TABLE project_removal_approvals (
+               id TEXT PRIMARY KEY,
+               project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+               state TEXT NOT NULL CHECK(state IN (
+                 'pending', 'approved_pending_execution', 'rejected',
+                 'expired', 'stale', 'executed'
+               )),
+               project_state_revision INTEGER NOT NULL,
+               project_lifecycle_state TEXT NOT NULL,
+               requester_actor TEXT NOT NULL,
+               requester_client TEXT NOT NULL,
+               requester_delegator TEXT,
+               approver_actor TEXT,
+               approver_client TEXT,
+               executor_actor TEXT,
+               executor_client TEXT,
+               created_at_ms INTEGER NOT NULL,
+               expires_at_ms INTEGER NOT NULL,
+               decided_at_ms INTEGER,
+               executed_at_ms INTEGER
+             );
+             CREATE INDEX project_removal_approvals_project
+               ON project_removal_approvals(project_id, created_at_ms DESC, id DESC);"
+        ).map_err(|error| StorageError::sqlite("create project removal approvals", error))?;
+        tx.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
+            params![10i64, applied_at],
+        ).map_err(|error| StorageError::sqlite("record schema migration 10", error))?;
+        tx.commit().map_err(|error| StorageError::sqlite("commit schema migration 10", error))
+    }
+
     pub fn db_path(&self) -> &Path {
         &self.db_path
     }
@@ -975,6 +1122,7 @@ impl RelayStorage {
                  ON CONFLICT(id) DO UPDATE SET
                    name=excluded.name,
                    root_uri=excluded.root_uri,
+                   state_revision=projects.state_revision + 1,
                    updated_at=excluded.updated_at",
                 params![id, name, root_uri, now, now],
             )
@@ -1046,7 +1194,7 @@ impl RelayStorage {
     }
 
     pub fn set_project_lifecycle(&self, id: &str, target: &str) -> Result<(ProjectRecord, bool), StorageError> {
-        if !matches!(target, "active" | "archived" | "removed") {
+        if !matches!(target, "active" | "archived") {
             return Err(StorageError::new("VALIDATION_FAILED", "unsupported lifecycle state"));
         }
         let tx = self.conn.unchecked_transaction()
@@ -1055,7 +1203,7 @@ impl RelayStorage {
             "SELECT lifecycle_state FROM projects WHERE id = ?1", [id], |row| row.get(0),
         ).optional().map_err(|error| StorageError::sqlite("read project lifecycle state", error))?;
         let current = current.ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
-        if current == "removed" && target != "removed" {
+        if current == "removed" {
             return Err(StorageError::new("PROJECT_REMOVED", "removed project cannot be restored or archived"));
         }
         if target == "active" && !matches!(current.as_str(), "active" | "archived") {
@@ -1073,7 +1221,8 @@ impl RelayStorage {
                 ).map_err(|error| StorageError::sqlite("invalidate restored project index", error))?;
             }
             tx.execute(
-                "UPDATE projects SET lifecycle_state = ?2, updated_at = ?3 WHERE id = ?1",
+                "UPDATE projects SET lifecycle_state = ?2, updated_at = ?3,
+                   state_revision = state_revision + 1 WHERE id = ?1",
                 params![id, target, now],
             ).map_err(|error| StorageError::sqlite("change project lifecycle state", error))?;
         }
@@ -1081,6 +1230,152 @@ impl RelayStorage {
         let project = self.get_project(id)?
             .ok_or_else(|| StorageError::new("STORAGE_ERROR", "project disappeared after lifecycle change"))?;
         Ok((project, changed))
+    }
+
+    pub fn plan_project_removal(&self, project_id: &str, requester_actor: &str, requester_client: &str, requester_delegator: Option<&str>) -> Result<ProjectRemovalApprovalRecord, StorageError> {
+        let tx = self.conn.unchecked_transaction().map_err(|e| StorageError::sqlite("begin removal plan", e))?;
+        let project: Option<(i64, String)> = tx.query_row(
+            "SELECT state_revision, lifecycle_state FROM projects WHERE id = ?1", [project_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).optional().map_err(|e| StorageError::sqlite("read removal target", e))?;
+        let (revision, lifecycle) = project.ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
+        if lifecycle == "removed" { return Err(StorageError::new("PROJECT_REMOVED", "project is already removed")); }
+        let now = current_unix_ms();
+        let outstanding: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM project_removal_approvals WHERE project_id = ?1
+             AND state IN ('pending', 'approved_pending_execution') AND expires_at_ms > ?2
+             AND project_state_revision = ?3 AND project_lifecycle_state = ?4",
+            params![project_id, now, revision, lifecycle], |row| row.get(0),
+        ).map_err(|e| StorageError::sqlite("count outstanding removal plans", e))?;
+        if outstanding >= 4 { return Err(StorageError::new("APPROVAL_LIMIT", "too many outstanding removal plans for project")); }
+        let id = opaque_id("APR");
+        let expires = now.saturating_add(15 * 60 * 1000);
+        tx.execute("INSERT INTO project_removal_approvals
+            (id, project_id, state, project_state_revision, project_lifecycle_state,
+             requester_actor, requester_client, requester_delegator, created_at_ms, expires_at_ms)
+            VALUES (?1, ?2, 'pending', ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![id, project_id, revision, lifecycle, requester_actor, requester_client, requester_delegator, now, expires],
+        ).map_err(|e| StorageError::sqlite("write removal plan", e))?;
+        let approval = read_removal_approval(&tx, project_id, &id)?.expect("inserted approval exists");
+        tx.commit().map_err(|e| StorageError::sqlite("commit removal plan", e))?;
+        Ok(approval)
+    }
+
+    pub fn get_project_removal_approval(&self, project_id: &str, approval_id: &str) -> Result<ProjectRemovalApprovalRecord, StorageError> {
+        let mut approval = read_removal_approval(&self.conn, project_id, approval_id)?
+            .ok_or_else(|| StorageError::new("APPROVAL_NOT_FOUND", "removal approval not found"))?;
+        let project: (i64, String) = self.conn.query_row(
+            "SELECT state_revision, lifecycle_state FROM projects WHERE id = ?1", [project_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).map_err(|e| StorageError::sqlite("read removal target", e))?;
+        approval.state = effective_removal_state(&approval, project.0, &project.1, current_unix_ms()).to_string();
+        Ok(approval)
+    }
+
+    pub fn list_project_removal_approvals(&self, project_id: &str, limit: usize) -> Result<Vec<ProjectRemovalApprovalRecord>, StorageError> {
+        let project: Option<(i64, String)> = self.conn.query_row(
+            "SELECT state_revision, lifecycle_state FROM projects WHERE id = ?1", [project_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).optional().map_err(|e| StorageError::sqlite("read removal target", e))?;
+        let (revision, lifecycle) = project.ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
+        let mut stmt = self.conn.prepare(&format!("SELECT {REMOVAL_APPROVAL_COLUMNS} FROM project_removal_approvals WHERE project_id = ?1 ORDER BY created_at_ms DESC, id DESC LIMIT ?2"))
+            .map_err(|e| StorageError::sqlite("prepare removal approval list", e))?;
+        let rows = stmt.query_map(params![project_id, limit.min(100) as i64], decode_removal_approval)
+            .map_err(|e| StorageError::sqlite("list removal approvals", e))?;
+        let mut out = Vec::new();
+        let now = current_unix_ms();
+        for row in rows {
+            let mut approval = row.map_err(|e| StorageError::sqlite("decode removal approval", e))?;
+            approval.state = effective_removal_state(&approval, revision, &lifecycle, now).to_string();
+            out.push(approval);
+        }
+        Ok(out)
+    }
+
+    pub fn task_context_snapshot(&self, project_id: &str, result_ids: &[&str], approval_ids: &[&str]) -> Result<TaskContextSnapshot, StorageError> {
+        if result_ids.len() > 8 || approval_ids.len() > 4 {
+            return Err(StorageError::new("VALIDATION_FAILED", "task context source limit exceeded"));
+        }
+        let tx = self.conn.unchecked_transaction()
+            .map_err(|e| StorageError::sqlite("begin task context snapshot", e))?;
+        let project = self.get_project(project_id)?
+            .ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
+        let project_state_revision: i64 = tx.query_row(
+            "SELECT state_revision FROM projects WHERE id = ?1", [project_id], |row| row.get(0),
+        ).map_err(|e| StorageError::sqlite("read project revision", e))?;
+        let index = self.get_project_index_state(project_id)?;
+        let configuration = self.get_project_configuration(project_id)?;
+        let mut results = Vec::with_capacity(result_ids.len());
+        for id in result_ids {
+            let record = self.get_result(id)?
+                .ok_or_else(|| StorageError::new("RESULT_NOT_FOUND", "result not found in project"))?;
+            if record.project_id.as_deref() != Some(project_id) {
+                return Err(StorageError::new("RESULT_NOT_FOUND", "result not found in project"));
+            }
+            results.push(record);
+        }
+        let mut removal_approvals = Vec::with_capacity(approval_ids.len());
+        for id in approval_ids {
+            removal_approvals.push(self.get_project_removal_approval(project_id, id)?);
+        }
+        tx.commit().map_err(|e| StorageError::sqlite("commit task context snapshot", e))?;
+        Ok(TaskContextSnapshot { project, project_state_revision, index, configuration, results, removal_approvals })
+    }
+
+    pub fn decide_project_removal(&self, project_id: &str, approval_id: &str, approve: bool, approver_actor: &str, approver_client: &str) -> Result<ProjectRemovalApprovalRecord, StorageError> {
+        let tx = self.conn.unchecked_transaction().map_err(|e| StorageError::sqlite("begin removal decision", e))?;
+        let mut approval = read_removal_approval(&tx, project_id, approval_id)?
+            .ok_or_else(|| StorageError::new("APPROVAL_NOT_FOUND", "removal approval not found"))?;
+        let project: (i64, String) = tx.query_row("SELECT state_revision, lifecycle_state FROM projects WHERE id = ?1", [project_id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|e| StorageError::sqlite("read removal target", e))?;
+        let state = effective_removal_state(&approval, project.0, &project.1, current_unix_ms());
+        if matches!(state, "stale" | "expired") {
+            tx.execute("UPDATE project_removal_approvals SET state = ?3 WHERE project_id = ?1 AND id = ?2", params![project_id, approval_id, state])
+                .map_err(|e| StorageError::sqlite("record invalid removal approval", e))?;
+            approval = read_removal_approval(&tx, project_id, approval_id)?.expect("approval exists");
+            tx.commit().map_err(|e| StorageError::sqlite("commit invalid removal approval", e))?;
+            return Ok(approval);
+        }
+        let next = match (state, approve) {
+            ("pending", true) => "approved_pending_execution",
+            ("pending" | "approved_pending_execution", false) => "rejected",
+            _ => return Err(StorageError::new("APPROVAL_STATE_CONFLICT", "approval cannot be decided in its current state")),
+        };
+        let now = current_unix_ms();
+        tx.execute("UPDATE project_removal_approvals SET state = ?3, approver_actor = ?4, approver_client = ?5, decided_at_ms = ?6 WHERE project_id = ?1 AND id = ?2",
+            params![project_id, approval_id, next, approver_actor, approver_client, now])
+            .map_err(|e| StorageError::sqlite("write removal decision", e))?;
+        approval = read_removal_approval(&tx, project_id, approval_id)?.expect("approval exists");
+        tx.commit().map_err(|e| StorageError::sqlite("commit removal decision", e))?;
+        Ok(approval)
+    }
+
+    pub fn execute_project_removal(&self, project_id: &str, approval_id: &str, executor_actor: &str, executor_client: &str) -> Result<(ProjectRemovalApprovalRecord, bool), StorageError> {
+        let tx = self.conn.unchecked_transaction().map_err(|e| StorageError::sqlite("begin approved removal", e))?;
+        let mut approval = read_removal_approval(&tx, project_id, approval_id)?
+            .ok_or_else(|| StorageError::new("APPROVAL_NOT_FOUND", "removal approval not found"))?;
+        if approval.state == "executed" { return Ok((approval, false)); }
+        let project: (i64, String) = tx.query_row("SELECT state_revision, lifecycle_state FROM projects WHERE id = ?1", [project_id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|e| StorageError::sqlite("read removal target", e))?;
+        let state = effective_removal_state(&approval, project.0, &project.1, current_unix_ms());
+        if state != "approved_pending_execution" {
+            if state == "stale" || state == "expired" {
+                tx.execute("UPDATE project_removal_approvals SET state = ?3 WHERE project_id = ?1 AND id = ?2", params![project_id, approval_id, state])
+                    .map_err(|e| StorageError::sqlite("record invalid removal approval", e))?;
+                tx.commit().map_err(|e| StorageError::sqlite("commit invalid removal approval", e))?;
+            }
+            return Err(StorageError::new("APPROVAL_STATE_CONFLICT", format!("removal approval is {state}")));
+        }
+        let now_text = sqlite_now(&tx)?;
+        let now = current_unix_ms();
+        tx.execute("UPDATE projects SET lifecycle_state = 'removed', state_revision = state_revision + 1, updated_at = ?2 WHERE id = ?1", params![project_id, now_text])
+            .map_err(|e| StorageError::sqlite("remove approved project", e))?;
+        tx.execute("UPDATE project_removal_approvals SET state = 'executed', executor_actor = ?3, executor_client = ?4, executed_at_ms = ?5 WHERE project_id = ?1 AND id = ?2",
+            params![project_id, approval_id, executor_actor, executor_client, now])
+            .map_err(|e| StorageError::sqlite("record approved removal", e))?;
+        approval = read_removal_approval(&tx, project_id, approval_id)?.expect("approval exists");
+        tx.commit().map_err(|e| StorageError::sqlite("commit approved removal", e))?;
+        Ok((approval, true))
     }
 
     pub fn get_project_configuration(
@@ -3040,6 +3335,36 @@ mod tests {
     }
 
     #[test]
+    fn removal_approval_is_single_use_durable_and_revision_guarded() {
+        let dir = temp_dir("removal-approval");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("relay.sqlite3");
+        let storage = RelayStorage::open(&path).unwrap();
+        storage.register_project(Some("PRJ-a"), "A", "file:///a").unwrap();
+        let stale = storage.plan_project_removal("PRJ-a", "requester", "client", None).unwrap();
+        storage.register_project(Some("PRJ-a"), "A2", "file:///a2").unwrap();
+        assert_eq!(storage.get_project_removal_approval("PRJ-a", &stale.id).unwrap().state, "stale");
+        let rejected = storage.plan_project_removal("PRJ-a", "requester", "client", None).unwrap();
+        assert_eq!(storage.decide_project_removal("PRJ-a", &rejected.id, false, "approver", "client").unwrap().state, "rejected");
+        assert_eq!(storage.execute_project_removal("PRJ-a", &rejected.id, "executor", "client").unwrap_err().code, "APPROVAL_STATE_CONFLICT");
+        let expired = storage.plan_project_removal("PRJ-a", "requester", "client", None).unwrap();
+        storage.conn.execute("UPDATE project_removal_approvals SET expires_at_ms = 1 WHERE id = ?1", [&expired.id]).unwrap();
+        assert_eq!(storage.get_project_removal_approval("PRJ-a", &expired.id).unwrap().state, "expired");
+        assert_eq!(storage.decide_project_removal("PRJ-a", &expired.id, true, "approver", "client").unwrap().state, "expired");
+        let approved = storage.plan_project_removal("PRJ-a", "requester", "client", Some("owner")).unwrap();
+        assert_eq!(storage.decide_project_removal("PRJ-a", &approved.id, true, "approver", "client").unwrap().state, "approved_pending_execution");
+        drop(storage);
+        let reopened = RelayStorage::open(&path).unwrap();
+        assert_eq!(reopened.get_project_removal_approval("PRJ-a", &approved.id).unwrap().state, "approved_pending_execution");
+        assert!(reopened.execute_project_removal("PRJ-a", &approved.id, "executor", "client").unwrap().1);
+        assert!(!reopened.execute_project_removal("PRJ-a", &approved.id, "executor", "client").unwrap().1);
+        assert_eq!(reopened.get_project("PRJ-a").unwrap().unwrap().lifecycle_state, "removed");
+        assert_eq!(reopened.get_project_removal_approval("PRJ-a", &approved.id).unwrap().state, "executed");
+        drop(reopened);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn lifecycle_tombstone_preserves_result_and_job_links_across_restart() {
         let dir = temp_dir("lifecycle-history");
         fs::create_dir_all(&dir).unwrap();
@@ -3053,8 +3378,11 @@ mod tests {
             Some("JOB-life"), Some("PRJ-life"), "fixture.work", "DONE",
             &json!({ "step": 1 }), Some(&result.id), &json!({}), "local",
         ).unwrap();
-        assert_eq!(storage.set_project_lifecycle("PRJ-life", "removed").unwrap().1, true);
-        assert_eq!(storage.set_project_lifecycle("PRJ-life", "removed").unwrap().1, false);
+        assert_eq!(storage.set_project_lifecycle("PRJ-life", "removed").unwrap_err().code, "VALIDATION_FAILED");
+        let plan = storage.plan_project_removal("PRJ-life", "requester", "client", None).unwrap();
+        storage.decide_project_removal("PRJ-life", &plan.id, true, "approver", "client").unwrap();
+        assert!(storage.execute_project_removal("PRJ-life", &plan.id, "executor", "client").unwrap().1);
+        assert!(!storage.execute_project_removal("PRJ-life", &plan.id, "executor", "client").unwrap().1);
         assert!(storage.list_projects().unwrap().is_empty());
         assert_eq!(storage.get_result(&result.id).unwrap().unwrap().project_id.as_deref(), Some("PRJ-life"));
         assert_eq!(storage.get_job(&job.id).unwrap().unwrap().result_id.as_deref(), Some(result.id.as_str()));
@@ -3070,7 +3398,7 @@ mod tests {
     }
 
     #[test]
-    fn fresh_store_uses_schema_eight_and_typed_records() {
+    fn fresh_store_uses_current_schema_and_typed_records() {
         let dir = temp_dir("fresh");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");

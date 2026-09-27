@@ -272,6 +272,19 @@ Common diagnostic output should be concise by default and include structured det
 Normal supported workflows should not require users/agents to memorize internal daemon, database, IPC, adapter-broker, or policy implementation details.
 
 
+## Blender validation record
+
+`relay blender-mesh-record <project-id> <project-relative.blend>` runs the same
+bounded read-only native check as `blender-mesh-check`, then saves its compact
+response through shared `result.put` with kind `BLENDER_MESH_VALIDATION`. The
+returned `id` is the result ID for `relay result-get <result-id>`.
+The stored payload retains `status` and `native_workflow_status`, including
+`unavailable`/`untested` when Blender cannot run; saving a result does not turn
+an unavailable native check into a pass. A successful CLI exit means the record
+was saved; inspect the stored `status` for the native check outcome. Both
+project read authority for the check and `state_write`/`relay_state_write`
+authority for recording are needed.
+
 ## Krita build identity
 
 `relay krita-export` returns a project-scoped build `result_id` after a successful

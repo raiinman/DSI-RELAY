@@ -154,7 +154,7 @@ impl ExecutionAuthority {
             actor_id: "local-user".to_string(),
             client_id: client_id.into(),
             delegator_id: None,
-            permissions: ["read", "state_write", "host_control", "project_write"]
+            permissions: ["read", "state_write", "host_control", "project_write", "approve_destructive"]
                 .into_iter()
                 .map(str::to_string)
                 .collect(),

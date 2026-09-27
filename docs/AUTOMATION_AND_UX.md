@@ -272,6 +272,8 @@ Prefer approving a bounded group of related actions over prompting for every tri
 
 UX testing should measure approval frequency, repeated low-value prompts, rejection/cancel behavior, and whether users can correctly explain what they approved.
 
+The first implemented local confirmation workflow covers project removal only. A plan records the requesting actor/client, target project ID, registration revision, 15-minute expiry, impact, validation, and rollback limit. It is inspectable after restart and may be rejected. Execution requires an approved, unexpired plan for the same registration revision; changed state makes it stale. At most four outstanding plans per project are allowed. The dashboard shows fixed risk and scope details before deciding and supports listing earlier plan states. Same-user CLI/dashboard confirmation is not cryptographic proof of a human at the keyboard; that limitation remains for future identity design and usability review.
+
 ## Automation levels
 
 Possible user-facing profiles:

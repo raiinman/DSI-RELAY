@@ -173,8 +173,15 @@ function renderProjects(projects) {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.textContent = "Remove";
-    remove.addEventListener("click", () => changeProjectLifecycle(project, "project.remove", remove));
+    remove.addEventListener("click", () => planProjectRemoval(project, remove));
     item.append(remove);
+    const plans = document.createElement("button");
+    plans.type = "button";
+    plans.textContent = "Removal plans";
+    const plansRegion = document.createElement("div");
+    plans.addEventListener("click", () => showRemovalPlans(project, plansRegion));
+    item.append(plans);
+    item.append(plansRegion);
     list.append(item);
   }
 }
@@ -383,7 +390,7 @@ async function changeProjectLifecycle(project, name, button) {
     ? `Archive ${label}? Its files stay on this computer and its RELAY records are kept.`
     : name === "project.restore"
       ? `Restore ${label} to active projects?`
-      : `Remove ${label} from RELAY? Its files and RELAY history are kept, but this project will no longer be active.`;
+      : `Change ${label}?`;
   if (!window.confirm(warning)) return;
   projectActionBusy = true;
   button.disabled = true;
@@ -391,7 +398,6 @@ async function changeProjectLifecycle(project, name, button) {
     : name === "project.restore" ? "Restoring the project…" : "Removing the project…";
   try {
     const argumentsValue = { project_id: project.id };
-    if (name === "project.remove") argumentsValue.confirm_project_id = project.id;
     const result = await command(name, argumentsValue);
     selectedProjectId = null;
     const updated = await refresh();
@@ -399,6 +405,116 @@ async function changeProjectLifecycle(project, name, button) {
     $("#project-action").textContent = updated
       ? `${label} ${action}. Project files and RELAY history were kept.`
       : `${label} ${action}, but the project list could not be refreshed. Try Refresh.`;
+  } catch (problem) {
+    $("#project-action").textContent = projectError(problem);
+  } finally {
+    projectActionBusy = false;
+    button.disabled = false;
+  }
+}
+
+function removalSummary(plan) {
+  const states = new Set(["pending", "approved_pending_execution", "rejected", "expired", "stale", "executed"]);
+  const state = states.has(plan.state) ? plan.state.replaceAll("_", " ") : "unknown";
+  const requester = plan.requester_client === "relay-dashboard" ? "Dashboard"
+    : plan.requester_client === "relay-cli" ? "CLI" : "another client";
+  const expiry = Number.isSafeInteger(plan.expires_at_ms) && plan.expires_at_ms > 0
+    ? new Date(plan.expires_at_ms).toLocaleString() : "unknown";
+  return `Project removal plan · ${state}. Requested for this project through ${requester}. Expires ${expiry}. High risk: the project registration will be removed from active use. Project files and RELAY history stay on this computer. The project registration must still match this plan. RELAY cannot reverse removal.`;
+}
+
+async function showRemovalPlans(project, region) {
+  try {
+    const result = await command("project.removal.list", { project_id: project.id, limit: 10 });
+    const plans = Array.isArray(result.approvals) ? result.approvals : [];
+    region.replaceChildren();
+    $("#project-action").textContent = plans.length ? "Recent removal plans are shown under the project." : "No removal plans for this project.";
+    for (const plan of plans) {
+      const detail = document.createElement("p");
+      detail.textContent = removalSummary(plan);
+      region.append(detail);
+      if (plan.state === "pending" || plan.state === "approved_pending_execution") {
+        const finish = document.createElement("button");
+        finish.type = "button";
+        finish.textContent = plan.state === "pending" ? "Approve and remove" : "Finish approved removal";
+        finish.addEventListener("click", () => continueRemovalPlan(project, plan, finish));
+        region.append(finish);
+      }
+      if (plan.state === "pending" || plan.state === "approved_pending_execution") {
+        const reject = document.createElement("button");
+        reject.type = "button";
+        reject.textContent = "Reject plan";
+        reject.addEventListener("click", () => rejectRemovalPlan(project, plan, reject, region));
+        region.append(reject);
+      }
+    }
+  } catch (problem) {
+    $("#project-action").textContent = projectError(problem);
+  }
+}
+
+async function continueRemovalPlan(project, plan, button) {
+  if (projectActionBusy || !window.confirm(`${removalSummary(plan)}\n\nRemove this project from RELAY?`)) return;
+  projectActionBusy = true;
+  button.disabled = true;
+  try {
+    if (plan.state === "pending") {
+      await command("project.removal.decide", { project_id: project.id, approval_id: plan.approval_id, decision: "approve" });
+    }
+    const removed = await command("project.remove", { project_id: project.id, approval_id: plan.approval_id });
+    selectedProjectId = null;
+    await refresh();
+    $("#project-action").textContent = removed.state === "executed"
+      ? "Project removed from RELAY. Files and RELAY history were kept."
+      : "Removal outcome needs review. Refresh the approval list.";
+  } catch (problem) {
+    $("#project-action").textContent = projectError(problem);
+  } finally {
+    projectActionBusy = false;
+    button.disabled = false;
+  }
+}
+
+async function rejectRemovalPlan(project, plan, button, region) {
+  if (projectActionBusy) return;
+  projectActionBusy = true;
+  button.disabled = true;
+  try {
+    await command("project.removal.decide", { project_id: project.id, approval_id: plan.approval_id, decision: "reject" });
+    await showRemovalPlans(project, region);
+    $("#project-action").textContent = "Removal plan rejected. Project remains available.";
+  } catch (problem) {
+    $("#project-action").textContent = projectError(problem);
+  } finally {
+    projectActionBusy = false;
+    button.disabled = false;
+  }
+}
+
+async function planProjectRemoval(project, button) {
+  if (projectActionBusy) return;
+  projectActionBusy = true;
+  button.disabled = true;
+  $("#project-action").textContent = "Preparing a removal plan…";
+  try {
+    const plan = await command("project.removal.plan", { project_id: project.id });
+    $("#project-action").textContent = removalSummary(plan);
+    const approved = window.confirm(`${removalSummary(plan)}\n\nApprove and remove this project from RELAY?`);
+    const decision = await command("project.removal.decide", {
+      project_id: project.id, approval_id: plan.approval_id,
+      decision: approved ? "approve" : "reject"
+    });
+    if (!approved) {
+      $("#project-action").textContent = "Removal plan rejected. Project remains available.";
+      return;
+    }
+    $("#project-action").textContent = "Approval recorded. Removing the project registration…";
+    const result = await command("project.remove", { project_id: project.id, approval_id: plan.approval_id });
+    selectedProjectId = null;
+    const updated = await refresh();
+    $("#project-action").textContent = updated
+      ? `${project.name || "Project"} removed from RELAY. Project files and RELAY history were kept.`
+      : "Removal was recorded, but the project list could not be refreshed. Try Refresh.";
   } catch (problem) {
     $("#project-action").textContent = projectError(problem);
   } finally {
@@ -657,6 +773,47 @@ async function previewIntegratedReport() {
       for (const metric of transport) {
         const pathLabel = metric.path_id === "cli_stdin" ? "CLI" : "local MCP";
         details.push(`${pathLabel}: ${count(metric.request_bytes)} in / ${count(metric.response_bytes)} out JSON bytes · ${count(metric.elapsed_ms)} ms`);
+      }
+      const context = workflow.workflow_id === "context.cost_benchmark" ? workflow.context_cost_metric : null;
+      if (context?.byte_scope === "sum_of_stored_payload_json_vs_compiled_result_json" &&
+          Number.isSafeInteger(context.source_count) && context.source_count >= 1 && context.source_count <= 8 &&
+          [context.full_payload_json_bytes, context.compiled_context_json_bytes,
+           context.compiled_to_full_ratio_milli, context.full_payload_elapsed_ms,
+           context.compiled_context_elapsed_ms].every((number) =>
+             Number.isSafeInteger(number) && number >= 0 && number <= 1048576) &&
+          context.full_payload_json_bytes > 0 && context.compiled_context_json_bytes > 0 &&
+          Math.floor(context.compiled_context_json_bytes * 1000 / context.full_payload_json_bytes) === context.compiled_to_full_ratio_milli &&
+          context.token_estimate_status === "not_measured" &&
+          context.model_answer_quality_status === "untested" && context.remote_cost_status === "untested") {
+        details.push(`Context: ${count(context.compiled_context_json_bytes)} compiled / ${count(context.full_payload_json_bytes)} source JSON bytes (${(context.compiled_to_full_ratio_milli / 10).toFixed(1)}%) across ${count(context.source_count)} results`);
+        details.push(`Local time: ${count(context.compiled_context_elapsed_ms)} ms compiled / ${count(context.full_payload_elapsed_ms)} ms full`);
+        details.push("Tokens not measured · answer quality and remote cost UNTESTED");
+      }
+      const host = workflow.workflow_id === "project.supported_host_resource" ? workflow.host_resource_metric : null;
+      if (["minimum_candidate", "recommended_candidate"].includes(host?.host_tier_declaration) &&
+          host.support_tier_budget_status === "untested" && host.foreground_interference_status === "untested" &&
+          ["seen", "not_seen", "unavailable"].includes(host.foreground_observation) &&
+          [host.physical_core_count, host.logical_processor_count, host.physical_memory_bytes,
+           host.index_command_elapsed_ms, host.daemon_cpu_ms, host.cli_cpu_ms,
+           host.daemon_peak_working_set_bytes, host.cli_peak_working_set_bytes,
+           host.sample_count, host.sample_interval_ms, host.sampling_overhead_ms,
+           host.host_probe_overhead_ms, host.foreground_probe_overhead_ms,
+           host.foreground_creator_samples].every((number) => Number.isSafeInteger(number) && number >= 0) &&
+          host.physical_core_count > 0 && host.physical_core_count <= 512 &&
+          host.logical_processor_count >= host.physical_core_count && host.logical_processor_count <= 1024 &&
+          host.physical_memory_bytes >= 1073741824 && host.physical_memory_bytes <= 4398046511104 &&
+          host.index_command_elapsed_ms <= 600000 && host.daemon_cpu_ms <= 614400000 &&
+          host.cli_cpu_ms <= 614400000 &&
+          host.daemon_peak_working_set_bytes > 0 && host.daemon_peak_working_set_bytes <= 1099511627776 &&
+          host.cli_peak_working_set_bytes > 0 && host.cli_peak_working_set_bytes <= 1099511627776 &&
+          host.sample_count >= 2 && host.sample_count <= 6002 && host.sample_interval_ms === 100 &&
+          host.sampling_overhead_ms <= 600000 && host.host_probe_overhead_ms <= 600000 &&
+          host.foreground_probe_overhead_ms <= 600000 &&
+          host.foreground_creator_samples <= host.sample_count) {
+        details.push(`Host candidate: ${host.physical_core_count} physical cores, ${(host.physical_memory_bytes / 1073741824).toFixed(1)} GiB RAM · support budget UNTESTED`);
+        details.push(`Index: ${count(host.index_command_elapsed_ms)} ms · daemon ${count(host.daemon_cpu_ms)} ms CPU / ${(host.daemon_peak_working_set_bytes / 1048576).toFixed(1)} MiB peak · CLI ${count(host.cli_cpu_ms)} ms CPU / ${(host.cli_peak_working_set_bytes / 1048576).toFixed(1)} MiB peak`);
+        details.push(`Sampling: ${count(host.sample_count)} at ${count(host.sample_interval_ms)} ms · overhead ${count(host.sampling_overhead_ms + host.host_probe_overhead_ms + host.foreground_probe_overhead_ms)} ms`);
+        details.push(`Foreground creator app: ${host.foreground_observation.replaceAll("_", " ")} · interference UNTESTED`);
       }
       item.textContent = `${workflow.workflow_id}: ${workflow.status.toUpperCase()}${code}${details.length ? ` · ${details.join(" · ")}` : ""}`;
       list.append(item);

@@ -3,7 +3,7 @@
   "relay_version_family": "0.1",
   "registry_format": 1,
   "registry_id": "dsi.relay.commands",
-  "registry_sha256": "cd8e51d5a33f242aced88dce50ac351fe796af1c296c75e5be95c7b1a834cf6d",
+  "registry_sha256": "6a48b0a4c418f1fec7fdcfe57e6f6e14c2774a8b7f4e2236212aac0869767647",
   "required_capabilities": [
     "system.status@1",
     "system.doctor@1",
@@ -73,6 +73,14 @@
       "id": "context.compile",
       "version": 1,
       "summary": "Compile safe exact facts from selected stored project results, preserving source identity and conflicts within a byte budget.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "context.task.compile",
+      "version": 1,
+      "summary": "Compile a bounded project state snapshot, explicitly selected durable removal decisions, and exact historical result facts for one task.",
       "effect_class": "observe",
       "permission": "read",
       "idempotency": "safe"
@@ -238,9 +246,41 @@
       "idempotency": "keyed"
     },
     {
+      "id": "project.removal.get",
+      "version": 1,
+      "summary": "Inspect a durable project removal approval without exposing project paths.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "project.removal.list",
+      "version": 1,
+      "summary": "List a bounded set of project removal approvals, including stale and expired records.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "project.removal.plan",
+      "version": 1,
+      "summary": "Create a short-lived, project-scoped removal plan with a durable state precondition.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed"
+    },
+    {
       "id": "project.remove",
       "version": 1,
       "summary": "Remove a project from active use with a durable history-preserving tombstone.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed"
+    },
+    {
+      "id": "project.remove",
+      "version": 2,
+      "summary": "Execute a previously approved project removal if its durable precondition still matches.",
       "effect_class": "relay_state_write",
       "permission": "state_write",
       "idempotency": "keyed"

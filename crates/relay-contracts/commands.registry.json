@@ -885,7 +885,120 @@
         },
         "additionalProperties": false
       },
-      "errors": ["VALIDATION_FAILED", "PROJECT_NOT_FOUND", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+      "errors": ["VALIDATION_FAILED", "PROJECT_NOT_FOUND", "APPROVAL_REQUIRED", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "project.remove",
+      "version": 2,
+      "stability": "phase5",
+      "summary": "Execute a previously approved project removal if its durable precondition still matches.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id", "approval_id"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "approval_id": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["project_id", "approval_id", "state", "executed"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "approval_id": { "type": "string" },
+          "state": { "type": "string", "const": "executed" },
+          "executed": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["APPROVAL_NOT_FOUND", "APPROVAL_STATE_CONFLICT", "PROJECT_NOT_FOUND", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "project.removal.plan",
+      "version": 1,
+      "stability": "phase5",
+      "summary": "Create a short-lived, project-scoped removal plan with a durable state precondition.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": { "project_id": { "type": "string", "minLength": 1 } },
+        "additionalProperties": false
+      },
+      "result_schema": { "type": "object", "required": ["approval_id", "project_id", "state", "project_state_revision", "requester_actor", "expires_at_ms", "risk", "effect", "validation", "rollback"], "additionalProperties": true },
+      "errors": ["PROJECT_NOT_FOUND", "PROJECT_REMOVED", "APPROVAL_LIMIT", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "project.removal.get",
+      "version": 1,
+      "stability": "phase5",
+      "summary": "Inspect a durable project removal approval without exposing project paths.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id", "approval_id"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "approval_id": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": { "type": "object", "required": ["approval_id", "project_id", "state", "project_state_revision", "requester_actor", "expires_at_ms"], "additionalProperties": true },
+      "errors": ["APPROVAL_NOT_FOUND", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "project.removal.list",
+      "version": 1,
+      "stability": "phase5",
+      "summary": "List a bounded set of project removal approvals, including stale and expired records.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": { "type": "object", "required": ["project_id", "approvals"], "properties": { "project_id": { "type": "string" }, "approvals": { "type": "array", "items": { "type": "object" } } }, "additionalProperties": false },
+      "errors": ["PROJECT_NOT_FOUND", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "project.removal.decide",
+      "version": 1,
+      "stability": "phase5",
+      "summary": "Approve or reject a removal plan through local confirmation authority.",
+      "effect_class": "relay_state_write",
+      "permission": "approve_destructive",
+      "idempotency": "keyed",
+      "surfaces": ["cli", "dashboard"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id", "approval_id", "decision"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "approval_id": { "type": "string", "minLength": 1 },
+          "decision": { "type": "string", "enum": ["approve", "reject"] }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": { "type": "object", "required": ["approval_id", "project_id", "state", "approver_actor", "decided_at_ms"], "additionalProperties": true },
+      "errors": ["APPROVAL_NOT_FOUND", "APPROVAL_STATE_CONFLICT", "PROJECT_NOT_FOUND", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
     },
     {
       "id": "project.configuration.put",
@@ -1178,7 +1291,7 @@
       "effect_class": "observe",
       "permission": "read",
       "idempotency": "safe",
-      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "surfaces": ["cli", "adapter", "ai"],
       "arguments_schema": {
         "type": "object",
         "required": ["project_id", "result_ids", "max_bytes"],
@@ -1257,6 +1370,54 @@
         }, "additionalProperties": false
       },
       "errors": ["VALIDATION_FAILED", "RESULT_NOT_FOUND", "CONTEXT_BUDGET_TOO_SMALL", "CONTEXT_FACT_UNAVAILABLE", "CONTEXT_SOURCE_TOO_LARGE", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
+      "id": "context.task.compile",
+      "version": 1,
+      "stability": "phase4",
+      "summary": "Compile a bounded project state snapshot, explicitly selected durable removal decisions, and exact historical result facts for one task.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id", "task_kind", "max_bytes"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "task_kind": { "type": "string", "enum": ["diagnose", "implement", "review", "project_admin"] },
+          "max_bytes": { "type": "integer", "minimum": 1024, "maximum": 32768 },
+          "result_ids": { "type": "array", "maxItems": 8, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 128 } },
+          "approval_ids": { "type": "array", "maxItems": 4, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 128 } },
+          "required_pointers": {
+            "type": "array", "maxItems": 16, "uniqueItems": true,
+            "items": { "type": "object", "required": ["result_id", "pointer"], "properties": {
+              "result_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "pointer": { "type": "string", "minLength": 1, "maxLength": 256 }
+            }, "additionalProperties": false }
+          },
+          "focus_terms": { "type": "array", "maxItems": 8, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 64 } }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["context_version", "project_id", "task_kind", "task_selection_trust", "current_state_basis", "project_state", "decision_evidence", "decision_evidence_scope", "result_currentness", "result_context"],
+        "properties": {
+          "context_version": { "type": "integer", "const": 2 },
+          "project_id": { "type": "string" },
+          "task_kind": { "type": "string" },
+          "task_selection_trust": { "type": "string", "const": "untrusted_caller_selection" },
+          "current_state_basis": { "type": "string", "const": "single_local_sqlite_read_snapshot" },
+          "project_state": { "type": "object" },
+          "decision_evidence": { "type": "array", "maxItems": 4, "items": { "type": "object" } },
+          "decision_evidence_scope": { "type": "string", "const": "explicitly_selected_project_records_only" },
+          "result_currentness": { "type": "string", "const": "unknown_without_project_generation_link" },
+          "result_context": { "type": "object" }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["VALIDATION_FAILED", "PROJECT_NOT_FOUND", "PROJECT_SCOPE_DENIED", "RESULT_NOT_FOUND", "APPROVAL_NOT_FOUND", "CONTEXT_BUDGET_TOO_SMALL", "CONTEXT_FACT_UNAVAILABLE", "CONTEXT_SOURCE_TOO_LARGE", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
     },
     {
       "id": "job.checkpoint",

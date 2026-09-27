@@ -1211,7 +1211,13 @@ impl RelayCore {
             "project.list" => self.project_list(&request.arguments, authority),
             "project.archive" => self.project_lifecycle(&request.arguments, "archived"),
             "project.restore" => self.project_lifecycle(&request.arguments, "active"),
-            "project.remove" => self.project_lifecycle(&request.arguments, "removed"),
+            "project.remove" => if command_version == 1 {
+                Err(CoreCommandError::new("APPROVAL_REQUIRED", "project.remove@1 is disabled; plan, approve, and execute project.remove@2"))
+            } else { self.project_removal_execute(&request.arguments, authority) },
+            "project.removal.plan" => self.project_removal_plan(&request.arguments, authority),
+            "project.removal.get" => self.project_removal_get(&request.arguments),
+            "project.removal.list" => self.project_removal_list(&request.arguments),
+            "project.removal.decide" => self.project_removal_decide(&request.arguments, authority),
             "project.configuration.put" => self.project_configuration_put(&request.arguments),
             "project.configuration.get" => self.project_configuration_get(&request.arguments),
             "project.index.build" => self.project_index_build(&request.arguments),
@@ -1230,6 +1236,7 @@ impl RelayCore {
             "result.describe" => self.result_describe(&request.arguments, authority),
             "result.context" => self.result_context(&request.arguments, authority),
             "context.compile" => self.context_compile(&request.arguments, authority),
+            "context.task.compile" => self.context_task_compile(&request.arguments, authority),
             "job.checkpoint" => self.job_checkpoint(request),
             "job.get" => self.job_get(&request.arguments, authority),
             "job.list" => self.job_list(&request.arguments, authority),
@@ -1497,15 +1504,54 @@ impl RelayCore {
 
     fn project_lifecycle(&self, arguments: &Value, target: &str) -> Result<Value, CoreCommandError> {
         let project_id = arguments["project_id"].as_str().expect("registry validation requires project_id");
-        if target == "removed" && arguments["confirm_project_id"].as_str() != Some(project_id) {
-            return Err(CoreCommandError::new("VALIDATION_FAILED", "confirmation must match the project ID"));
-        }
         let (project, changed) = self.with_storage(|storage| storage.set_project_lifecycle(project_id, target))?;
         Ok(json!({
             "project_id": project.id,
             "lifecycle_state": project.lifecycle_state,
             "changed": changed
         }))
+    }
+
+    fn project_removal_plan(&self, arguments: &Value, authority: &ExecutionAuthority) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"].as_str().unwrap();
+        let actor = safe_approval_ref(&authority.actor_id);
+        let client = safe_approval_ref(&authority.client_id);
+        let delegator = authority.delegator_id.as_deref().map(safe_approval_ref);
+        let approval = self.with_storage(|storage| storage.plan_project_removal(project_id, &actor, &client, delegator.as_deref()))?;
+        Ok(removal_approval_json(&approval))
+    }
+
+    fn project_removal_get(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"].as_str().unwrap();
+        let approval_id = arguments["approval_id"].as_str().unwrap();
+        let approval = self.with_storage(|storage| storage.get_project_removal_approval(project_id, approval_id))?;
+        Ok(removal_approval_json(&approval))
+    }
+
+    fn project_removal_list(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"].as_str().unwrap();
+        let limit = arguments.get("limit").and_then(Value::as_u64).unwrap_or(20).min(100) as usize;
+        let approvals = self.with_storage(|storage| storage.list_project_removal_approvals(project_id, limit))?;
+        Ok(json!({ "project_id": safe_approval_ref(project_id), "approvals": approvals.iter().map(removal_approval_json).collect::<Vec<_>>() }))
+    }
+
+    fn project_removal_decide(&self, arguments: &Value, authority: &ExecutionAuthority) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"].as_str().unwrap();
+        let approval_id = arguments["approval_id"].as_str().unwrap();
+        let approve = arguments["decision"].as_str() == Some("approve");
+        let actor = safe_approval_ref(&authority.actor_id);
+        let client = safe_approval_ref(&authority.client_id);
+        let approval = self.with_storage(|storage| storage.decide_project_removal(project_id, approval_id, approve, &actor, &client))?;
+        Ok(removal_approval_json(&approval))
+    }
+
+    fn project_removal_execute(&self, arguments: &Value, authority: &ExecutionAuthority) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"].as_str().unwrap();
+        let approval_id = arguments["approval_id"].as_str().unwrap();
+        let actor = safe_approval_ref(&authority.actor_id);
+        let client = safe_approval_ref(&authority.client_id);
+        let (approval, executed) = self.with_storage(|storage| storage.execute_project_removal(project_id, approval_id, &actor, &client))?;
+        Ok(json!({ "project_id": safe_approval_ref(project_id), "approval_id": approval.id, "state": approval.state, "executed": executed }))
     }
 
     fn project_configuration_put(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
@@ -2404,6 +2450,56 @@ impl RelayCore {
                 "CONTEXT_SOURCE_TOO_LARGE", "selected stored results exceed the bounded compiler input")),
         }
     }
+    fn context_task_compile(
+        &self,
+        arguments: &Value,
+        authority: &ExecutionAuthority,
+    ) -> Result<Value, CoreCommandError> {
+        let project_id = arguments["project_id"].as_str().expect("registry validates project_id");
+        authority.require_project(Some(project_id))
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        let task_kind = arguments["task_kind"].as_str().expect("registry validates task_kind");
+        let result_ids: Vec<&str> = arguments.get("result_ids").and_then(Value::as_array)
+            .map(|values| values.iter().map(|value| value.as_str().expect("registry validates result ID")).collect())
+            .unwrap_or_default();
+        let approval_ids: Vec<&str> = arguments.get("approval_ids").and_then(Value::as_array)
+            .map(|values| values.iter().map(|value| value.as_str().expect("registry validates approval ID")).collect())
+            .unwrap_or_default();
+        if result_ids.len() > 8 || approval_ids.len() > 4
+            || result_ids.iter().collect::<BTreeSet<_>>().len() != result_ids.len()
+            || approval_ids.iter().collect::<BTreeSet<_>>().len() != approval_ids.len() {
+            return Err(CoreCommandError::new("VALIDATION_FAILED", "task context source IDs must be unique and bounded"));
+        }
+        let required: Vec<(&str, &str)> = arguments.get("required_pointers").and_then(Value::as_array)
+            .map(|items| items.iter().map(|item| (
+                item["result_id"].as_str().expect("registry validates result ID"),
+                item["pointer"].as_str().expect("registry validates pointer"),
+            )).collect()).unwrap_or_default();
+        if required.len() > 16 || required.iter().collect::<BTreeSet<_>>().len() != required.len()
+            || required.iter().any(|(id, pointer)| !result_ids.contains(id) || !context::valid_required_pointer(pointer)) {
+            return Err(CoreCommandError::new("VALIDATION_FAILED", "required pointers must name unique eligible result facts"));
+        }
+        let focus_terms: Vec<&str> = arguments.get("focus_terms").and_then(Value::as_array)
+            .map(|items| items.iter().map(|item| item.as_str().expect("registry validates focus term")).collect())
+            .unwrap_or_default();
+        if focus_terms.len() > 8 || focus_terms.iter().collect::<BTreeSet<_>>().len() != focus_terms.len()
+            || focus_terms.iter().any(|term| !context::valid_focus_term(term)) {
+            return Err(CoreCommandError::new("VALIDATION_FAILED", "focus terms must be unique bounded literals"));
+        }
+        let max_bytes = arguments["max_bytes"].as_u64().expect("registry validates max_bytes") as usize;
+        let snapshot = self.with_storage(|storage| storage.task_context_snapshot(project_id, &result_ids, &approval_ids))?;
+        match context::compile_task_project_view(
+            &safe_approval_ref(project_id), &snapshot, task_kind, max_bytes, &required, &focus_terms,
+        ) {
+            Ok(view) => Ok(view),
+            Err(context::CompileError::BudgetTooSmall) => Err(CoreCommandError::new(
+                "CONTEXT_BUDGET_TOO_SMALL", "byte budget cannot hold current state, selected decision evidence, conflicts, and required facts")),
+            Err(context::CompileError::RequiredFactUnavailable) => Err(CoreCommandError::new(
+                "CONTEXT_FACT_UNAVAILABLE", "a required exact source fact is unavailable")),
+            Err(context::CompileError::SourceTooLarge) => Err(CoreCommandError::new(
+                "CONTEXT_SOURCE_TOO_LARGE", "selected stored results exceed bounded compiler input")),
+        }
+    }
     fn job_checkpoint(&self, request: &CommandRequest) -> Result<Value, CoreCommandError> {
         let arguments = &request.arguments;
         let id = arguments.get("id").and_then(Value::as_str);
@@ -2818,6 +2914,43 @@ impl RelayCore {
         }
     }
 }
+fn safe_approval_ref(value: &str) -> String {
+    if !value.is_empty() && value.len() <= 96 && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')) {
+        value.to_string()
+    } else {
+        let digest = Sha256::digest(value.as_bytes());
+        let mut out = String::from("ref-sha256-");
+        for byte in digest { use std::fmt::Write as _; write!(&mut out, "{byte:02x}").expect("String write"); }
+        out
+    }
+}
+
+fn removal_approval_json(approval: &crate::storage::ProjectRemovalApprovalRecord) -> Value {
+    json!({
+        "approval_id": approval.id,
+        "project_id": safe_approval_ref(&approval.project_id),
+        "state": approval.state,
+        "project_state_revision": approval.project_state_revision,
+        "project_lifecycle_state": approval.project_lifecycle_state,
+        "requester_actor": approval.requester_actor,
+        "requester_client": approval.requester_client,
+        "requester_delegator": approval.requester_delegator,
+        "approver_actor": approval.approver_actor,
+        "approver_client": approval.approver_client,
+        "executor_actor": approval.executor_actor,
+        "executor_client": approval.executor_client,
+        "created_at_ms": approval.created_at_ms,
+        "expires_at_ms": approval.expires_at_ms,
+        "decided_at_ms": approval.decided_at_ms,
+        "executed_at_ms": approval.executed_at_ms,
+        "action": "remove_project_registration",
+        "risk": "high",
+        "effect": "Project is removed from active use; RELAY history and project files remain untouched.",
+        "validation": "Project lifecycle and registration revision must match the plan.",
+        "rollback": "Removal cannot be reversed through RELAY."
+    })
+}
+
 fn request_fingerprint(request: &CommandRequest, command_version: u32) -> String {
     let canonical = canonical_json(&json!({
         "command": request.command,
@@ -4310,6 +4443,88 @@ mod tests {
     }
 
     #[test]
+    fn task_context_separates_current_state_from_selected_historical_evidence() {
+        let dir = temp_dir("task-context");
+        let core = RelayCore::open(CoreConfig::new(&dir));
+        let runtime = runtime();
+        for project_id in ["PRJ-task-a", "PRJ-task-b"] {
+            let mut register = request(&format!("REQ-{project_id}"), "project.register", json!({
+                "id": project_id, "name": "Fixture", "root_uri": "file:///private/project"
+            }));
+            register.idempotency_key = Some(format!("IDEMP-{project_id}"));
+            assert!(core.execute(register, &runtime).ok);
+        }
+        let mut put = request("REQ-task-result", "result.put", json!({
+            "project_id": "PRJ-task-a", "kind": "TEST", "payload": {
+                "failure_count": 3, "status": "FAILED", "api_token": "SECRET", "project_path": "C:/private/project"
+            }
+        }));
+        put.idempotency_key = Some("IDEMP-task-result".to_string());
+        let result_id = core.execute(put, &runtime).result.unwrap()["id"].as_str().unwrap().to_string();
+        let mut plan = request("REQ-task-plan", "project.removal.plan", json!({"project_id":"PRJ-task-a"}));
+        plan.idempotency_key = Some("IDEMP-task-plan".to_string());
+        let approval_id = core.execute(plan, &runtime).result.unwrap()["approval_id"].as_str().unwrap().to_string();
+        let mut decide = request("REQ-task-decide", "project.removal.decide", json!({
+            "project_id":"PRJ-task-a", "approval_id":approval_id, "decision":"approve"
+        }));
+        decide.idempotency_key = Some("IDEMP-task-decide".to_string());
+        assert!(core.execute(decide, &runtime).ok);
+        let args = json!({
+            "project_id":"PRJ-task-a", "task_kind":"project_admin", "max_bytes":8192,
+            "result_ids":[result_id], "approval_ids":[approval_id],
+            "required_pointers":[{"result_id":result_id,"pointer":"/failure_count"}],
+            "focus_terms":["failure"]
+        });
+        let view = core.execute(request("REQ-task-context", "context.task.compile", args.clone()), &runtime);
+        assert!(view.ok, "{view:?}");
+        let view = view.result.unwrap();
+        assert_eq!(view["project_state"]["index_state"], "unknown");
+        assert_eq!(view["result_currentness"], "unknown_without_project_generation_link");
+        assert_eq!(view["decision_evidence"][0]["recorded_decision"], "approve");
+        assert_eq!(view["decision_evidence"][0]["human_presence"], "unverified");
+        assert_eq!(view["decision_evidence"][0]["source_trust"], "durable_local_record");
+        assert!(view["result_context"]["facts"].as_array().unwrap().iter().any(|fact| fact["pointer"] == "/failure_count" && fact["value"] == 3));
+        let serialized = serde_json::to_string(&view).unwrap();
+        assert!(serialized.len() <= 8192);
+        assert!(!serialized.contains("SECRET"));
+        assert!(!serialized.contains("C:/private"));
+        assert!(!serialized.contains("local-user"));
+        let mut too_small = args.clone();
+        too_small["max_bytes"] = json!(1024);
+        assert_eq!(core.execute(request("REQ-task-small", "context.task.compile", too_small), &runtime).error.unwrap().code, "CONTEXT_BUDGET_TOO_SMALL");
+        let mut unsafe_required = args.clone();
+        unsafe_required["required_pointers"] = json!([{"result_id":result_id,"pointer":"/api_token"}]);
+        assert_eq!(core.execute(request("REQ-task-private", "context.task.compile", unsafe_required), &runtime).error.unwrap().code, "CONTEXT_FACT_UNAVAILABLE");
+        core.with_storage(|storage| storage.replace_project_baseline("PRJ-task-a", &[], 0)).unwrap();
+        let ready = core.execute(request("REQ-task-ready", "context.task.compile", args.clone()), &runtime);
+        let ready = ready.result.unwrap();
+        assert_eq!(ready["project_state"]["index_state"], "ready");
+        assert!(ready["project_state"]["last_reconciled_at"].is_string());
+        core.with_storage(|storage| storage.mark_project_index_stale("PRJ-task-a")).unwrap();
+        let stale_index = core.execute(request("REQ-task-stale-index", "context.task.compile", args.clone()), &runtime);
+        assert_eq!(stale_index.result.unwrap()["project_state"]["index_state"], "stale");
+        let mut foreign_plan = request("REQ-task-foreign-plan", "project.removal.plan", json!({"project_id":"PRJ-task-b"}));
+        foreign_plan.idempotency_key = Some("IDEMP-task-foreign-plan".to_string());
+        let foreign_approval_id = core.execute(foreign_plan, &runtime).result.unwrap()["approval_id"].as_str().unwrap().to_string();
+        let mut foreign = args.clone();
+        foreign["approval_ids"] = json!([foreign_approval_id]);
+        assert_eq!(core.execute(request("REQ-task-foreign", "context.task.compile", foreign), &runtime).error.unwrap().code, "APPROVAL_NOT_FOUND");
+        let mut change = request("REQ-task-change", "project.register", json!({
+            "id":"PRJ-task-a", "name":"New", "root_uri":"file:///different"
+        }));
+        change.idempotency_key = Some("IDEMP-task-change".to_string());
+        assert!(core.execute(change, &runtime).ok);
+        let stale = core.execute(request("REQ-task-context-stale", "context.task.compile", args.clone()), &runtime);
+        assert_eq!(stale.result.unwrap()["decision_evidence"][0]["state"], "stale");
+        let mut scoped = ExecutionAuthority::local_user("CLIENT-scoped");
+        scoped.project_ids = Some(["PRJ-task-b".to_string()].into_iter().collect());
+        let denied = core.execute_authorized(request("REQ-task-context-denied", "context.task.compile", args), &runtime, &scoped);
+        assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
+        drop(core);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn context_compiler_uses_only_authorized_project_results() {
         let dir = temp_dir("context-compiler");
         let core = RelayCore::open(CoreConfig::new(&dir));
@@ -4420,13 +4635,30 @@ mod tests {
             "REQ-life-mismatch", "project.remove",
             json!({ "project_id": "PRJ-life", "confirm_project_id": "PRJ-other" }),
         ), &runtime);
-        assert_eq!(mismatch.error.unwrap().code, "VALIDATION_FAILED");
+        assert_eq!(mismatch.error.unwrap().code, "APPROVAL_REQUIRED");
         let mut remove = request(
             "REQ-life-remove", "project.remove",
             json!({ "project_id": "PRJ-life", "confirm_project_id": "PRJ-life" }),
         );
         remove.idempotency_key = Some("IDEMP-lifecycle-remove".to_string());
-        assert_eq!(core.execute(remove, &runtime).result.unwrap()["lifecycle_state"], "removed");
+        assert_eq!(core.execute(remove, &runtime).error.unwrap().code, "APPROVAL_REQUIRED");
+        let mut plan = request("REQ-life-plan", "project.removal.plan", json!({"project_id":"PRJ-life"}));
+        plan.idempotency_key = Some("IDEMP-life-plan".to_string());
+        let planned = core.execute(plan, &runtime);
+        assert!(planned.ok, "{planned:?}");
+        assert!(!serde_json::to_string(planned.result.as_ref().unwrap()).unwrap().contains("file:///fixture"));
+        let approval_id = planned.result.unwrap()["approval_id"].as_str().unwrap().to_string();
+        let mut nonlocal = ExecutionAuthority::local_user("CLIENT-agent");
+        nonlocal.permissions.remove("approve_destructive");
+        let denied_decision = core.execute_authorized(request("REQ-life-agent-decide", "project.removal.decide", json!({"project_id":"PRJ-life","approval_id":approval_id,"decision":"approve"})), &runtime, &nonlocal);
+        assert_eq!(denied_decision.error.unwrap().code, "PERMISSION_DENIED");
+        let mut decide = request("REQ-life-decide", "project.removal.decide", json!({"project_id":"PRJ-life","approval_id":approval_id,"decision":"approve"}));
+        decide.idempotency_key = Some("IDEMP-life-decide".to_string());
+        assert_eq!(core.execute(decide, &runtime).result.unwrap()["state"], "approved_pending_execution");
+        let mut execute = request("REQ-life-execute", "project.remove", json!({"project_id":"PRJ-life","approval_id":approval_id}));
+        execute.command_version = Some(2);
+        execute.idempotency_key = Some("IDEMP-life-execute".to_string());
+        assert_eq!(core.execute(execute, &runtime).result.unwrap()["state"], "executed");
         assert!(core.execute(request("REQ-life-history", "result.get", json!({ "result_id": result_id })), &runtime).ok);
         let mut reuse = request(
             "REQ-life-reuse", "project.register",

@@ -1,4 +1,4 @@
-use crate::storage::ResultRecord;
+use crate::storage::{ResultRecord, TaskContextSnapshot};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -347,6 +347,24 @@ fn serialized_len(value: &Value) -> Result<usize, CompileError> {
         .map_err(|_| CompileError::BudgetTooSmall)
 }
 
+fn safe_utc_timestamp(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if !(bytes.len() == 20 || (22..=32).contains(&bytes.len()))
+        || bytes.last() != Some(&b'Z')
+        || bytes.get(4) != Some(&b'-')
+        || bytes.get(7) != Some(&b'-')
+        || bytes.get(10) != Some(&b'T')
+        || bytes.get(13) != Some(&b':')
+        || bytes.get(16) != Some(&b':')
+        || (bytes.len() > 20 && bytes.get(19) != Some(&b'.')) {
+        return false;
+    }
+    bytes.iter().enumerate().all(|(index, byte)| {
+        matches!(index, 4 | 7 | 10 | 13 | 16) || index == bytes.len() - 1 || (bytes.len() > 20 && index == 19)
+            || byte.is_ascii_digit()
+    })
+}
+
 /// Compile multiple authorized results into one exact-fact package. The caller
 /// has already checked project scope and bounded/unique source IDs. Conflicting
 /// values at the same pointer are emitted together before optional facts; no
@@ -478,9 +496,108 @@ pub(crate) fn compile_project_results(
     Ok(output)
 }
 
+/// Combine one consistent local state snapshot with explicitly selected
+/// historical sources. Task intent only ranks eligible result facts.
+pub(crate) fn compile_task_project_view(
+    project_ref: &str,
+    snapshot: &TaskContextSnapshot,
+    task_kind: &str,
+    max_bytes: usize,
+    required_pointers: &[(&str, &str)],
+    focus_terms: &[&str],
+) -> Result<Value, CompileError> {
+    let index = snapshot.index.as_ref();
+    let index_state = match index {
+        None => "unknown",
+        Some(state) if state.status == "ready" && !state.content_verification_required => "ready",
+        Some(state) if state.status == "stale" || state.content_verification_required => "stale",
+        _ => "unknown",
+    };
+    let configuration = snapshot.configuration.as_ref().map(|record| json!({
+        "revision": record.revision,
+        "format_version": record.format_version,
+        "project_type": safe_token(&record.project_type).then_some(record.project_type.as_str()),
+        "adapter_id": record.adapter_id.as_deref().filter(|value| safe_token(value)),
+        "adapter_version": record.adapter_version.as_deref().filter(|value| safe_token(value)),
+        "adapter_binding_status": "declared_not_verified"
+    }));
+    let mut approvals = snapshot.removal_approvals.iter().collect::<Vec<_>>();
+    approvals.sort_by(|left, right| left.id.cmp(&right.id));
+    let decision_evidence = approvals.into_iter().map(|record| {
+        let recorded_decision = match record.state.as_str() {
+            "approved_pending_execution" | "executed" => "approve",
+            "rejected" => "reject",
+            "stale" | "expired" if record.approver_actor.is_some() => "approve",
+            _ => "none",
+        };
+        json!({
+            "record_id": record.id,
+            "kind": "project_removal_local_confirmation",
+            "evidence_role": "durable_historical_event",
+            "state": record.state,
+            "recorded_decision": recorded_decision,
+            "project_state_revision": record.project_state_revision,
+            "created_at_ms": record.created_at_ms,
+            "expires_at_ms": record.expires_at_ms,
+            "decided_at_ms": record.decided_at_ms,
+            "executed_at_ms": record.executed_at_ms,
+            "requester_recorded": !record.requester_actor.is_empty() && !record.requester_client.is_empty(),
+            "approver_recorded": record.approver_actor.is_some() && record.approver_client.is_some(),
+            "executor_recorded": record.executor_actor.is_some() && record.executor_client.is_some(),
+            "confirmation_basis": "local_permission_only",
+            "human_presence": "unverified",
+            "source_trust": "durable_local_record",
+            "full_record_command": "project.removal.get"
+        })
+    }).collect::<Vec<_>>();
+    let mut output = json!({
+        "context_version": 2,
+        "project_id": project_ref,
+        "task_kind": task_kind,
+        "task_selection_trust": "untrusted_caller_selection",
+        "current_state_basis": "single_local_sqlite_read_snapshot",
+        "project_state": {
+            "lifecycle_state": snapshot.project.lifecycle_state,
+            "registration_revision": snapshot.project_state_revision,
+            "index_state": index_state,
+            "index_generation": index.map(|state| state.generation),
+            "baseline_generation": index.map(|state| state.baseline_generation),
+            "last_reconciled_at": index.and_then(|state| safe_utc_timestamp(&state.last_reconciled_at).then_some(state.last_reconciled_at.as_str())),
+            "content_verification_required": index.map(|state| state.content_verification_required),
+            "file_count": index.map(|state| state.file_count),
+            "total_bytes": index.map(|state| state.total_bytes),
+            "configuration": configuration
+        },
+        "decision_evidence": decision_evidence,
+        "decision_evidence_scope": "explicitly_selected_project_records_only",
+        "result_currentness": "unknown_without_project_generation_link",
+        "result_context": null
+    });
+    let base_bytes = serialized_len(&output)?;
+    let result_budget = max_bytes.checked_sub(base_bytes.saturating_sub(4))
+        .ok_or(CompileError::BudgetTooSmall)?;
+    let defaults: &[&str] = match task_kind {
+        "diagnose" => &["error", "failure"],
+        "implement" => &["version", "generation"],
+        "review" => &["status", "passed"],
+        "project_admin" => &["state", "revision"],
+        _ => &[],
+    };
+    let mut ranked_terms = focus_terms.to_vec();
+    ranked_terms.extend_from_slice(defaults);
+    output["result_context"] = compile_project_results(
+        project_ref, &snapshot.results, result_budget, required_pointers, &ranked_terms,
+    )?;
+    if serialized_len(&output)? > max_bytes {
+        return Err(CompileError::BudgetTooSmall);
+    }
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::ProjectRecord;
 
     fn record(payload: Value) -> ResultRecord {
         ResultRecord {
@@ -495,6 +612,29 @@ mod tests {
             trust: "local-attributed".to_string(),
             created_at: "2026-09-26T00:00:00Z".to_string(),
         }
+    }
+
+    #[test]
+    fn fixed_task_kind_only_reorders_eligible_exact_facts() {
+        let snapshot = TaskContextSnapshot {
+            project: ProjectRecord {
+                id: "PRJ-fixture".into(), name: "Private".into(), root_uri: "file:///private".into(),
+                created_at: "2026-09-26T00:00:00Z".into(), updated_at: "2026-09-26T00:00:00Z".into(),
+                lifecycle_state: "active".into(),
+            },
+            project_state_revision: 1,
+            index: None,
+            configuration: None,
+            results: vec![record(json!({"error_code":"ERR-7","version":"2.1","api_token":"SECRET"}))],
+            removal_approvals: Vec::new(),
+        };
+        let diagnose = compile_task_project_view("PRJ-fixture", &snapshot, "diagnose", 4096, &[], &[]).unwrap();
+        let implement = compile_task_project_view("PRJ-fixture", &snapshot, "implement", 4096, &[], &[]).unwrap();
+        assert_eq!(diagnose["result_context"]["facts"][0]["pointer"], "/error_code");
+        assert_eq!(implement["result_context"]["facts"][0]["pointer"], "/version");
+        assert_eq!(diagnose["project_state"]["index_state"], "unknown");
+        assert!(!diagnose.to_string().contains("SECRET"));
+        assert!(!diagnose.to_string().contains("file:///private"));
     }
 
     #[test]

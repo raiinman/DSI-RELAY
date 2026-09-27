@@ -15,6 +15,97 @@ pub const MAX_VERSIONS: usize = 64;
 pub const MAX_REPRO_STEPS: usize = 16;
 pub const MAX_TRANSPORT_METRICS: usize = 4;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextByteScope {
+    SumOfStoredPayloadJsonVsCompiledResultJson,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TokenEstimateStatus {
+    NotMeasured,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UnverifiedStatus {
+    Untested,
+}
+
+/// One local comparison over already stored project results. Elapsed time is
+/// the observed CLI command path and may include a warm context cache.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContextCostMetric {
+    pub byte_scope: ContextByteScope,
+    pub source_count: u8,
+    pub full_payload_json_bytes: u64,
+    pub compiled_context_json_bytes: u64,
+    /// Integer thousandths of compiled bytes divided by summed source bytes.
+    pub compiled_to_full_ratio_milli: u64,
+    pub full_payload_elapsed_ms: u64,
+    pub compiled_context_elapsed_ms: u64,
+    pub token_estimate_status: TokenEstimateStatus,
+    pub model_answer_quality_status: UnverifiedStatus,
+    pub remote_cost_status: UnverifiedStatus,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HostTierDeclaration {
+    MinimumCandidate,
+    RecommendedCandidate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ForegroundObservation {
+    Seen,
+    NotSeen,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObservedMemoryClass {
+    Below16Gib,
+    AtLeast16Gib,
+    AtLeast32Gib,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObservedCpuClass {
+    BelowFourPhysicalCores,
+    AtLeastFourPhysicalCores,
+}
+
+/// A bounded one-run host/index observation, not a hardware-tier budget pass
+/// or paired creator-app interference measurement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HostResourceMetric {
+    pub host_tier_declaration: HostTierDeclaration,
+    pub support_tier_budget_status: UnverifiedStatus,
+    pub physical_core_count: u16,
+    pub logical_processor_count: u16,
+    pub physical_memory_bytes: u64,
+    pub observed_memory_class: ObservedMemoryClass,
+    pub observed_cpu_class: ObservedCpuClass,
+    pub index_command_elapsed_ms: u64,
+    pub daemon_cpu_ms: u64,
+    pub cli_cpu_ms: u64,
+    pub daemon_peak_working_set_bytes: u64,
+    pub cli_peak_working_set_bytes: u64,
+    pub sample_count: u16,
+    pub sample_interval_ms: u16,
+    pub sampling_overhead_ms: u64,
+    pub host_probe_overhead_ms: u64,
+    pub foreground_probe_overhead_ms: u64,
+    pub foreground_observation: ForegroundObservation,
+    pub foreground_creator_samples: u16,
+    pub foreground_interference_status: UnverifiedStatus,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReportError {
     pub code: &'static str,
@@ -154,6 +245,10 @@ pub struct WorkflowObservation {
     pub reproduction: Option<Reproduction>,
     #[serde(default)]
     pub transport_metrics: Vec<TransportMetric>,
+    #[serde(default)]
+    pub context_cost_metric: Option<ContextCostMetric>,
+    #[serde(default)]
+    pub host_resource_metric: Option<HostResourceMetric>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -177,6 +272,10 @@ pub struct WorkflowResult {
     pub reproduction: Option<Reproduction>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub transport_metrics: Vec<TransportMetric>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_cost_metric: Option<ContextCostMetric>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_resource_metric: Option<HostResourceMetric>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -344,28 +443,41 @@ fn classify_workflow(
         (WorkflowStatus::Untested, "NOT_EXECUTED".to_string())
     };
 
-    let (evidence, diagnostic_codes, component_versions, timing, resource_use, reproduction, transport_metrics) =
-        if let Some(observation) = observation {
-            (
-                observation.evidence,
-                observation.diagnostic_codes,
-                observation.component_versions,
-                observation.timing,
-                observation.resource_use,
-                observation.reproduction,
-                observation.transport_metrics,
-            )
-        } else {
-            (
-                EvidenceSource::None,
-                Vec::new(),
-                Vec::new(),
-                None,
-                None,
-                None,
-                Vec::new(),
-            )
-        };
+    let (
+        evidence,
+        diagnostic_codes,
+        component_versions,
+        timing,
+        resource_use,
+        reproduction,
+        transport_metrics,
+        context_cost_metric,
+        host_resource_metric,
+    ) = if let Some(observation) = observation {
+        (
+            observation.evidence,
+            observation.diagnostic_codes,
+            observation.component_versions,
+            observation.timing,
+            observation.resource_use,
+            observation.reproduction,
+            observation.transport_metrics,
+            observation.context_cost_metric,
+            observation.host_resource_metric,
+        )
+    } else {
+        (
+            EvidenceSource::None,
+            Vec::new(),
+            Vec::new(),
+            None,
+            None,
+            None,
+            Vec::new(),
+            None,
+            None,
+        )
+    };
     WorkflowResult {
         workflow_id: workflow.workflow_id,
         phase: workflow.phase,
@@ -379,6 +491,8 @@ fn classify_workflow(
         resource_use,
         reproduction,
         transport_metrics,
+        context_cost_metric,
+        host_resource_metric,
     }
 }
 
@@ -456,6 +570,62 @@ fn validate_observation(observation: &WorkflowObservation) -> Result<(), ReportE
             || !metric_paths.insert(metric.path_id.as_str())
         {
             return Err(error("INVALID_TRANSPORT_METRIC"));
+        }
+    }
+    if let Some(metric) = &observation.context_cost_metric {
+        if observation.workflow_id != "context.cost_benchmark"
+            || !(1..=8).contains(&metric.source_count)
+            || metric.full_payload_json_bytes == 0
+            || metric.compiled_context_json_bytes == 0
+            || metric.full_payload_json_bytes > 1_048_576
+            || metric.compiled_context_json_bytes > 1_048_576
+            || metric.compiled_to_full_ratio_milli
+                != metric.compiled_context_json_bytes.saturating_mul(1000)
+                    / metric.full_payload_json_bytes
+            || metric.full_payload_elapsed_ms > 600_000
+            || metric.compiled_context_elapsed_ms > 600_000
+        {
+            return Err(error("INVALID_CONTEXT_COST_METRIC"));
+        }
+    }
+    if let Some(metric) = &observation.host_resource_metric {
+        if observation.workflow_id != "project.supported_host_resource"
+            || metric.physical_core_count == 0
+            || metric.physical_core_count > 512
+            || metric.logical_processor_count < metric.physical_core_count
+            || metric.logical_processor_count > 1024
+            || !(1_073_741_824..=4_398_046_511_104).contains(&metric.physical_memory_bytes)
+            || metric.index_command_elapsed_ms > 600_000
+            || metric.daemon_cpu_ms > 614_400_000
+            || metric.cli_cpu_ms > 614_400_000
+            || metric.daemon_peak_working_set_bytes == 0
+            || metric.daemon_peak_working_set_bytes > 1_099_511_627_776
+            || metric.cli_peak_working_set_bytes == 0
+            || metric.cli_peak_working_set_bytes > 1_099_511_627_776
+            || !(2..=6002).contains(&metric.sample_count)
+            || metric.sample_interval_ms != 100
+            || metric.sampling_overhead_ms > 600_000
+            || metric.host_probe_overhead_ms > 600_000
+            || metric.foreground_probe_overhead_ms > 600_000
+            || metric.foreground_creator_samples > metric.sample_count
+            || (metric.foreground_observation == ForegroundObservation::Unavailable
+                && metric.foreground_creator_samples != 0)
+            || metric.observed_memory_class
+                != if metric.physical_memory_bytes >= 32 * 1_073_741_824 {
+                    ObservedMemoryClass::AtLeast32Gib
+                } else if metric.physical_memory_bytes >= 16 * 1_073_741_824 {
+                    ObservedMemoryClass::AtLeast16Gib
+                } else {
+                    ObservedMemoryClass::Below16Gib
+                }
+            || metric.observed_cpu_class
+                != if metric.physical_core_count >= 4 {
+                    ObservedCpuClass::AtLeastFourPhysicalCores
+                } else {
+                    ObservedCpuClass::BelowFourPhysicalCores
+                }
+        {
+            return Err(error("INVALID_HOST_RESOURCE_METRIC"));
         }
     }
     match &observation.evidence {
@@ -543,6 +713,8 @@ mod tests {
                 step_codes: vec!["OPEN_SESSION".into(), "RUN_ASSERTION".into()],
             }),
             transport_metrics: Vec::new(),
+            context_cost_metric: None,
+            host_resource_metric: None,
         }
     }
 
@@ -635,6 +807,101 @@ mod tests {
             .unwrap_err()
             .code,
             "INVALID_TRANSPORT_METRIC"
+        );
+    }
+
+    #[test]
+    fn context_cost_measurement_preserves_regression_without_token_claim() {
+        let mut measured = observation(EvidenceSource::Observed {
+            source_id: "runner".into(),
+            log_ref: "LOG-1".into(),
+        });
+        measured.workflow_id = "context.cost_benchmark".into();
+        measured.context_cost_metric = Some(ContextCostMetric {
+            byte_scope: ContextByteScope::SumOfStoredPayloadJsonVsCompiledResultJson,
+            source_count: 2,
+            full_payload_json_bytes: 100,
+            compiled_context_json_bytes: 140,
+            compiled_to_full_ratio_milli: 1400,
+            full_payload_elapsed_ms: 20,
+            compiled_context_elapsed_ms: 30,
+            token_estimate_status: TokenEstimateStatus::NotMeasured,
+            model_answer_quality_status: UnverifiedStatus::Untested,
+            remote_cost_status: UnverifiedStatus::Untested,
+        });
+        let mut run_plan = plan(Requirement::Uefn, Availability::Available);
+        run_plan.workflows[0].workflow_id = "context.cost_benchmark".into();
+        let report = assemble_report(run_plan.clone(), vec![measured.clone()], 200).unwrap();
+        assert_eq!(report.workflows[0].status, WorkflowStatus::Passed);
+        let metric = report.workflows[0].context_cost_metric.as_ref().unwrap();
+        assert_eq!(metric.compiled_to_full_ratio_milli, 1400);
+        assert_eq!(metric.full_payload_json_bytes, 100);
+
+        measured
+            .context_cost_metric
+            .as_mut()
+            .unwrap()
+            .compiled_to_full_ratio_milli = 1;
+        assert_eq!(
+            assemble_report(run_plan, vec![measured], 200)
+                .unwrap_err()
+                .code,
+            "INVALID_CONTEXT_COST_METRIC"
+        );
+    }
+
+    #[test]
+    fn host_resource_measurement_is_bounded_and_keeps_budget_untested() {
+        let mut measured = observation(EvidenceSource::Observed {
+            source_id: "runner".into(),
+            log_ref: "LOG-1".into(),
+        });
+        measured.workflow_id = "project.supported_host_resource".into();
+        measured.host_resource_metric = Some(HostResourceMetric {
+            host_tier_declaration: HostTierDeclaration::MinimumCandidate,
+            support_tier_budget_status: UnverifiedStatus::Untested,
+            physical_core_count: 4,
+            logical_processor_count: 8,
+            physical_memory_bytes: 17_179_869_184,
+            observed_memory_class: ObservedMemoryClass::AtLeast16Gib,
+            observed_cpu_class: ObservedCpuClass::AtLeastFourPhysicalCores,
+            index_command_elapsed_ms: 120,
+            daemon_cpu_ms: 30,
+            cli_cpu_ms: 10,
+            daemon_peak_working_set_bytes: 12_000_000,
+            cli_peak_working_set_bytes: 6_000_000,
+            sample_count: 3,
+            sample_interval_ms: 100,
+            sampling_overhead_ms: 2,
+            host_probe_overhead_ms: 12,
+            foreground_probe_overhead_ms: 3,
+            foreground_observation: ForegroundObservation::NotSeen,
+            foreground_creator_samples: 0,
+            foreground_interference_status: UnverifiedStatus::Untested,
+        });
+        let mut run_plan = plan(Requirement::Uefn, Availability::Available);
+        run_plan.workflows[0].workflow_id = measured.workflow_id.clone();
+        let report = assemble_report(run_plan.clone(), vec![measured.clone()], 200).unwrap();
+        assert_eq!(report.workflows[0].status, WorkflowStatus::Passed);
+        assert_eq!(
+            report.workflows[0]
+                .host_resource_metric
+                .as_ref()
+                .unwrap()
+                .foreground_interference_status,
+            UnverifiedStatus::Untested
+        );
+
+        measured
+            .host_resource_metric
+            .as_mut()
+            .unwrap()
+            .observed_memory_class = ObservedMemoryClass::AtLeast32Gib;
+        assert_eq!(
+            assemble_report(run_plan, vec![measured], 200)
+                .unwrap_err()
+                .code,
+            "INVALID_HOST_RESOURCE_METRIC"
         );
     }
 

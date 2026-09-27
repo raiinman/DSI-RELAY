@@ -5,7 +5,7 @@ Own Windows per-user package staging and the future signed-distribution verifica
 # Ownership
 
 - Governs `packaging/` and descendants.
-- Builds an unsigned, unpublished local staging archive from supplied release binaries and owns explicit local-development side-by-side install/uninstall scripts. It does not sign or publish RELAY.
+- Builds an unsigned, unpublished local staging archive from supplied release binaries and owns explicit local-development side-by-side install, rollback, and uninstall scripts. It does not sign or publish RELAY.
 
 # Local Contracts
 
@@ -15,6 +15,7 @@ Own Windows per-user package staging and the future signed-distribution verifica
 - Keep generated local staging output under ignored `packaging/out/`; never commit or upload an unsigned archive as a public binary.
 - Local installation requires an explicit unsigned-development opt-in, expected archive digest, verified extraction, declared storage schema compatibility, and stopped `relayd.exe` before activation or uninstall.
 - Install/update/uninstall uses per-user side-by-side version directories, inactive staging, one active pointer, schema-aware rollback, and durable-data preservation. Never delete an unverified version directory or a path outside the explicit program root.
+- Explicit rollback names the immediately previous version and its expected archive SHA-256, re-verifies its folder and receipt, requires a positive observed schema compatible with that version, and atomically replaces the pointer while the daemon is stopped. Existing-version activation rejects schema `0`; neither path claims to probe the actual database or launch/health-check the daemon.
 - `Verify-SignedDistribution.ps1` is a separate read-only PowerShell 7.2+ Windows release verifier for a detached SHA-256 catalog over an exact payload folder. It requires a trusted Authenticode signature, exact catalog digest, expected publisher subject and signer/root thumbprints from a separately reviewed policy, a current non-revoked code-signing chain, and warning-free timestamped Windows SDK SignTool verification. It must fail closed without a real certificate and never turn unsigned local staging into a trusted package.
 
 # Work Guidance
@@ -24,7 +25,7 @@ Own Windows per-user package staging and the future signed-distribution verifica
 
 # Verification
 
-- Run the folder verifier against a locally staged package when release binaries are available. Exercise install/update/uninstall only in a disposable fixture root.
+- Run the folder verifier against a locally staged package when release binaries are available. Exercise install/update/rollback/uninstall only in a disposable fixture root.
 - Parse the signed verifier and exercise only fail-closed unsigned fixtures until a reviewed CA-issued certificate, catalog, trusted root pin, and Windows SDK SignTool are available. A synthetic signature cannot prove public trust.
 
 # Child DOX Index

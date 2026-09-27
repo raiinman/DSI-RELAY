@@ -42,6 +42,7 @@ Own the production per-user RELAY daemon and local transport boundary.
 - The watcher unit test verifies required full-content recovery remains eligible after the metadata deadline and still defers for a callback or lost idle state.
 - Repeatable five-sample scale measurements use `tests/phase3_scale_report.ps1`; record host facts and distributions without treating a single host as minimum/recommended tier certification.
 - Installed parser dispatch, Alpha/Bravo grant isolation, source reparse, target delete/restore, configuration revocation, and bad-digest rejection are covered by `tests/phase3_parser_dispatch.rs`.
+- The same parser-dispatch suite verifies an offline staged package and explicit grant activate after daemon startup.
 - `tests/phase3_parser_dispatch.rs` also verifies missing/malformed installation health, broker quarantine, fixed-code diagnostics, and repair/restart or source-change recovery.
 - The ignored live installed-parser resource fixture in `tests/phase3_parser_resource.rs` measures initial publication, changed-source reparse, foreground latency, idle CPU, and resident memory on one host; `tests/phase3_parser_resource_report.ps1` records repeatable samples and source fingerprints without claiming a supported hardware tier.
 - The draft portable runner in `tests/phase3_portable_benchmark.ps1` exercises a staged release daemon on another host; its smoke results are functional evidence until minimum/recommended hardware and creator-app contention are measured.

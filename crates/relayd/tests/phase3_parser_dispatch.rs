@@ -169,6 +169,59 @@ fn install_fixture(state_dir: &Path, root: &Path) {
     .unwrap();
 }
 
+#[test]
+fn offline_installer_grant_activates_after_daemon_start() {
+    let dir = fixture_dir();
+    let state_dir = dir.join("state");
+    let root = dir.join("project");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("source.json"), br#"{"targets":["target.txt"]}"#).unwrap();
+    fs::write(root.join("target.txt"), b"target").unwrap();
+    install_fixture(&state_dir, &dir);
+    fs::remove_file(state_dir.join("parser-installations.json")).unwrap();
+    let package = dir.join("installed-parser");
+    let installed = relay::parser_install::install_in_state_dir(
+        &state_dir,
+        relay::parser_install::InstallOptions {
+            project_id: "PRJ-parser-alpha".to_string(),
+            manifest_path: package.join("manifest.json"),
+            worker_path: package.join("relay-adapter-fixture.exe"),
+            source_extensions: vec!["json".to_string()],
+            allow_source_delivery: true,
+        },
+    )
+    .unwrap();
+    assert!(installed.contains("Start RELAY"));
+    let (mut host, state) = spawn_host(&state_dir);
+    for (id, args) in [
+        (
+            "install-import",
+            json!({ "id": "PRJ-parser-alpha", "name": "Parser install fixture", "root_path": root.to_string_lossy() }),
+        ),
+        (
+            "install-config",
+            json!({ "project_id": "PRJ-parser-alpha", "expected_revision": 0, "format_version": 1, "project_type": "synthetic.project", "adapter_id": "fixture.parser", "adapter_version": "1.0.0" }),
+        ),
+        ("install-build", json!({ "project_id": "PRJ-parser-alpha" })),
+    ] {
+        let command = match id {
+            "install-import" => "project.import",
+            "install-config" => "project.configuration.put",
+            _ => "project.index.build",
+        };
+        let response = call(&state, id, command, args, true);
+        assert!(response.ok, "{:?}", response.error);
+    }
+    wait_edges(&state, "PRJ-parser-alpha", &["target.txt"]);
+    assert_eq!(
+        wait_parser_state(&state, "healthy")["host_components"][0]["installed_count"],
+        1
+    );
+    assert!(call(&state, "install-stop", "system.shutdown", json!({}), false).ok);
+    assert!(host.wait().unwrap().success());
+    fs::remove_dir_all(dir).unwrap();
+}
+
 fn edges(state: &LocalHostState, project_id: &str) -> Vec<String> {
     let response = call(
         state,

@@ -68,7 +68,8 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `PHASE3_CLOSURE_REVIEW.md` — active Phase 3 exit-gate review with explicit open and partial items.
 - `PHASE5_DASHBOARD_FIRST_SLICE_EVIDENCE.md` — local read-only dashboard health/project view and security-boundary evidence.
 - `PHASE4_RESULT_DESCRIPTION_EVIDENCE.md` — early metadata-only result retrieval foundation and focused verification; Phase 4 remains open.
-- `PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md` — byte-budgeted exact-fact result view, scope/privacy tests, and explicit Phase 4 limits.
+- `PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md` — byte-budgeted exact-fact result view, bounded required pointers, scope/privacy tests, and explicit Phase 4 limits.
+- `PHASE4_CONTEXT_GAUNTLET_FIRST_FIXTURE.md` — repeatable stored-result payload/context comparison across hard synthetic cases, measured limitations, and explicit-pointer retention.
 - `PUBLIC_PREVIEW_PATH.md` — scoped measurement-preview and public-beta release path, privacy-preserving report contract, and distribution gates.
 - `MEASUREMENT_PREVIEW_CI_PLAN.md` — branch-only hosted Windows package validation plan and evidence limits.
 - `VOLUNTEER_BENCHMARK_INTAKE.md` — opt-in public issue report contract and triage criteria for synthetic hardware observations.

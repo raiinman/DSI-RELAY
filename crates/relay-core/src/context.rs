@@ -7,6 +7,26 @@ struct Fact {
     priority: u8,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CompileError {
+    BudgetTooSmall,
+    RequiredFactUnavailable,
+}
+
+/// Accept only non-root JSON Pointers with RFC 6901 escape sequences.
+pub(crate) fn valid_required_pointer(pointer: &str) -> bool {
+    if !pointer.starts_with('/') || pointer.len() > 256 {
+        return false;
+    }
+    let mut chars = pointer.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '~' && !matches!(chars.next(), Some('0' | '1')) {
+            return false;
+        }
+    }
+    true
+}
+
 fn forbidden_key(key: &str) -> bool {
     let key = key.to_ascii_lowercase();
     [
@@ -151,6 +171,16 @@ fn collect(
 /// Return an exact-fact view within `max_bytes`, or `None` if even its fixed
 /// envelope cannot fit. This is presentation filtering, not an egress policy.
 pub fn compile_result(record: &ResultRecord, max_bytes: usize) -> Option<Value> {
+    compile_result_required(record, max_bytes, &[]).ok()
+}
+
+/// Requested facts must already pass request validation. Only facts admitted
+/// by the same conservative selector as unrequested context can be required.
+pub(crate) fn compile_result_required(
+    record: &ResultRecord,
+    max_bytes: usize,
+    required_pointers: &[&str],
+) -> Result<Value, CompileError> {
     let mut total_scalars = 0;
     let mut facts = Vec::new();
     collect(
@@ -161,13 +191,36 @@ pub fn compile_result(record: &ResultRecord, max_bytes: usize) -> Option<Value> 
         &mut total_scalars,
         &mut facts,
     );
-    facts.sort_by(|left, right| {
-        left.priority
-            .cmp(&right.priority)
-            .then_with(|| left.pointer.cmp(&right.pointer))
-    });
+    if required_pointers
+        .iter()
+        .any(|pointer| !facts.iter().any(|fact| fact.pointer == *pointer))
+    {
+        return Err(CompileError::RequiredFactUnavailable);
+    }
+    if required_pointers.is_empty() {
+        facts.sort_by(|left, right| {
+            left.priority
+                .cmp(&right.priority)
+                .then_with(|| left.pointer.cmp(&right.pointer))
+        });
+    } else {
+        facts.sort_by(|left, right| {
+            let rank = |fact: &Fact| {
+                required_pointers
+                    .iter()
+                    .position(|pointer| *pointer == fact.pointer)
+                    .unwrap_or(usize::MAX)
+            };
+            rank(left)
+                .cmp(&rank(right))
+                .then_with(|| left.priority.cmp(&right.priority))
+                .then_with(|| left.pointer.cmp(&right.pointer))
+        });
+    }
 
-    let payload_bytes = serde_json::to_vec(&record.payload).ok()?.len();
+    let payload_bytes = serde_json::to_vec(&record.payload)
+        .map_err(|_| CompileError::BudgetTooSmall)?
+        .len();
     let mut output = json!({
         "result_id": record.id,
         "payload_sha256": record.payload_sha256,
@@ -178,28 +231,52 @@ pub fn compile_result(record: &ResultRecord, max_bytes: usize) -> Option<Value> 
         "omitted_scalar_count": total_scalars,
         "truncated": total_scalars > 0
     });
-    if serde_json::to_vec(&output).ok()?.len() > max_bytes {
-        return None;
+    if serialized_len(&output)? > max_bytes {
+        return Err(CompileError::BudgetTooSmall);
     }
 
     for fact in facts {
+        let is_required = required_pointers.contains(&fact.pointer.as_str());
         output["facts"]
-            .as_array_mut()?
+            .as_array_mut()
+            .ok_or(CompileError::BudgetTooSmall)?
             .push(json!({ "pointer": fact.pointer, "value": fact.value }));
-        if serde_json::to_vec(&output).ok()?.len() > max_bytes {
-            output["facts"].as_array_mut()?.pop();
+        if serialized_len(&output)? > max_bytes {
+            output["facts"]
+                .as_array_mut()
+                .ok_or(CompileError::BudgetTooSmall)?
+                .pop();
+            if is_required {
+                return Err(CompileError::BudgetTooSmall);
+            }
         }
     }
     loop {
-        let selected_count = output["facts"].as_array()?.len() as u64;
+        let selected_count = output["facts"]
+            .as_array()
+            .ok_or(CompileError::BudgetTooSmall)?
+            .len() as u64;
         output["omitted_scalar_count"] = json!(total_scalars - selected_count);
         output["truncated"] = json!(total_scalars != selected_count);
-        if serde_json::to_vec(&output).ok()?.len() <= max_bytes {
+        if serialized_len(&output)? <= max_bytes {
             break;
         }
-        output["facts"].as_array_mut()?.pop()?;
+        let removed = output["facts"]
+            .as_array_mut()
+            .ok_or(CompileError::BudgetTooSmall)?
+            .pop()
+            .ok_or(CompileError::BudgetTooSmall)?;
+        if required_pointers.contains(&removed["pointer"].as_str().unwrap_or("")) {
+            return Err(CompileError::BudgetTooSmall);
+        }
     }
-    Some(output)
+    Ok(output)
+}
+
+fn serialized_len(value: &Value) -> Result<usize, CompileError> {
+    serde_json::to_vec(value)
+        .map(|bytes| bytes.len())
+        .map_err(|_| CompileError::BudgetTooSmall)
 }
 
 #[cfg(test)]
@@ -300,5 +377,16 @@ mod tests {
             }
         }
         assert!(compile_result(&record, 16).is_none());
+    }
+
+    #[test]
+    fn required_pointer_syntax_is_bounded_and_unambiguous() {
+        for pointer in ["/target_code", "/entries/200/target_code", "/a~0b", "/a~1b"] {
+            assert!(valid_required_pointer(pointer));
+        }
+        for pointer in ["", "target_code", "/a~", "/a~2", "/a~~0"] {
+            assert!(!valid_required_pointer(pointer));
+        }
+        assert!(!valid_required_pointer(&format!("/{}", "a".repeat(256))));
     }
 }

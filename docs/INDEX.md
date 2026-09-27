@@ -19,7 +19,8 @@ MEASUREMENT_PREVIEW_CI_PLAN.md records the branch-only hosted Windows package ch
 VOLUNTEER_BENCHMARK_INTAKE.md describes optional public report submission and how to classify synthetic hardware observations.
 The current Rust release dependency and license-expression inventory is in RELEASE_DEPENDENCY_LICENSE_INVENTORY.md.
 PHASE4_RESULT_DESCRIPTION_EVIDENCE.md records the early metadata-only result lookup; Phase 4 remains open.
-PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md records the first byte-budgeted exact-fact view by result ID and its test limits.
+PHASE4_CONTEXT_FIRST_SLICE_EVIDENCE.md records the byte-budgeted exact-fact view by result ID, bounded required pointers, and test limits.
+PHASE4_CONTEXT_GAUNTLET_FIRST_FIXTURE.md records deterministic stored-payload/context byte and exact-fact comparisons, including explicit-pointer retention; it does not measure model tokens.
 PHASE5_DASHBOARD_FIRST_SLICE_EVIDENCE.md records the first local read-only dashboard view; Phase 5 remains open.
 
 ## Core design

@@ -16,7 +16,7 @@ Own production RELAY Core deterministic local business logic and durable state.
 - Validation happens before business logic; incompatible command versions fail explicitly.
 - Durable result/job outputs carry provenance/trust metadata.
 - Result descriptions query stored metadata and payload byte size without loading or serializing the payload; the same project-scope rule as full result retrieval applies.
-- Compact result context preserves selected exact scalar facts under an explicit serialized byte limit, excludes path/secret-keyed and unsafe-key content, reports omissions, and retains the full result ID. It is presentation filtering, not data-egress authorization.
+- Compact result context preserves selected exact scalar facts under an explicit serialized byte limit, excludes path/secret-keyed and unsafe-key content, reports omissions, and retains the full result ID. Bounded required JSON Pointers reorder only already eligible facts and fail if unavailable or over budget. It is presentation filtering, not data-egress authorization.
 - Phase 3 project baselines and change rows are project-scoped, derived state. Canonical roots stay local; machine-facing index paths are project-relative. Reconciliation treats watcher paths as hints and hashes changed candidates after authoritative metadata enumeration.
 - Schema-5 delta reads and dependency edges are bounded, project-scoped derived state. Edge replacement requires the current index generation and source content hash; source/target changes invalidate edges, and rebuild resets the delta boundary.
 - Schema-7 project configuration is separate from derived index state, versioned by format and revision, and limited to a project type plus an optional declared adapter ID/version pair. Core must not treat that declaration as installed capability or parser authority.
@@ -39,6 +39,8 @@ Own production RELAY Core deterministic local business logic and durable state.
 - Live installed-parser fixtures verify that a stale configuration guard cannot restore edges after a version change.
 - Result-description tests cover no payload/provenance exposure, UTF-8 byte size, project-scope denial, and restart persistence.
 - Result-context tests cover exact allowlisted facts, byte ceilings, deterministic ordering, unsafe path/token omission, full-payload size comparison, and project-scope denial.
+- Required-pointer tests cover schema bounds and uniqueness, pointer syntax, exact retention under competing eligible facts, unsafe/missing fact denial, project scope, and all-required budget failure.
+- The deterministic Context Gauntlet integration fixture stores and re-reads results through Core commands, compares serialized payload/context body bytes, asserts required exact facts, reports retention of exploratory fields without treating current omissions as invariants, and checks repeat output.
 
 # Child DOX Index
 

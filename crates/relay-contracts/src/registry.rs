@@ -191,6 +191,10 @@ fn validate_schema_definition(schema: &Value, path: &str) -> Result<(), Registry
         "enum",
         "const",
         "minLength",
+        "maxLength",
+        "minItems",
+        "maxItems",
+        "uniqueItems",
         "minimum",
         "maximum",
     ];
@@ -265,13 +269,19 @@ fn validate_schema_definition(schema: &Value, path: &str) -> Result<(), Registry
         }
     }
 
-    if let Some(min_length) = object.get("minLength") {
-        if min_length.as_u64().is_none() {
+    for keyword in ["minLength", "maxLength", "minItems", "maxItems"] {
+        if object.get(keyword).is_some_and(|value| value.as_u64().is_none()) {
             return Err(RegistryError::new(
                 "REGISTRY_SCHEMA_UNSUPPORTED",
-                format!("{path}.minLength must be a non-negative integer"),
+                format!("{path}.{keyword} must be a non-negative integer"),
             ));
         }
+    }
+    if object.get("uniqueItems").is_some_and(|value| !value.is_boolean()) {
+        return Err(RegistryError::new(
+            "REGISTRY_SCHEMA_UNSUPPORTED",
+            format!("{path}.uniqueItems must be boolean"),
+        ));
     }
 
     for keyword in ["minimum", "maximum"] {
@@ -378,6 +388,44 @@ fn validate_value_at(
                     path: path.to_string(),
                     message: format!("string must contain at least {min_length} characters"),
                 });
+            }
+        }
+    }
+    if let Some(max_length) = object.get("maxLength").and_then(Value::as_u64) {
+        if let Some(text) = value.as_str() {
+            if text.chars().count() > max_length as usize {
+                return Err(ValidationError {
+                    path: path.to_string(),
+                    message: format!("string must contain at most {max_length} characters"),
+                });
+            }
+        }
+    }
+    if let Some(items) = value.as_array() {
+        if let Some(min_items) = object.get("minItems").and_then(Value::as_u64) {
+            if items.len() < min_items as usize {
+                return Err(ValidationError {
+                    path: path.to_string(),
+                    message: format!("array must contain at least {min_items} items"),
+                });
+            }
+        }
+        if let Some(max_items) = object.get("maxItems").and_then(Value::as_u64) {
+            if items.len() > max_items as usize {
+                return Err(ValidationError {
+                    path: path.to_string(),
+                    message: format!("array must contain at most {max_items} items"),
+                });
+            }
+        }
+        if object.get("uniqueItems").and_then(Value::as_bool) == Some(true) {
+            for (index, item) in items.iter().enumerate() {
+                if items[..index].contains(item) {
+                    return Err(ValidationError {
+                        path: path.to_string(),
+                        message: "array items must be unique".to_string(),
+                    });
+                }
             }
         }
     }
@@ -904,5 +952,24 @@ mod tests {
             &json!({ "result_id": "RES-fixture" }),
         )
         .is_err());
+
+        let focused = |pointers: Value| json!({
+            "result_id": "RES-fixture", "max_bytes": 1024,
+            "required_pointers": pointers
+        });
+        validate_value(&command.arguments_schema, &focused(json!(["/items/200/target_code"])))
+            .unwrap();
+        validate_value(&command.arguments_schema, &focused(json!([
+            "/a", "/b", "/c", "/d", "/e", "/f", "/g", "/h"
+        ]))).unwrap();
+        for pointers in [
+            json!([]),
+            json!((0..9).map(|index| format!("/{index}")).collect::<Vec<_>>()),
+            json!(["/a", "/a"]),
+            json!(["/", "/".repeat(257)]),
+            json!([5]),
+        ] {
+            assert!(validate_value(&command.arguments_schema, &focused(pointers)).is_err());
+        }
     }
 }

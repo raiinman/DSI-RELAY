@@ -170,6 +170,77 @@ fn has_json_flag(args: &[String]) -> bool {
     args.iter().any(|arg| arg == "--json")
 }
 
+fn onboard_step(request: CommandRequest, step: &str) -> Result<Value, Value> {
+    match invoke(&request) {
+        Ok(response) if response.ok => response
+            .result
+            .ok_or_else(|| json!({"step": step, "code": "COMMAND_RESULT_MISSING"})),
+        Ok(response) => Err(json!({
+            "step": step,
+            "code": response.error.as_ref().map(|error| error.code.as_str()).unwrap_or("COMMAND_FAILED")
+        })),
+        Err(_) => Err(json!({"step": step, "code": "TRANSPORT_UNAVAILABLE"})),
+    }
+}
+
+fn print_onboard_report(report: &Value, machine: bool) -> Result<(), String> {
+    if machine {
+        println!(
+            "{}",
+            serde_json::to_string(report)
+                .map_err(|error| format!("serialize onboarding: {error}"))?
+        );
+        return Ok(());
+    }
+    let id = report["project_id"].as_str().unwrap_or("unknown");
+    println!("Project connected. ID: {id}");
+    if report["status"] != "complete" {
+        println!(
+            "First audit incomplete at {} ({}). The project remains connected.",
+            report["failure"]["step"].as_str().unwrap_or("unknown step"),
+            report["failure"]["code"]
+                .as_str()
+                .unwrap_or("command failed")
+        );
+        return Ok(());
+    }
+    println!(
+        "First index: {} files, {} bytes (generation {}).",
+        report["index"]["file_count"],
+        report["index"]["total_bytes"],
+        report["index"]["generation"]
+    );
+    let audit = &report["first_audit"];
+    println!(
+        "Index: {}. Available capabilities: {}.",
+        audit["index_status"].as_str().unwrap_or("unknown"),
+        audit["available_capabilities"]
+            .as_array()
+            .map_or(0, Vec::len)
+    );
+    if let Some(gaps) = audit["capability_gaps"].as_array() {
+        for gap in gaps {
+            println!(
+                "- Capability gap: {} ({}) — {}",
+                gap["capability"].as_str().unwrap_or("unknown"),
+                gap["state"].as_str().unwrap_or("unknown"),
+                gap["detail"].as_str().unwrap_or("needs inspection")
+            );
+        }
+    }
+    if let Some(uefn) = audit["uefn_static"].as_object() {
+        println!(
+            "UEFN marker: {}. Indexed Verse sources: {}. Editor and runtime workflows: untested.",
+            uefn["marker_state"].as_str().unwrap_or("unknown"),
+            uefn["verse_source_count"]
+        );
+    } else {
+        println!("No UEFN project marker appears in the index.");
+    }
+    println!("This first audit uses indexed metadata; it does not validate creator-app workflows.");
+    Ok(())
+}
+
 fn execute_human(request: CommandRequest, json_output: bool, view: &str) -> Result<i32, String> {
     let response = invoke(&request)?;
     if json_output {
@@ -352,34 +423,88 @@ fn run(args: &[String]) -> Result<i32, String> {
                 .as_str()
                 .ok_or_else(|| "project import returned no ID".to_string())?
                 .to_string();
+            let mut report = json!({
+                "format_version": 1,
+                "project_id": project_id,
+                "status": "partial",
+                "index": null,
+                "first_audit": null,
+                "failure": null
+            });
             let req_id = request_id();
-            let baseline = invoke(&CommandRequest {
-                request_id: req_id.clone(),
-                command: "project.index.build".to_string(),
-                command_version: Some(1),
-                arguments: json!({ "project_id": project_id }),
-                idempotency_key: Some(format!("CLI-{req_id}")),
-                context: RequestContext::default(),
-            })?;
-            if has_json_flag(args) {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&json!({
-                        "project_id": project_id,
-                        "import": imported,
-                        "baseline": baseline
-                    }))
-                    .map_err(|error| format!("serialize onboarding: {error}"))?
-                );
-            } else if baseline.ok {
-                println!("Project {name} connected and indexed. ID: {project_id}");
-            } else {
-                println!(
-                    "Project {name} connected as {project_id}, but its first index needs attention."
-                );
-                print_human(&baseline);
+            let baseline = onboard_step(
+                CommandRequest {
+                    request_id: req_id.clone(),
+                    command: "project.index.build".to_string(),
+                    command_version: Some(1),
+                    arguments: json!({ "project_id": project_id }),
+                    idempotency_key: Some(format!("CLI-{req_id}")),
+                    context: RequestContext::default(),
+                },
+                "baseline",
+            );
+            let baseline = match baseline {
+                Ok(value) => value,
+                Err(failure) => {
+                    report["failure"] = failure;
+                    print_onboard_report(&report, has_json_flag(args))?;
+                    return Ok(2);
+                }
+            };
+            report["index"] = json!({
+                "generation": baseline["generation"],
+                "file_count": baseline["file_count"],
+                "total_bytes": baseline["total_bytes"],
+                "symlinks_skipped": baseline["symlinks_skipped"],
+                "elapsed_ms": baseline["elapsed_ms"]
+            });
+            let capabilities = match onboard_step(
+                make_request(
+                    "project.capabilities",
+                    json!({"project_id": project_id}),
+                    None,
+                ),
+                "capabilities",
+            ) {
+                Ok(value) => value,
+                Err(failure) => {
+                    report["failure"] = failure;
+                    print_onboard_report(&report, has_json_flag(args))?;
+                    return Ok(2);
+                }
+            };
+            let inspection = match onboard_step(
+                make_request(
+                    "uefn.static.inspect",
+                    json!({"project_id": project_id}),
+                    None,
+                ),
+                "static_inspection",
+            ) {
+                Ok(value) => value,
+                Err(failure) => {
+                    report["failure"] = failure;
+                    print_onboard_report(&report, has_json_flag(args))?;
+                    return Ok(2);
+                }
+            };
+            if !onboarding::audit_responses_match_project(
+                &project_id,
+                &baseline,
+                &capabilities,
+                &inspection,
+            ) {
+                report["failure"] = json!({
+                    "step": "first_audit",
+                    "code": "AUDIT_RESPONSE_MISMATCH"
+                });
+                print_onboard_report(&report, has_json_flag(args))?;
+                return Ok(2);
             }
-            Ok(if baseline.ok { 0 } else { 2 })
+            report["first_audit"] = onboarding::first_audit(&capabilities, &inspection);
+            report["status"] = json!("complete");
+            print_onboard_report(&report, has_json_flag(args))?;
+            Ok(0)
         }
         "commands" => {
             println!("{}", registry::render_cli_catalog());

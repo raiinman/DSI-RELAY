@@ -16,6 +16,7 @@ function element() {
     replaceChildren(...children) { this.children = children; },
     append(...children) { this.children.push(...children); },
     focus() { this.focused = true; },
+    click() { this.clicked = true; },
     setAttribute(name, value) { this.attributes[name] = value; },
     addEventListener(_name, listener) { this.listener = listener; }
   };
@@ -31,26 +32,29 @@ async function loadDashboard(results, hash = "#local-test-token") {
     "#activity-summary", "#activity-list", "#results-summary", "#results-list", "#jobs-summary", "#jobs-list", "#usage-summary", "#usage-detail", "#diagnostic-capture",
     "#diagnostic-detail", "#diagnostic-storage", "#diagnostic-dropped",
     "#diagnostic-events", "#diagnostic-incomplete", "#relay-version",
-    "#relay-uptime", "#diagnostic-guidance", "#diagnostic-recent-summary", "#diagnostic-recent-list", "#integrated-report", "#integrated-summary", "#integrated-workflows"
+    "#relay-uptime", "#diagnostic-guidance", "#diagnostic-recent-summary", "#diagnostic-recent-list", "#integrated-report", "#integrated-summary", "#integrated-workflows", "#support-download", "#support-download-status"
   ];
   const nodes = Object.fromEntries(selectors.map((selector) => [selector, element()]));
   const calls = [];
+  const downloads = [];
   let fetchResult = results;
   const location = { hash, pathname: "/" };
   const history = { replaceState(_state, _title, path) { location.hash = ""; location.pathname = path; } };
   const document = {
     querySelector(selector) { return nodes[selector]; },
-    createElement() { return element(); }
+    createElement() { const node = element(); downloads.push(node); return node; }
   };
   const fetch = async (_url, options) => {
     calls.push(options);
     const request = JSON.parse(options.body);
     return fetchResult(request.command, request.arguments);
   };
-  vm.runInNewContext(script, { document, fetch, history, location, TextEncoder, window: { confirm: () => true } });
+  const URL = { createObjectURL(blob) { downloads.push(blob); return "blob:local-test"; }, revokeObjectURL() {} };
+  vm.runInNewContext(script, { document, fetch, history, location, TextEncoder, Blob, URL,
+    setTimeout(callback) { callback(); }, window: { confirm: () => true } });
   await new Promise(setImmediate);
   return {
-    nodes, calls, location,
+    nodes, calls, location, downloads,
     refresh: () => nodes["#refresh"].listener(),
     setResults(next) { fetchResult = next; }
   };
@@ -860,4 +864,88 @@ test("uncertain check execution hides outcomes until refresh and replan", async 
   assert.equal(page.nodes["#tests-run-list"].children.length, 0);
   assert.equal(page.nodes["#tests-run"].disabled, true);
   assert.equal(page.nodes["#tests-run-status"].focused, true);
+});
+
+test("support download projects fresh health and a checked report without raw fields", async () => {
+  const page = await loadDashboard(async (command, args) => {
+    const response = await success(command, args).json();
+    const result = response.result;
+    if (command === "system.status") {
+      result.diagnostics.raw_log = "private log";
+      result.diagnostics.current_bytes = 80;
+    }
+    if (command === "system.doctor") {
+      result.healthy = false;
+      result.checks[0].detail = "C:\\private\\secret";
+      result.checks.push({ id: "private.secret", status: "fail", detail: "private log" });
+    }
+    if (command === "diagnostics.summary") {
+      result.generated_unix_ms = 12345;
+      result.relay_version = "0.1.0";
+      result.events.sampled = 0;
+      result.recent[0].raw_message = "private argument";
+    }
+    return { ok: true, json: async () => ({ ok: true, result }) };
+  });
+  page.nodes["#integrated-report"].files = [{ size: 512, text: async () => JSON.stringify({
+    schema_version: 1, run_id: "run.one", started_unix_ms: 1000, completed_unix_ms: 1050,
+    duration_ms: 50, overall_status: "untested", counts: { passed: 0, failed: 0, blocked: 0, untested: 1 },
+    secret: "C:\\private\\secret", workflows: [{ workflow_id: "uefn.live_runtime", phase: 7,
+      status: "untested", reason_code: "NATIVE_UNAVAILABLE", requirements: [{ availability: "unavailable" }],
+      evidence: { kind: "none", raw_log: "private log" },
+      resource_use: { peak_rss_bytes: 100, cpu_ms: 4, io_read_bytes: null, io_write_bytes: null, peak_gpu_bytes: null }
+    }]
+  }) }];
+  const before = page.calls.length;
+  await page.nodes["#support-download"].listener();
+  assert.deepEqual(page.calls.slice(before).map((call) => JSON.parse(call.body).command),
+    ["system.status", "system.doctor", "diagnostics.summary"]);
+  const blob = page.downloads.find((entry) => entry instanceof Blob);
+  assert.ok(blob);
+  const body = await blob.text();
+  const bundle = JSON.parse(body);
+  assert.equal(bundle.privacy.policy, "summary_only_v1");
+  assert.equal(bundle.integrated_run.counts.untested, 1);
+  assert.equal(bundle.integrated_run.resources.total_cpu_ms, 4);
+  assert.equal(bundle.native_workflows.uefn_editor, "UNTESTED");
+  assert.equal(bundle.recent_events.length, 2);
+  assert.equal(bundle.other_component_check_count, 1);
+  assert.match(page.nodes["#support-download-status"].textContent, /download started/);
+  assert.equal(page.nodes["#support-download-status"].focused, true);
+  assert.doesNotMatch(body, /private log|private argument|raw_message|<script>|C:\\private/);
+});
+
+test("support download fails closed on inconsistent selected report", async () => {
+  const page = await loadDashboard(success);
+  page.nodes["#integrated-report"].files = [{ size: 300, text: async () => JSON.stringify({
+    schema_version: 1, run_id: "run.one", started_unix_ms: 1, completed_unix_ms: 2,
+    duration_ms: 1, overall_status: "passed", counts: { passed: 1, failed: 0, blocked: 0, untested: 0 },
+    workflows: [{ workflow_id: "uefn.live_runtime", phase: 7, status: "passed", reason_code: "PASSED",
+      requirements: [{ availability: "unavailable" }], evidence: { kind: "synthetic" } }]
+  }) }];
+  const before = page.calls.length;
+  await page.nodes["#support-download"].listener();
+  assert.equal(page.calls.length, before);
+  assert.equal(page.downloads.some((entry) => entry instanceof Blob), false);
+  assert.match(page.nodes["#support-download-status"].textContent, /Could not save/);
+});
+
+test("support download without a selected report leaves integrated run empty", async () => {
+  const page = await loadDashboard(async (command, args) => {
+    const response = await success(command, args).json();
+    const result = response.result;
+    if (command === "system.doctor") result.healthy = false;
+    if (command === "diagnostics.summary") {
+      result.generated_unix_ms = 12345;
+      result.relay_version = "0.1.0";
+      result.events.sampled = 0;
+    }
+    return { ok: true, json: async () => ({ ok: true, result }) };
+  });
+  await page.nodes["#support-download"].listener();
+  const blob = page.downloads.find((entry) => entry instanceof Blob);
+  assert.ok(blob);
+  const bundle = JSON.parse(await blob.text());
+  assert.equal(bundle.integrated_run, null);
+  assert.equal(bundle.native_workflows.creator_apps, "UNTESTED");
 });

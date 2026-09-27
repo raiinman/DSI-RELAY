@@ -19,6 +19,7 @@ let checkPlan = null;
 let checkWorkflowBusy = false;
 let checkWorkflowEpoch = 0;
 let checkDisplayedProjectId = null;
+let supportDownloadBusy = false;
 
 async function command(name, argumentsValue = {}) {
   const body = JSON.stringify({ command: name, arguments: argumentsValue });
@@ -1278,6 +1279,175 @@ async function previewIntegratedReport() {
   }
 }
 
+const safeUnsigned = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
+const safeCode = (value) => typeof value === "string" && /^[A-Z0-9_]{1,96}$/.test(value) ? value : null;
+const safeRef = (value) => typeof value === "string" && /^[A-Za-z0-9._-]{1,96}$/.test(value) ? value : null;
+const safeVersion = (value) => typeof value === "string" && value.length <= 32 &&
+  /^(?:[0-9]|v[0-9])[A-Za-z0-9_.+-]*$/.test(value) ? value : null;
+const supportEventLabels = {
+  "relay.core.started": "relay_started",
+  "relay.command.completed": "command_failed",
+  "relay.host.component.failed": "component_failed",
+  "relay.host.component.recovered": "component_recovered"
+};
+
+function checkedIntegratedSummary(report) {
+  const statuses = ["passed", "failed", "blocked", "untested"];
+  if (report?.schema_version !== 1 || !safeRef(report.run_id) ||
+      safeUnsigned(report.started_unix_ms) === null || safeUnsigned(report.completed_unix_ms) === null ||
+      report.completed_unix_ms < report.started_unix_ms ||
+      report.duration_ms !== report.completed_unix_ms - report.started_unix_ms ||
+      !statuses.includes(report.overall_status) || !Array.isArray(report.workflows) ||
+      report.workflows.length < 1 || report.workflows.length > 256) throw new Error("INVALID_RUN_REPORT");
+  const counts = { passed: 0, failed: 0, blocked: 0, untested: 0 };
+  const reasons = new Map();
+  const seen = new Set();
+  const resources = { peak_rss_bytes: null, total_cpu_ms: null, io_read_bytes: null, io_write_bytes: null, peak_gpu_bytes: null };
+  for (const workflow of report.workflows) {
+    if (!safeRef(workflow?.workflow_id) || seen.has(workflow.workflow_id) ||
+        !Number.isSafeInteger(workflow.phase) || workflow.phase < 0 || workflow.phase > 11 ||
+        !statuses.includes(workflow.status) || !safeCode(workflow.reason_code) ||
+        !Array.isArray(workflow.requirements) ||
+        (workflow.status === "passed" && (workflow.evidence?.kind !== "observed" ||
+          workflow.requirements.some((entry) => entry?.availability !== "available")))) {
+      throw new Error("INVALID_RUN_REPORT");
+    }
+    seen.add(workflow.workflow_id);
+    counts[workflow.status]++;
+    reasons.set(workflow.reason_code, (reasons.get(workflow.reason_code) ?? 0) + 1);
+    const use = workflow.resource_use;
+    if (use !== null && use !== undefined) {
+      for (const [source, target, sum] of [
+        ["peak_rss_bytes", "peak_rss_bytes", false], ["cpu_ms", "total_cpu_ms", true],
+        ["io_read_bytes", "io_read_bytes", true], ["io_write_bytes", "io_write_bytes", true],
+        ["peak_gpu_bytes", "peak_gpu_bytes", false]
+      ]) {
+        const value = use[source];
+        if (value === null || value === undefined) continue;
+        if (safeUnsigned(value) === null) throw new Error("INVALID_RUN_RESOURCE");
+        const next = resources[target] === null ? value : sum ? resources[target] + value : Math.max(resources[target], value);
+        if (safeUnsigned(next) === null) throw new Error("RUN_RESOURCE_OVERFLOW");
+        resources[target] = next;
+      }
+    }
+  }
+  const expected = counts.failed ? "failed" : counts.blocked ? "blocked" : counts.untested ? "untested" : "passed";
+  if (expected !== report.overall_status || statuses.some((status) => report.counts?.[status] !== counts[status]) || reasons.size > 64) {
+    throw new Error("INCONSISTENT_RUN_STATUS");
+  }
+  return {
+    report_schema_version: 1, run_ref: report.run_id, completed_unix_ms: report.completed_unix_ms,
+    duration_ms: report.duration_ms, overall_status: report.overall_status, counts,
+    resources: Object.values(resources).every((value) => value === null) ? null : resources,
+    outcome_reasons: [...reasons].sort(([left], [right]) => left.localeCompare(right))
+      .map(([code, count]) => ({ code, count })),
+    evidence_status: "selected_file_consistency_checked_not_independently_verified"
+  };
+}
+
+async function selectedIntegratedSummary() {
+  const file = $("#integrated-report").files?.[0];
+  if (!file) return null;
+  if (safeUnsigned(file.size) === null || file.size === 0 || file.size > 262144) throw new Error("INVALID_RUN_REPORT");
+  const source = await file.text();
+  if (new TextEncoder().encode(source).byteLength > 262144) throw new Error("INVALID_RUN_REPORT");
+  return checkedIntegratedSummary(JSON.parse(source));
+}
+
+function checkedSupportSummary(status, doctor, summary, integratedRun) {
+  const capture = status?.diagnostics;
+  const events = summary?.events;
+  if (!safeVersion(status?.version) || !safeVersion(summary?.relay_version) ||
+      safeUnsigned(summary?.generated_unix_ms) === null ||
+      typeof capture?.ok !== "boolean" || typeof capture?.detail_active !== "boolean" ||
+      typeof doctor?.healthy !== "boolean" || !Array.isArray(doctor.checks) || doctor.checks.length > 32 ||
+      typeof summary?.available !== "boolean") throw new Error("INVALID_SUPPORT_DATA");
+  const number = (value) => safeUnsigned(value) ?? 0;
+  const knownChecks = new Set(["core.process", "storage.integrity", "diagnostics.capture",
+    "transport.local", "adapter.dependencies.parse"]);
+  const checks = doctor.checks.filter((check) => knownChecks.has(check?.id)).map((check) => {
+    if (!["pass", "fail"].includes(check.status)) throw new Error("INVALID_SUPPORT_DATA");
+    return { id: check.id, status: check.status };
+  });
+  const total = summary.available ? safeUnsigned(events?.total) : 0;
+  const incomplete = summary.available ? safeUnsigned(events?.incomplete) : 0;
+  const sampled = summary.available ? safeUnsigned(events?.sampled) : 0;
+  if (total === null || incomplete === null || sampled === null || incomplete > total || sampled > total) {
+    throw new Error("INVALID_SUPPORT_DATA");
+  }
+  const recentEvents = [];
+  if (summary.available && Array.isArray(summary.recent)) {
+    for (const event of summary.recent.slice(-12)) {
+      const label = Object.hasOwn(supportEventLabels, event?.event_code) ? supportEventLabels[event.event_code] : null;
+      if (!label) continue;
+      const time = safeUnsigned(event.time_unix_ms);
+      recentEvents.push({ time_unix_ms: time, event: label, error_code: safeCode(event.error_code) });
+    }
+  }
+  const bundle = {
+    schema_version: 1, format: "relay_dashboard_support_summary", generated_unix_ms: summary.generated_unix_ms,
+    relay_version: status.version, component_versions: [{ component_id: "relay-core", version: summary.relay_version }],
+    protocol_version: safeUnsigned(status.protocol?.negotiated),
+    diagnostic_health: {
+      healthy: capture.ok, current_bytes: number(capture.current_bytes), rotated_files: number(capture.rotated_files),
+      evicted_events: number(capture.evicted_events), evicted_files: number(capture.evicted_files),
+      recovered_partial_bytes: number(capture.recovered_partial_bytes),
+      last_sync_unix_ms: safeUnsigned(capture.last_sync_unix_ms), detail_active: capture.detail_active,
+      last_error_code: safeCode(summary.error_code)
+    },
+    diagnostic_counts: {
+      total_events: total, invalid_lines: number(events?.invalid_lines), incomplete_events: incomplete,
+      sampled_events: sampled, untrusted_source_events: 0,
+      retention_evicted_events: number(capture.evicted_events), by_code: []
+    },
+    component_checks: checks, other_component_check_count: doctor.checks.length - checks.length,
+    recent_events: recentEvents, integrated_run: integratedRun,
+    native_workflows: { uefn_editor: "UNTESTED", creator_apps: "UNTESTED", hardware_tiers: "UNTESTED",
+      note: "Live native outcomes require an observed integrated run; local component health is not workflow evidence." },
+    privacy: { policy: "summary_only_v1", includes_raw_logs: false, includes_local_paths: false,
+      includes_secrets: false, includes_command_arguments: false, includes_project_file_contents: false }
+  };
+  if (new TextEncoder().encode(JSON.stringify(bundle)).byteLength > 65536) throw new Error("BUNDLE_TOO_LARGE");
+  return bundle;
+}
+
+async function downloadSupportSummary() {
+  if (supportDownloadBusy) return;
+  supportDownloadBusy = true;
+  const button = $("#support-download");
+  const message = $("#support-download-status");
+  button.disabled = true;
+  message.textContent = "Preparing current support summary…";
+  try {
+    const integratedRun = await selectedIntegratedSummary();
+    const [status, doctor, summary] = await Promise.all([
+      command("system.status"), command("system.doctor"), command("diagnostics.summary")
+    ]);
+    const bundle = checkedSupportSummary(status, doctor, summary, integratedRun);
+    const blob = new Blob([JSON.stringify(bundle, null, 2) + "\n"], { type: "application/json" });
+    if (blob.size > 65536) throw new Error("BUNDLE_TOO_LARGE");
+    const url = URL.createObjectURL(blob);
+    let clicked = false;
+    try {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `relay-support-summary-${summary.generated_unix_ms}.json`;
+      link.click();
+      clicked = true;
+    } finally {
+      if (clicked) setTimeout(() => URL.revokeObjectURL(url), 60000);
+      else URL.revokeObjectURL(url);
+    }
+    message.textContent = "Support summary download started. Review the saved JSON before sharing it. Selected report outcomes are file-provided, not independently verified here.";
+  } catch (_problem) {
+    message.textContent = "Could not save the support summary. Refresh RELAY and choose a valid integrated report file if one is selected, then try again.";
+  } finally {
+    supportDownloadBusy = false;
+    button.disabled = false;
+    message.focus();
+  }
+}
+
 async function refresh() {
   if (refreshing) return;
   refreshing = true;
@@ -1405,6 +1575,7 @@ $("#integrated-report").addEventListener("change", async () => {
   await previewIntegratedReport();
   $("#integrated-summary").focus();
 });
+$("#support-download").addEventListener("click", downloadSupportSummary);
 $("#project-add-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (projectActionBusy) return;

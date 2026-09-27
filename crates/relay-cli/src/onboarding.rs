@@ -2,6 +2,7 @@
 //! onboarding, never evidence that an editor or runtime workflow passed.
 
 use serde::Serialize;
+use serde_json::{Value, json};
 use std::collections::VecDeque;
 use std::env;
 use std::fs;
@@ -10,6 +11,69 @@ use std::path::{Path, PathBuf};
 const MAX_DIRECTORIES: usize = 256;
 const MAX_ENTRIES: usize = 8192;
 const MAX_DEPTH: usize = 2;
+
+/// Summarize shared read-only command results. A UEFN finding is relevant only
+/// when the indexed project contains a top-level UEFN marker.
+pub fn first_audit(capabilities: &Value, inspection: &Value) -> Value {
+    let mut available = Vec::new();
+    let mut gaps = Vec::new();
+    if let Some(items) = capabilities["capabilities"].as_array() {
+        for item in items {
+            let (Some(id), Some(state)) = (item["id"].as_str(), item["state"].as_str()) else {
+                continue;
+            };
+            if state == "available" {
+                available.push(id.to_string());
+            } else {
+                gaps.push(json!({
+                    "capability": id,
+                    "state": state,
+                    "detail": item["detail"]
+                }));
+            }
+        }
+    }
+    let marker_count = inspection["project_marker_count"].as_u64().unwrap_or(0);
+    let uefn = if marker_count > 0 {
+        Some(json!({
+            "marker_state": inspection["marker_state"],
+            "marker_count": marker_count,
+            "verse_source_count": inspection["verse_source_count"],
+            "unreal_asset_count": inspection["unreal_asset_count"],
+            "unreal_map_count": inspection["unreal_map_count"],
+            "finding_codes": inspection["findings"].as_array().map(|items| items.iter()
+                .filter_map(|item| item["code"].as_str()).collect::<Vec<_>>()).unwrap_or_default(),
+            "editor_status": "untested",
+            "runtime_status": "untested"
+        }))
+    } else {
+        None
+    };
+    json!({
+        "index_status": capabilities["index_status"],
+        "content_verification_required": capabilities["content_verification_required"],
+        "available_capabilities": available,
+        "capability_gaps": gaps,
+        "uefn_static": uefn
+    })
+}
+
+pub fn audit_responses_match_project(
+    project_id: &str,
+    baseline: &Value,
+    capabilities: &Value,
+    inspection: &Value,
+) -> bool {
+    let Some(generation) = baseline["generation"].as_i64() else {
+        return false;
+    };
+    capabilities["project_id"] == project_id
+        && capabilities["capabilities"].is_array()
+        && capabilities["index_status"].as_str().is_some()
+        && inspection["project_id"] == project_id
+        && inspection["index_generation"].as_i64() == Some(generation)
+        && inspection["project_marker_count"].as_u64().is_some()
+}
 
 #[derive(Debug, Serialize)]
 pub struct DiscoveryReport {
@@ -311,6 +375,65 @@ fn epic_manifest_detects_uefn() -> bool {
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn first_audit_reports_capability_gaps_without_inventing_uefn() {
+        let capabilities = json!({
+            "project_id": "PRJ-one",
+            "index_status": "ready",
+            "content_verification_required": false,
+            "capabilities": [
+                {"id":"filesystem.read","state":"available","detail":"readable"},
+                {"id":"dependency_graph","state":"unknown","detail":"requires parser"}
+            ]
+        });
+        let inspection = json!({
+            "project_id": "PRJ-one", "index_generation": 1,
+            "project_marker_count": 0, "marker_state": "missing",
+            "findings": [{"code":"UEFN_PROJECT_MARKER_MISSING"}]
+        });
+        assert!(audit_responses_match_project(
+            "PRJ-one",
+            &json!({"generation":1}),
+            &capabilities,
+            &inspection
+        ));
+        let audit = first_audit(&capabilities, &inspection);
+        assert!(audit["uefn_static"].is_null());
+        assert_eq!(audit["available_capabilities"], json!(["filesystem.read"]));
+        assert_eq!(
+            audit["capability_gaps"][0]["capability"],
+            "dependency_graph"
+        );
+        assert_eq!(audit["capability_gaps"][0]["detail"], "requires parser");
+    }
+
+    #[test]
+    fn first_audit_keeps_uefn_native_workflows_untested() {
+        let capabilities = json!({"index_status":"ready", "capabilities":[]});
+        let inspection = json!({
+            "project_marker_count": 1, "marker_state":"present", "verse_source_count": 3,
+            "unreal_asset_count": 2, "unreal_map_count": 1, "findings": []
+        });
+        let audit = first_audit(&capabilities, &inspection);
+        assert_eq!(audit["uefn_static"]["verse_source_count"], 3);
+        assert_eq!(audit["uefn_static"]["editor_status"], "untested");
+        assert_eq!(audit["uefn_static"]["runtime_status"], "untested");
+    }
+
+    #[test]
+    fn first_audit_rejects_mismatched_generation() {
+        let capabilities =
+            json!({"project_id":"PRJ-one", "index_status":"ready", "capabilities":[]});
+        let inspection =
+            json!({"project_id":"PRJ-one", "index_generation":2, "project_marker_count":0});
+        assert!(!audit_responses_match_project(
+            "PRJ-one",
+            &json!({"generation":1}),
+            &capabilities,
+            &inspection
+        ));
+    }
 
     #[test]
     fn discovers_nearby_uefn_and_skips_generated_tree() {

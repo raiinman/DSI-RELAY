@@ -66,7 +66,7 @@ li { border-top: 1px solid #e3ece7; padding: .7rem 0; }
 .test-workflow p:focus-visible { outline: 3px solid #efb03c; outline-offset: 3px; }
 button { background: #d7f3e5; color: #143d39; border: 0; border-radius: .5rem; padding: .65rem 1rem; font-weight: 700; cursor: pointer; }
 button:focus-visible, summary:focus-visible { outline: 3px solid #efb03c; outline-offset: 3px; }
-#project-action:focus-visible, #integrated-summary:focus-visible, .removal-plans:focus-visible { outline: 3px solid #efb03c; outline-offset: 3px; }
+#project-action:focus-visible, #integrated-summary:focus-visible, #support-download-status:focus-visible, .removal-plans:focus-visible { outline: 3px solid #efb03c; outline-offset: 3px; }
 a:focus-visible { outline: 3px solid #efb03c; outline-offset: 3px; }
 button[aria-disabled="true"] { opacity: .55; cursor: wait; }
 button:disabled { opacity: .55; cursor: wait; }
@@ -88,5 +88,6 @@ footer { padding: 1.5rem; text-align: center; color: #53645e; font-size: .85rem;
   #projects li > button { flex: 1 1 8rem; min-height: 2.75rem; }
   #projects .removal-plan-actions button { flex: 1 1 100%; }
   #integrated-report { max-width: 100%; }
+  #support-download { width: 100%; min-height: 2.75rem; }
   .test-workflow button { width: 100%; }
 }

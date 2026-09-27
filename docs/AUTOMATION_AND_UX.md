@@ -68,6 +68,8 @@ When adding a project, RELAY should automatically:
 
 Avoid forcing users to author large configuration files before useful output exists.
 
+The current `relay onboard` path imports a project, builds its baseline, and composes shared capability and static inspection results into a bounded first audit. It reports the project ID on partial failure and labels editor/runtime observations untested; an indexed UEFN marker is only a project-type clue.
+
 ## Incremental indexing
 
 After baseline, watch for relevant changes and update only affected state.
@@ -134,7 +136,7 @@ RELAY should:
 - compare with baseline/previous results
 - surface regressions
 
-Current planning foundation: a creator can register a revisioned check catalog with project-relative parser roots and declared leaf paths. RELAY records successful parser coverage, including observations with no dependency edges, and keeps bounded-query history of edges invalidated by index changes. A read-only plan uses one index snapshot. It selects checks only when the declared inputs and guarded parser coverage are complete; otherwise it proposes the entire declared catalog with a fixed fallback reason. Every proposed check is `planned_not_run`, has no result ID, and is not executed by this command. A catalog declaration is not proof that all real project checks were listed. A live affected-only workflow remains untested.
+Current planning and execution foundation: a creator can register a revisioned project check catalog. Simple direct file-presence checks can be added through the dashboard or CLI without writing JSON; advanced catalogs may declare project-relative parser roots, leaves, and indexed-file presence or digest assertions. RELAY records parser coverage and invalidation history. A read-only plan uses one guarded index snapshot, selecting declared direct paths from changes or the first baseline without a parser; transitive checks require complete guarded parser coverage. Uncertain plans fall back to the full declared catalog with a fixed reason and do not execute assertions. A separate explicit command executes only allowlisted indexed-file assertions from an exact current selective plan, then stores project-scoped result IDs and a replay-safe job. Native creator tests stay UNTESTED without their own live run. A catalog declaration is not proof that all real project checks were listed, and automatic affected-only native workflows remain open.
 
 ## Visual regression
 

@@ -1,4 +1,5 @@
-const token = location.hash.slice(1);
+const openedFromFile = location.protocol === "file:";
+const token = openedFromFile ? "" : location.hash.slice(1);
 history.replaceState(null, "", location.pathname);
 
 const $ = (selector) => document.querySelector(selector);
@@ -1456,6 +1457,7 @@ async function refresh() {
   message.textContent = "Checking RELAY…";
   message.dataset.state = "Checking";
   try {
+    if (openedFromFile) throw new Error("OPENED_AS_FILE");
     if (!token) throw new Error("Open a fresh dashboard link from RELAY, then try again.");
     const [status, doctor, projectList, summary] = await Promise.all([
       command("system.status"), command("system.doctor"), command("project.list", { include_inactive: true }), command("diagnostics.summary")
@@ -1487,7 +1489,9 @@ async function refresh() {
     await loadTestsForSelection();
     return true;
   } catch (problem) {
-    message.textContent = !token || problem.message === "DASHBOARD_UNAUTHORIZED"
+    message.textContent = openedFromFile
+      ? "This is the dashboard source file. Open the local dashboard link from RELAY to connect it."
+      : !token || problem.message === "DASHBOARD_UNAUTHORIZED"
       ? "Open a fresh dashboard link from RELAY, then try again."
       : "Could not update the dashboard. Check that RELAY is running, then refresh this page.";
     message.dataset.state = "Degraded";
@@ -1525,7 +1529,11 @@ async function refresh() {
     $("#tests-catalog-list").replaceChildren();
     $("#tests-catalog-status").textContent = "Current declared checks are unavailable. Refresh after RELAY is running.";
     $("#uefn-connection").textContent = "UEFN editor connection has not been checked.";
-    if (!token || problem.message === "DASHBOARD_UNAUTHORIZED") {
+    if (openedFromFile) {
+      showSetup("Open the live dashboard",
+        "This file is only the dashboard source. It is not connected to RELAY when opened from a file path.",
+        "Next: start RELAY, then run `relay dashboard-url` and open the printed http://127.0.0.1 link.", null, null);
+    } else if (!token || problem.message === "DASHBOARD_UNAUTHORIZED") {
       showSetup("Connection needed",
         "This dashboard link is no longer available. Open a fresh dashboard link from RELAY.",
         "Next: reopen the dashboard from RELAY.", null, null);

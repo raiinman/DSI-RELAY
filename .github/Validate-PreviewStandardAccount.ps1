@@ -110,11 +110,13 @@ try {
         throw 'Secondary-logon process failed'
     }
 
-    $stage = 'report_validation'
+    $stage = 'account_check_read'
     $checkPath = Join-Path $workRoot 'account-check.json'
     $reportPath = Join-Path $workRoot 'standard-account-benchmark.json'
     $check = Get-Content -LiteralPath $checkPath -Raw | ConvertFrom-Json
+    $stage = 'benchmark_report_read'
     $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+    $stage = 'evidence_shape'
     if (-not $check.identity_matches_temporary_account -or $check.administrator_token -or
         -not $check.nonzero_windows_session -or -not $check.profile_loaded -or
         $report.status -ne 'passed' -or $report.runs_requested -ne 1 -or
@@ -122,6 +124,7 @@ try {
         @($report.samples).Count -ne 1) {
         throw 'Standard-account evidence is incomplete'
     }
+    $stage = 'correctness'
     foreach ($field in @('both_baselines_complete', 'attachment_verified_content',
         'clean_metadata_hashed_zero', 'watcher_observed_change',
         'other_project_remained_ready', 'post_hint_hashed_zero',
@@ -130,17 +133,21 @@ try {
             throw 'Standard-account correctness check failed'
         }
     }
+    $stage = 'fixture_cleanup'
     if (@(Get-ChildItem -LiteralPath (Join-Path $workRoot 'temp') -Directory -Filter 'relay-portable-benchmark-*').Count -ne 0) {
         throw 'Standard-account benchmark left a temporary fixture'
     }
+    $stage = 'daemon_cleanup'
     $daemonAfter = @(Get-Process -Name relayd -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
     if (@(Compare-Object -ReferenceObject $daemonBefore -DifferenceObject $daemonAfter |
         Where-Object { $_.SideIndicator -eq '=>' }).Count -ne 0) {
         throw 'Standard-account benchmark left a daemon'
     }
+    $stage = 'privacy_screen'
     $needles = @($env:USERNAME, $env:COMPUTERNAME, $env:USERPROFILE, $accountName, $workRoot, $password)
     Assert-PrivateDataAbsent $checkPath $needles
     Assert-PrivateDataAbsent $reportPath $needles
+    $stage = 'report_publish'
     if (-not (Test-Path -LiteralPath $reviewRoot)) {
         $null = New-Item -ItemType Directory -Path $reviewRoot
     }

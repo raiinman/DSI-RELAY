@@ -98,8 +98,10 @@ try {
     $stage = 'secondary_logon'
     $args = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -BundleDirectory "{1}" -WorkDirectory "{2}" -ExpectedSid "{3}"' -f `
         $childScript, $stagedBundle, $workRoot, $sid
+    # The clean machine environment avoids forwarding the runner's process
+    # credentials (including artifact/runtime tokens) to the test account.
     $child = Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') `
-        -ArgumentList $args -Credential $credential -LoadUserProfile -PassThru `
+        -ArgumentList $args -Credential $credential -LoadUserProfile -UseNewEnvironment -PassThru `
         -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr
     if (-not $child.WaitForExit(600000)) { throw 'Secondary-logon process timed out' }
     # Windows PowerShell 5.1 can expose a null ExitCode after redirected

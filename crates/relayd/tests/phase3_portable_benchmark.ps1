@@ -116,7 +116,7 @@ function Invoke-Relay {
         }
         $exitCode = $child.ExitCode
         $responseText = $stdout.GetAwaiter().GetResult()
-        $null = $stderr.GetAwaiter().GetResult()
+        $stderrText = $stderr.GetAwaiter().GetResult()
     }
     finally {
         if ($started -and -not $child.HasExited) {
@@ -125,9 +125,27 @@ function Invoke-Relay {
         }
         $child.Dispose()
     }
-    if ($exitCode -ne 0) { throw "RELAY command $Command failed" }
+    if ($exitCode -ne 0) {
+        $script:benchmarkFailureCode = 'BENCHMARK_CLI_EXIT_NONZERO'
+        Write-Host "RELAY CLI $Command exited with code $exitCode"
+        try {
+            $cliFailure = $stderrText | ConvertFrom-Json
+            $message = [string]$cliFailure.error.message
+            if ($message -eq 'HOST_UNAVAILABLE') { Write-Host 'RELAY CLI could not find daemon state' }
+            elseif ($message -match '^open local pipe failed: [0-9]{1,10}$') { Write-Host 'RELAY CLI could not open the daemon pipe' }
+            elseif ($message -eq 'pipe closed') { Write-Host 'RELAY CLI pipe closed before response' }
+            elseif ($message -match '^HOST_STATE_INCOMPATIBLE:') { Write-Host 'RELAY CLI host state was incompatible' }
+        }
+        catch { }
+        throw "RELAY command $Command failed"
+    }
     $response = $responseText | ConvertFrom-Json
-    if (-not $response.ok) { throw "RELAY command $Command returned an error" }
+    if (-not $response.ok) {
+        $script:benchmarkFailureCode = 'BENCHMARK_COMMAND_ERROR'
+        $code = [string]$response.error.code
+        if ($code -match '^[A-Z][A-Z0-9_]{0,63}$') { Write-Host "RELAY command $Command returned $code" }
+        throw "RELAY command $Command returned an error"
+    }
     return $response.result
 }
 
@@ -299,7 +317,8 @@ try {
     New-SyntheticProject $rootA
     New-SyntheticProject $rootB
     $daemonStderr = Join-Path $ownedFull 'daemon-stderr.json'
-    try { $daemon = Start-Process -FilePath $daemonPath -PassThru -WindowStyle Hidden -RedirectStandardError $daemonStderr }
+    $daemonStdout = Join-Path $ownedFull 'daemon-stdout.json'
+    try { $daemon = Start-Process -FilePath $daemonPath -PassThru -WindowStyle Hidden -RedirectStandardError $daemonStderr -RedirectStandardOutput $daemonStdout }
     catch {
         $script:benchmarkFailureCode = 'BENCHMARK_DAEMON_LAUNCH_FAILED'
         throw
@@ -311,7 +330,10 @@ try {
     foreach ($pair in @(@('PRJ-bench-alpha', $rootA), @('PRJ-bench-bravo', $rootB))) {
         $null = Invoke-Relay 'project.import' @{ id = $pair[0]; name = $pair[0]; root_path = $pair[1] } $true
         $built = Invoke-Relay 'project.index.build' @{ project_id = $pair[0] } $true
-        if ($built.file_count -ne $FilesPerProject) { throw 'Baseline file count was unexpected' }
+        if ($built.file_count -ne $FilesPerProject) {
+            $script:benchmarkFailureCode = 'BENCHMARK_BASELINE_FILE_COUNT'
+            throw 'Baseline file count was unexpected'
+        }
         $baseline += [int]$built.elapsed_ms
     }
     Start-Sleep -Milliseconds 500

@@ -1,14 +1,12 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::OnceLock;
 
-pub const REGISTRY_SOURCE: &str =
-    include_str!("../commands.registry.json");
+pub const REGISTRY_SOURCE: &str = include_str!("../commands.registry.json");
 pub const REGISTRY_FORMAT: u32 = 1;
-pub const JSON_SCHEMA_DIALECT: &str =
-    "https://json-schema.org/draft/2020-12/schema";
+pub const JSON_SCHEMA_DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommandRegistry {
@@ -38,7 +36,6 @@ pub struct CommandSpec {
     pub result_schema: Value,
     pub errors: Vec<String>,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegistryError {
@@ -93,11 +90,12 @@ pub fn registry() -> &'static CommandRegistry {
 }
 
 pub fn validate_embedded_registry() -> Result<(), RegistryError> {
-    let parsed: CommandRegistry = serde_json::from_str(registry_source())
-        .map_err(|error| RegistryError::new(
+    let parsed: CommandRegistry = serde_json::from_str(registry_source()).map_err(|error| {
+        RegistryError::new(
             "REGISTRY_INVALID",
             format!("parse command registry: {error}"),
-        ))?;
+        )
+    })?;
     validate_registry(&parsed)
 }
 
@@ -152,13 +150,19 @@ pub fn validate_registry(registry: &CommandRegistry) -> Result<(), RegistryError
         if reserved.contains(&command.id) || deprecated.contains(&command.id) {
             return Err(RegistryError::new(
                 "REGISTRY_ID_REUSE",
-                format!("active command reuses reserved/deprecated ID {}", command.id),
+                format!(
+                    "active command reuses reserved/deprecated ID {}",
+                    command.id
+                ),
             ));
         }
         if !pairs.insert((command.id.clone(), command.version)) {
             return Err(RegistryError::new(
                 "REGISTRY_INVALID",
-                format!("duplicate command contract {}@{}", command.id, command.version),
+                format!(
+                    "duplicate command contract {}@{}",
+                    command.id, command.version
+                ),
             ));
         }
         validate_schema_definition(&command.arguments_schema, "$arguments")?;
@@ -166,7 +170,6 @@ pub fn validate_registry(registry: &CommandRegistry) -> Result<(), RegistryError
     }
     Ok(())
 }
-
 
 fn validate_schema_definition(schema: &Value, path: &str) -> Result<(), RegistryError> {
     if schema.is_boolean() {
@@ -270,14 +273,20 @@ fn validate_schema_definition(schema: &Value, path: &str) -> Result<(), Registry
     }
 
     for keyword in ["minLength", "maxLength", "minItems", "maxItems"] {
-        if object.get(keyword).is_some_and(|value| value.as_u64().is_none()) {
+        if object
+            .get(keyword)
+            .is_some_and(|value| value.as_u64().is_none())
+        {
             return Err(RegistryError::new(
                 "REGISTRY_SCHEMA_UNSUPPORTED",
                 format!("{path}.{keyword} must be a non-negative integer"),
             ));
         }
     }
-    if object.get("uniqueItems").is_some_and(|value| !value.is_boolean()) {
+    if object
+        .get("uniqueItems")
+        .is_some_and(|value| !value.is_boolean())
+    {
         return Err(RegistryError::new(
             "REGISTRY_SCHEMA_UNSUPPORTED",
             format!("{path}.uniqueItems must be boolean"),
@@ -298,7 +307,9 @@ fn validate_schema_definition(schema: &Value, path: &str) -> Result<(), Registry
 }
 
 fn validate_type_declaration(types: &Value, path: &str) -> Result<(), RegistryError> {
-    let allowed = ["object", "array", "string", "integer", "number", "boolean", "null"];
+    let allowed = [
+        "object", "array", "string", "integer", "number", "boolean", "null",
+    ];
     let values: Vec<&str> = if let Some(value) = types.as_str() {
         vec![value]
     } else if let Some(values) = types.as_array() {
@@ -321,16 +332,11 @@ fn validate_type_declaration(types: &Value, path: &str) -> Result<(), RegistryEr
     Ok(())
 }
 
-
 pub fn validate_value(schema: &Value, value: &Value) -> Result<(), ValidationError> {
     validate_value_at(schema, value, "$")
 }
 
-fn validate_value_at(
-    schema: &Value,
-    value: &Value,
-    path: &str,
-) -> Result<(), ValidationError> {
+fn validate_value_at(schema: &Value, value: &Value, path: &str) -> Result<(), ValidationError> {
     if let Some(allow) = schema.as_bool() {
         return if allow {
             Ok(())
@@ -372,11 +378,7 @@ fn validate_value_at(
         if !matches_declared_type(types, value) {
             return Err(ValidationError {
                 path: path.to_string(),
-                message: format!(
-                    "expected type {}, got {}",
-                    compact(types),
-                    json_type(value)
-                ),
+                message: format!("expected type {}, got {}", compact(types), json_type(value)),
             });
         }
     }
@@ -464,9 +466,7 @@ fn validate_value_at(
             }
         }
 
-        let properties = object
-            .get("properties")
-            .and_then(Value::as_object);
+        let properties = object.get("properties").and_then(Value::as_object);
         if let Some(properties) = properties {
             for (name, child_schema) in properties {
                 if let Some(child) = instance.get(name) {
@@ -496,11 +496,7 @@ fn validate_value_at(
     if let Some(items_schema) = object.get("items") {
         if let Some(items) = value.as_array() {
             for (index, item) in items.iter().enumerate() {
-                validate_value_at(
-                    items_schema,
-                    item,
-                    &format!("{path}[{index}]"),
-                )?;
+                validate_value_at(items_schema, item, &format!("{path}[{index}]"))?;
             }
         }
     }
@@ -536,7 +532,6 @@ fn matches_json_type(expected: &str, value: &Value) -> bool {
     }
 }
 
-
 fn json_type(value: &Value) -> &'static str {
     match value {
         Value::Null => "null",
@@ -554,7 +549,10 @@ fn compact(value: &Value) -> String {
 }
 
 fn escape_path(value: &str) -> String {
-    if value.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_') {
+    if value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    {
         value.to_string()
     } else {
         format!("[{}]", compact(&Value::String(value.to_string())))
@@ -620,14 +618,23 @@ pub fn capability_ids() -> Vec<String> {
 
 pub fn is_surface_exposed(id: &str, surface: &str) -> bool {
     resolve_command(id, None)
-        .map(|command| command.surfaces.iter().any(|candidate| candidate == surface))
+        .map(|command| {
+            command
+                .surfaces
+                .iter()
+                .any(|candidate| candidate == surface)
+        })
         .unwrap_or(false)
 }
 
 pub fn surface_command_ids(surface: &str) -> Vec<String> {
     let mut latest: BTreeMap<&str, &CommandSpec> = BTreeMap::new();
     for command in &registry().commands {
-        if !command.surfaces.iter().any(|candidate| candidate == surface) {
+        if !command
+            .surfaces
+            .iter()
+            .any(|candidate| candidate == surface)
+        {
             continue;
         }
         match latest.get(command.id.as_str()) {
@@ -640,16 +647,15 @@ pub fn surface_command_ids(surface: &str) -> Vec<String> {
     latest.keys().map(|id| (*id).to_string()).collect()
 }
 
-
-pub fn compact_list(
-    surface: Option<&str>,
-    prefix: Option<&str>,
-    limit: usize,
-) -> Value {
+pub fn compact_list(surface: Option<&str>, prefix: Option<&str>, limit: usize) -> Value {
     let mut latest: BTreeMap<&str, &CommandSpec> = BTreeMap::new();
     for command in &registry().commands {
         if let Some(surface) = surface {
-            if !command.surfaces.iter().any(|candidate| candidate == surface) {
+            if !command
+                .surfaces
+                .iter()
+                .any(|candidate| candidate == surface)
+            {
                 continue;
             }
         }
@@ -696,7 +702,6 @@ pub fn describe(id: &str, version: Option<u32>) -> Result<Value, ResolveError> {
     }))
 }
 
-
 pub fn render_cli_catalog() -> String {
     let mut lines = Vec::new();
     for id in surface_command_ids("cli") {
@@ -716,10 +721,7 @@ pub struct CompatibilityReport {
     pub reasons: Vec<String>,
 }
 
-pub fn compare_object_schema_backward(
-    old: &Value,
-    new: &Value,
-) -> CompatibilityReport {
+pub fn compare_object_schema_backward(old: &Value, new: &Value) -> CompatibilityReport {
     let mut reasons = Vec::new();
     let Some(old_object) = old.as_object() else {
         return CompatibilityReport {
@@ -754,31 +756,25 @@ pub fn compare_object_schema_backward(
         .collect();
 
     for added in new_required.difference(&old_required) {
-        reasons.push(format!("new required property {added} rejects older payloads"));
+        reasons.push(format!(
+            "new required property {added} rejects older payloads"
+        ));
     }
 
-    let old_properties = old_object
-        .get("properties")
-        .and_then(Value::as_object);
-    let new_properties = new_object
-        .get("properties")
-        .and_then(Value::as_object);
+    let old_properties = old_object.get("properties").and_then(Value::as_object);
+    let new_properties = new_object.get("properties").and_then(Value::as_object);
     if let Some(old_properties) = old_properties {
         for (name, old_schema) in old_properties {
             match new_properties.and_then(|properties| properties.get(name)) {
                 Some(new_schema) if new_schema == old_schema => {}
-                Some(_) => reasons.push(format!(
-                    "existing property {name} changed schema"
-                )),
+                Some(_) => reasons.push(format!("existing property {name} changed schema")),
                 None => {
                     if new_object
                         .get("additionalProperties")
                         .and_then(Value::as_bool)
                         == Some(false)
                     {
-                        reasons.push(format!(
-                            "existing property {name} is no longer accepted"
-                        ));
+                        reasons.push(format!("existing property {name} is no longer accepted"));
                     }
                 }
             }
@@ -794,9 +790,7 @@ pub fn compare_object_schema_backward(
             .and_then(Value::as_bool)
             == Some(false)
     {
-        reasons.push(
-            "new schema forbids additional properties previously accepted".to_string(),
-        );
+        reasons.push("new schema forbids additional properties previously accepted".to_string());
     }
 
     CompatibilityReport {
@@ -805,7 +799,6 @@ pub fn compare_object_schema_backward(
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -813,23 +806,35 @@ mod tests {
     #[test]
     fn embedded_registry_is_valid() {
         validate_embedded_registry().expect("registry must validate");
-        assert_eq!(registry().commands.len(), 29);
-        assert!(registry()
-            .common_errors
-            .iter()
-            .any(|code| code == "PERMISSION_DENIED"));
+        assert_eq!(registry().commands.len(), 36);
+        assert!(
+            registry()
+                .commands
+                .iter()
+                .any(|command| command.id == "diagnostics.summary")
+        );
+        assert!(
+            registry()
+                .common_errors
+                .iter()
+                .any(|code| code == "PERMISSION_DENIED")
+        );
         assert_eq!(registry().registry_format, 1);
     }
 
     #[test]
     fn reserved_and_deprecated_ids_cannot_be_reused() {
         let mut candidate = registry().clone();
-        candidate.reserved_command_ids.push("system.status".to_string());
+        candidate
+            .reserved_command_ids
+            .push("system.status".to_string());
         let error = validate_registry(&candidate).expect_err("reserved reuse must fail");
         assert_eq!(error.code, "REGISTRY_ID_REUSE");
 
         let mut candidate = registry().clone();
-        candidate.deprecated_command_ids.push("system.status".to_string());
+        candidate
+            .deprecated_command_ids
+            .push("system.status".to_string());
         let error = validate_registry(&candidate).expect_err("deprecated reuse must fail");
         assert_eq!(error.code, "REGISTRY_ID_REUSE");
     }
@@ -924,10 +929,14 @@ mod tests {
         let commands = dashboard["commands"].as_array().unwrap();
         assert!(commands.iter().any(|value| value["id"] == "system.status"));
         assert!(commands.iter().any(|value| value["id"] == "registry.list"));
-        assert!(!commands.iter().any(|value| value["id"] == "system.shutdown"));
+        assert!(
+            !commands
+                .iter()
+                .any(|value| value["id"] == "system.shutdown")
+        );
 
         let ai = compact_list(Some("ai"), Some("result."), 200);
-        assert_eq!(ai["commands"].as_array().unwrap().len(), 4);
+        assert_eq!(ai["commands"].as_array().unwrap().len(), 5);
     }
 
     #[test]
@@ -941,27 +950,38 @@ mod tests {
             .unwrap();
         }
         for max_bytes in [511, 16_385] {
-            assert!(validate_value(
-                &command.arguments_schema,
-                &json!({ "result_id": "RES-fixture", "max_bytes": max_bytes }),
-            )
-            .is_err());
+            assert!(
+                validate_value(
+                    &command.arguments_schema,
+                    &json!({ "result_id": "RES-fixture", "max_bytes": max_bytes }),
+                )
+                .is_err()
+            );
         }
-        assert!(validate_value(
-            &command.arguments_schema,
-            &json!({ "result_id": "RES-fixture" }),
-        )
-        .is_err());
+        assert!(
+            validate_value(
+                &command.arguments_schema,
+                &json!({ "result_id": "RES-fixture" }),
+            )
+            .is_err()
+        );
 
-        let focused = |pointers: Value| json!({
-            "result_id": "RES-fixture", "max_bytes": 1024,
-            "required_pointers": pointers
-        });
-        validate_value(&command.arguments_schema, &focused(json!(["/items/200/target_code"])))
-            .unwrap();
-        validate_value(&command.arguments_schema, &focused(json!([
-            "/a", "/b", "/c", "/d", "/e", "/f", "/g", "/h"
-        ]))).unwrap();
+        let focused = |pointers: Value| {
+            json!({
+                "result_id": "RES-fixture", "max_bytes": 1024,
+                "required_pointers": pointers
+            })
+        };
+        validate_value(
+            &command.arguments_schema,
+            &focused(json!(["/items/200/target_code"])),
+        )
+        .unwrap();
+        validate_value(
+            &command.arguments_schema,
+            &focused(json!(["/a", "/b", "/c", "/d", "/e", "/f", "/g", "/h"])),
+        )
+        .unwrap();
         for pointers in [
             json!([]),
             json!((0..9).map(|index| format!("/{index}")).collect::<Vec<_>>()),

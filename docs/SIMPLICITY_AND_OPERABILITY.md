@@ -262,6 +262,8 @@ It should answer:
 
 Do not require users to understand the internal architecture to repair common problems.
 
+Use one Diagnostics/Debug destination for health, workflow outcomes, and a previewable support report. Do not make users combine separate benchmark, daemon, and adapter reports by hand. Normal view gives status and next action; Detailed shows versions, timing, resource use, failure codes, and evidence limitations; Advanced links to bounded local logs. Unavailable real integrations or hardware must say UNTESTED plainly.
+
 ## Operability and toil
 
 RELAY can become a burden even when it technically works.

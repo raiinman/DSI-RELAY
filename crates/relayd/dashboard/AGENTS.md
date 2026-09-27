@@ -10,10 +10,16 @@ Own the static, local RELAY dashboard presentation.
 # Local Contracts
 
 - Use the canonical command path through the daemon; do not read project files, SQLite, or other local state from browser code.
-- Keep the primary view plain-language, responsive, and keyboard accessible. Put raw command output in Advanced details.
+- Keep the primary view plain-language, responsive, and keyboard accessible. Advanced details expose only allowlisted health metadata; do not render raw command output, arguments, logs, paths, identifiers, or arbitrary error text.
+- The Diagnostics & Debug section renders live `system.status`, `system.doctor`, and `diagnostics.summary` data through the shared command path. Component health must not be presented as an end-to-end workflow test result.
 - Announce refresh results in the status region, keep Refresh keyboard focusable while loading, and remove stale health/project details when a refresh fails.
 - Insert untrusted project names and details with text nodes, never HTML interpretation.
 - The dashboard's URL fragment carries a per-start local token. Browser code sends it only in the local command header and removes it from the visible address after loading.
+- The project inspection button invokes the shared `uefn.static.inspect` command and renders only bounded counts and capability limits.
+- Recent activity and usage use `transaction.list` and `usage.summary` through the same read-only command path; render allowlisted command/state and aggregate counters, never arguments, actor IDs, or raw transaction records.
+- Asset manifest selection stays in the local browser and sends only the selected bounded JSON to `assets.manifest.validate` or `assets.krita.inspect`; the dashboard displays finding counts and makes creator-app limits explicit.
+- Stored result summaries use `result.list` metadata only; never fetch payloads or provenance for the overview.
+- UEFN connection checks are user-initiated discovery probes; the UI does not present an MCP response as verified editor or play-session behavior.
 - No external assets, network services, telemetry, or browser storage.
 
 # Verification

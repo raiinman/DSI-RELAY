@@ -197,7 +197,18 @@ fn error(status: u16, reason: &str, code: &str) -> Vec<u8> {
 fn allowed_command(command: &str) -> bool {
     matches!(
         command,
-        "system.status" | "system.doctor" | "project.list" | "project.capabilities"
+        "system.status"
+            | "system.doctor"
+            | "diagnostics.summary"
+            | "project.list"
+            | "project.capabilities"
+            | "uefn.static.inspect"
+            | "uefn.mcp.discover"
+            | "assets.manifest.validate"
+            | "assets.krita.inspect"
+            | "usage.summary"
+            | "transaction.list"
+            | "result.list"
     ) && relay_contracts::registry::is_surface_exposed(command, "dashboard")
 }
 
@@ -276,7 +287,16 @@ fn handle_request(
                 matches!(command, "system.status" | "system.doctor"),
             );
             let authority = ExecutionAuthority::local_user("relay-dashboard");
-            let result = core.execute_authorized(command_request, &runtime, &authority);
+            let result = core.execute_authorized_with_extension(
+                command_request,
+                &runtime,
+                &authority,
+                |request| {
+                    crate::uefn::execute(core, request)
+                        .or_else(|| crate::assets::execute(core, request))
+                        .or_else(|| crate::verse::execute(core, request))
+                },
+            );
             json_response(
                 200,
                 "OK",

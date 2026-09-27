@@ -143,6 +143,10 @@ Blender and Krita are companion asset integrations.
 
 The first usable milestone should prove the architecture rather than attempt universal coverage.
 
+### Build and acceptance sequence
+
+Build the documented remaining roadmap phases as one product on `development/relay-v0.1`. Implement the shared command and evidence model, then the first UEFN editor and runtime workflows, asset workflows, CLI/dashboard/skill access, onboarding/recovery, and public packaging. Add one Diagnostics/Debug section as the workflows are built. During construction, run only the checks needed to keep the build working. After the complete experience is constructed, run one integrated acceptance pass that records PASS, FAIL, BLOCKED, or UNTESTED for each real workflow, together with versions, timing, resource use, fixed failure codes, reproducible privacy-safe logs, and evidence limits. Synthetic fixtures can verify internal behavior but cannot pass an unavailable UEFN, creator-app, or hardware workflow. Preserve the unpublished binary draft and leave `main` unmerged during construction.
+
 Required capabilities:
 
 - project registry and onboarding
@@ -229,7 +233,6 @@ These are intentionally not fixed yet:
 - remote-gateway hosting design
 - authentication implementation
 - packaging/update technology
-- public license and contributor copyright model
 - exact adapter API/ABI
 - exact compatibility matrix for UEFN versions
 

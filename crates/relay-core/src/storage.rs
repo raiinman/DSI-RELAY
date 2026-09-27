@@ -1,5 +1,5 @@
 use crate::indexing::{IndexChange, IndexedFileSnapshot};
-use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -327,19 +327,12 @@ fn opaque_id(prefix: &str) -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    let material = format!(
-        "{}:{}:{}:{}",
-        prefix,
-        std::process::id(),
-        now,
-        counter
-    );
+    let material = format!("{}:{}:{}:{}", prefix, std::process::id(), now, counter);
     let digest = Sha256::digest(material.as_bytes());
     let mut hex = String::with_capacity(32);
     for byte in digest.iter().take(16) {
         use std::fmt::Write as _;
-        write!(&mut hex, "{byte:02x}")
-            .expect("writing to String cannot fail");
+        write!(&mut hex, "{byte:02x}").expect("writing to String cannot fail");
     }
     format!("{prefix}-{hex}")
 }
@@ -349,8 +342,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
     let mut output = String::with_capacity(64);
     for byte in digest {
         use std::fmt::Write as _;
-        write!(&mut output, "{byte:02x}")
-            .expect("writing to String cannot fail");
+        write!(&mut output, "{byte:02x}").expect("writing to String cannot fail");
     }
     output
 }
@@ -359,12 +351,8 @@ fn sql_i64(value: u64) -> i64 {
 }
 
 fn json_text(value: &Value) -> Result<String, StorageError> {
-    serde_json::to_string(value).map_err(|error| {
-        StorageError::new(
-            "STORAGE_ERROR",
-            format!("serialize JSON: {error}"),
-        )
-    })
+    serde_json::to_string(value)
+        .map_err(|error| StorageError::new("STORAGE_ERROR", format!("serialize JSON: {error}")))
 }
 
 fn parse_json(text: &str, column: usize) -> Result<Value, rusqlite::Error> {
@@ -378,11 +366,9 @@ fn parse_json(text: &str, column: usize) -> Result<Value, rusqlite::Error> {
 }
 
 fn sqlite_now(conn: &Connection) -> Result<String, StorageError> {
-    conn.query_row(
-        "SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now')",
-        [],
-        |row| row.get(0),
-    )
+    conn.query_row("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now')", [], |row| {
+        row.get(0)
+    })
     .map_err(|error| StorageError::sqlite("read SQLite clock", error))
 }
 
@@ -413,9 +399,7 @@ impl RelayStorage {
                  PRAGMA foreign_keys=ON;
                  PRAGMA busy_timeout=3000;",
             )
-            .map_err(|error| {
-                StorageError::sqlite("configure database", error)
-            })
+            .map_err(|error| StorageError::sqlite("configure database", error))
     }
 
     fn migrate(&mut self) -> Result<(), StorageError> {
@@ -426,9 +410,7 @@ impl RelayStorage {
                     applied_at TEXT NOT NULL
                 );",
             )
-            .map_err(|error| {
-                StorageError::sqlite("create migration table", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("create migration table", error))?;
 
         let current = self.schema_version()?;
         if current > STORAGE_SCHEMA_VERSION {
@@ -469,9 +451,7 @@ impl RelayStorage {
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(|error| {
-                StorageError::sqlite("begin schema-1 migration", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("begin schema-1 migration", error))?;
 
         tx.execute_batch(
             "CREATE TABLE projects (
@@ -492,9 +472,7 @@ impl RelayStorage {
                 created_at TEXT NOT NULL
             );",
         )
-        .map_err(|error| {
-            StorageError::sqlite("create schema-1 tables", error)
-        })?;
+        .map_err(|error| StorageError::sqlite("create schema-1 tables", error))?;
         tx.execute_batch(
             "CREATE TABLE jobs (
                 id TEXT PRIMARY KEY,
@@ -511,30 +489,23 @@ impl RelayStorage {
             CREATE INDEX jobs_project_updated
               ON jobs(project_id, updated_at);",
         )
-        .map_err(|error| {
-            StorageError::sqlite("create schema-1 job tables", error)
-        })?;
+        .map_err(|error| StorageError::sqlite("create schema-1 job tables", error))?;
 
         tx.execute(
             "INSERT INTO schema_migrations(version, applied_at)
              VALUES (?1, ?2)",
             params![1i64, applied_at],
         )
-        .map_err(|error| {
-            StorageError::sqlite("record schema migration 1", error)
-        })?;
-        tx.commit().map_err(|error| {
-            StorageError::sqlite("commit schema migration 1", error)
-        })
+        .map_err(|error| StorageError::sqlite("record schema migration 1", error))?;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit schema migration 1", error))
     }
     fn apply_schema_two(&mut self) -> Result<(), StorageError> {
         let applied_at = sqlite_now(&self.conn)?;
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(|error| {
-                StorageError::sqlite("begin schema-2 migration", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("begin schema-2 migration", error))?;
 
         tx.execute_batch(
             "ALTER TABLE results
@@ -553,20 +524,15 @@ impl RelayStorage {
                created_at TEXT NOT NULL
              );",
         )
-        .map_err(|error| {
-            StorageError::sqlite("apply schema migration 2", error)
-        })?;
+        .map_err(|error| StorageError::sqlite("apply schema migration 2", error))?;
         tx.execute(
             "INSERT INTO schema_migrations(version, applied_at)
              VALUES (?1, ?2)",
             params![2i64, applied_at],
         )
-        .map_err(|error| {
-            StorageError::sqlite("record schema migration 2", error)
-        })?;
-        tx.commit().map_err(|error| {
-            StorageError::sqlite("commit schema migration 2", error)
-        })
+        .map_err(|error| StorageError::sqlite("record schema migration 2", error))?;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit schema migration 2", error))
     }
 
     fn apply_schema_three(&mut self) -> Result<(), StorageError> {
@@ -574,9 +540,7 @@ impl RelayStorage {
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(|error| {
-                StorageError::sqlite("begin schema-3 migration", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("begin schema-3 migration", error))?;
 
         tx.execute_batch(
             "CREATE TABLE transactions (
@@ -632,9 +596,7 @@ impl RelayStorage {
              CREATE INDEX usage_metrics_command
                ON usage_metrics(command, created_at);",
         )
-        .map_err(|error| {
-            StorageError::sqlite("create schema-3 transaction/usage tables", error)
-        })?;
+        .map_err(|error| StorageError::sqlite("create schema-3 transaction/usage tables", error))?;
 
         tx.execute_batch(
             "CREATE TABLE credential_handles (
@@ -670,21 +632,16 @@ impl RelayStorage {
              CREATE INDEX egress_destination_created
                ON egress_ledger(destination, created_at);",
         )
-        .map_err(|error| {
-            StorageError::sqlite("create schema-3 credential/egress tables", error)
-        })?;
+        .map_err(|error| StorageError::sqlite("create schema-3 credential/egress tables", error))?;
 
         tx.execute(
             "INSERT INTO schema_migrations(version, applied_at)
              VALUES (?1, ?2)",
             params![3i64, applied_at],
         )
-        .map_err(|error| {
-            StorageError::sqlite("record schema migration 3", error)
-        })?;
-        tx.commit().map_err(|error| {
-            StorageError::sqlite("commit schema migration 3", error)
-        })
+        .map_err(|error| StorageError::sqlite("record schema migration 3", error))?;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit schema migration 3", error))
     }
 
     fn apply_schema_four(&mut self) -> Result<(), StorageError> {
@@ -692,9 +649,7 @@ impl RelayStorage {
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(|error| {
-                StorageError::sqlite("begin schema-4 migration", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("begin schema-4 migration", error))?;
 
         tx.execute_batch(
             "CREATE TABLE project_index_state (
@@ -733,21 +688,16 @@ impl RelayStorage {
              CREATE INDEX project_changes_project_generation
                ON project_changes(project_id, generation, detected_at);",
         )
-        .map_err(|error| {
-            StorageError::sqlite("create schema-4 project index tables", error)
-        })?;
+        .map_err(|error| StorageError::sqlite("create schema-4 project index tables", error))?;
 
         tx.execute(
             "INSERT INTO schema_migrations(version, applied_at)
              VALUES (?1, ?2)",
             params![4i64, applied_at],
         )
-        .map_err(|error| {
-            StorageError::sqlite("record schema migration 4", error)
-        })?;
-        tx.commit().map_err(|error| {
-            StorageError::sqlite("commit schema migration 4", error)
-        })
+        .map_err(|error| StorageError::sqlite("record schema migration 4", error))?;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit schema migration 4", error))
     }
 
     fn apply_schema_five(&mut self) -> Result<(), StorageError> {
@@ -755,9 +705,7 @@ impl RelayStorage {
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(|error| {
-                StorageError::sqlite("begin schema-5 migration", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("begin schema-5 migration", error))?;
         tx.execute_batch(
             "ALTER TABLE project_index_state
                ADD COLUMN baseline_generation INTEGER NOT NULL DEFAULT 1;
@@ -778,42 +726,44 @@ impl RelayStorage {
              CREATE INDEX project_dependency_edges_target
                ON project_dependency_edges(project_id, target_path);",
         )
-        .map_err(|error| {
-            StorageError::sqlite("create schema-5 dependency tables", error)
-        })?;
+        .map_err(|error| StorageError::sqlite("create schema-5 dependency tables", error))?;
         tx.execute(
             "INSERT INTO schema_migrations(version, applied_at)
              VALUES (?1, ?2)",
             params![5i64, applied_at],
         )
-        .map_err(|error| {
-            StorageError::sqlite("record schema migration 5", error)
-        })?;
-        tx.commit().map_err(|error| {
-            StorageError::sqlite("commit schema migration 5", error)
-        })
+        .map_err(|error| StorageError::sqlite("record schema migration 5", error))?;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit schema migration 5", error))
     }
 
     fn apply_schema_six(&mut self) -> Result<(), StorageError> {
         let applied_at = sqlite_now(&self.conn)?;
-        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| StorageError::sqlite("begin schema-6 migration", error))?;
         tx.execute_batch(
             "ALTER TABLE project_index_state
                ADD COLUMN content_verification_required INTEGER NOT NULL DEFAULT 0;
              UPDATE project_index_state
                SET status = 'stale', content_verification_required = 1;",
-        ).map_err(|error| StorageError::sqlite("update schema-6 project index state", error))?;
+        )
+        .map_err(|error| StorageError::sqlite("update schema-6 project index state", error))?;
         tx.execute(
             "INSERT INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
             params![6i64, applied_at],
-        ).map_err(|error| StorageError::sqlite("record schema migration 6", error))?;
-        tx.commit().map_err(|error| StorageError::sqlite("commit schema migration 6", error))
+        )
+        .map_err(|error| StorageError::sqlite("record schema migration 6", error))?;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit schema migration 6", error))
     }
 
     fn apply_schema_seven(&mut self) -> Result<(), StorageError> {
         let applied_at = sqlite_now(&self.conn)?;
-        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| StorageError::sqlite("begin schema-7 migration", error))?;
         tx.execute_batch(
             "CREATE TABLE project_configuration (
@@ -825,13 +775,16 @@ impl RelayStorage {
                adapter_version TEXT,
                updated_at TEXT NOT NULL,
                CHECK((adapter_id IS NULL) = (adapter_version IS NULL))
-             );"
-        ).map_err(|error| StorageError::sqlite("create schema-7 project configuration", error))?;
+             );",
+        )
+        .map_err(|error| StorageError::sqlite("create schema-7 project configuration", error))?;
         tx.execute(
             "INSERT INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
             params![7i64, applied_at],
-        ).map_err(|error| StorageError::sqlite("record schema migration 7", error))?;
-        tx.commit().map_err(|error| StorageError::sqlite("commit schema migration 7", error))
+        )
+        .map_err(|error| StorageError::sqlite("record schema migration 7", error))?;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit schema migration 7", error))
     }
 
     pub fn db_path(&self) -> &Path {
@@ -846,25 +799,20 @@ impl RelayStorage {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|error| {
-                StorageError::sqlite("read schema version", error)
-            })
+            .map_err(|error| StorageError::sqlite("read schema version", error))
     }
 
     pub fn sqlite_version(&self) -> Result<String, StorageError> {
         self.conn
             .query_row("SELECT sqlite_version()", [], |row| row.get(0))
-            .map_err(|error| {
-                StorageError::sqlite("read SQLite version", error)
-            })
+            .map_err(|error| StorageError::sqlite("read SQLite version", error))
     }
 
     pub fn integrity(&self) -> Result<StorageHealth, StorageError> {
-        let check: String = self.conn
+        let check: String = self
+            .conn
             .query_row("PRAGMA quick_check", [], |row| row.get(0))
-            .map_err(|error| {
-                StorageError::sqlite("run quick_check", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("run quick_check", error))?;
         Ok(StorageHealth {
             ok: check == "ok",
             check,
@@ -896,19 +844,11 @@ impl RelayStorage {
                    updated_at=excluded.updated_at",
                 params![id, name, root_uri, now, now],
             )
-            .map_err(|error| {
-                StorageError::sqlite("register project", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("register project", error))?;
         self.get_project(&id)?
-            .ok_or_else(|| StorageError::new(
-                "STORAGE_ERROR",
-                "project disappeared after write",
-            ))
+            .ok_or_else(|| StorageError::new("STORAGE_ERROR", "project disappeared after write"))
     }
-    pub fn get_project(
-        &self,
-        id: &str,
-    ) -> Result<Option<ProjectRecord>, StorageError> {
+    pub fn get_project(&self, id: &str) -> Result<Option<ProjectRecord>, StorageError> {
         self.conn
             .query_row(
                 "SELECT id, name, root_uri, created_at, updated_at
@@ -925,22 +865,17 @@ impl RelayStorage {
                 },
             )
             .optional()
-            .map_err(|error| {
-                StorageError::sqlite("read project", error)
-            })
+            .map_err(|error| StorageError::sqlite("read project", error))
     }
 
-    pub fn list_projects(
-        &self,
-    ) -> Result<Vec<ProjectRecord>, StorageError> {
-        let mut statement = self.conn
+    pub fn list_projects(&self) -> Result<Vec<ProjectRecord>, StorageError> {
+        let mut statement = self
+            .conn
             .prepare(
                 "SELECT id, name, root_uri, created_at, updated_at
                  FROM projects ORDER BY created_at, id",
             )
-            .map_err(|error| {
-                StorageError::sqlite("prepare project list", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("prepare project list", error))?;
         let rows = statement
             .query_map([], |row| {
                 Ok(ProjectRecord {
@@ -951,15 +886,11 @@ impl RelayStorage {
                     updated_at: row.get(4)?,
                 })
             })
-            .map_err(|error| {
-                StorageError::sqlite("query project list", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("query project list", error))?;
 
         let mut projects = Vec::new();
         for row in rows {
-            projects.push(row.map_err(|error| {
-                StorageError::sqlite("decode project row", error)
-            })?);
+            projects.push(row.map_err(|error| StorageError::sqlite("decode project row", error))?);
         }
         Ok(projects)
     }
@@ -968,23 +899,26 @@ impl RelayStorage {
         &self,
         project_id: &str,
     ) -> Result<Option<ProjectConfiguration>, StorageError> {
-        self.conn.query_row(
-            "SELECT project_id, revision, format_version, project_type,
+        self.conn
+            .query_row(
+                "SELECT project_id, revision, format_version, project_type,
                     adapter_id, adapter_version, updated_at
              FROM project_configuration WHERE project_id = ?1",
-            [project_id],
-            |row| Ok(ProjectConfiguration {
-                project_id: row.get(0)?,
-                revision: row.get(1)?,
-                format_version: row.get(2)?,
-                project_type: row.get(3)?,
-                adapter_id: row.get(4)?,
-                adapter_version: row.get(5)?,
-                updated_at: row.get(6)?,
-            }),
-        ).optional().map_err(|error| {
-            StorageError::sqlite("read project configuration", error)
-        })
+                [project_id],
+                |row| {
+                    Ok(ProjectConfiguration {
+                        project_id: row.get(0)?,
+                        revision: row.get(1)?,
+                        format_version: row.get(2)?,
+                        project_type: row.get(3)?,
+                        adapter_id: row.get(4)?,
+                        adapter_version: row.get(5)?,
+                        updated_at: row.get(6)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|error| StorageError::sqlite("read project configuration", error))
     }
 
     pub fn put_project_configuration(
@@ -996,30 +930,42 @@ impl RelayStorage {
         adapter_version: Option<&str>,
     ) -> Result<ProjectConfiguration, StorageError> {
         let now = sqlite_now(&self.conn)?;
-        let tx = self.conn.unchecked_transaction().map_err(|error| {
-            StorageError::sqlite("begin project configuration update", error)
-        })?;
-        let project_exists: i64 = tx.query_row(
-            "SELECT COUNT(*) FROM projects WHERE id = ?1",
-            [project_id],
-            |row| row.get(0),
-        ).map_err(|error| StorageError::sqlite("check configured project", error))?;
+        let tx = self
+            .conn
+            .unchecked_transaction()
+            .map_err(|error| StorageError::sqlite("begin project configuration update", error))?;
+        let project_exists: i64 = tx
+            .query_row(
+                "SELECT COUNT(*) FROM projects WHERE id = ?1",
+                [project_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| StorageError::sqlite("check configured project", error))?;
         if project_exists == 0 {
             return Err(StorageError::new("PROJECT_NOT_FOUND", "project not found"));
         }
-        let current_revision: Option<i64> = tx.query_row(
-            "SELECT revision FROM project_configuration WHERE project_id = ?1",
-            [project_id],
-            |row| row.get(0),
-        ).optional().map_err(|error| StorageError::sqlite("read configuration revision", error))?;
+        let current_revision: Option<i64> = tx
+            .query_row(
+                "SELECT revision FROM project_configuration WHERE project_id = ?1",
+                [project_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| StorageError::sqlite("read configuration revision", error))?;
         if current_revision.unwrap_or(0) != expected_revision {
             return Err(StorageError::new(
                 "PROJECT_CONFIG_CONFLICT",
-                format!("expected configuration revision {expected_revision}, found {}", current_revision.unwrap_or(0)),
+                format!(
+                    "expected configuration revision {expected_revision}, found {}",
+                    current_revision.unwrap_or(0)
+                ),
             ));
         }
         let next_revision = expected_revision.checked_add(1).ok_or_else(|| {
-            StorageError::new("PROJECT_CONFIG_CONFLICT", "configuration revision exhausted")
+            StorageError::new(
+                "PROJECT_CONFIG_CONFLICT",
+                "configuration revision exhausted",
+            )
         })?;
         tx.execute(
             "INSERT INTO project_configuration(
@@ -1032,15 +978,30 @@ impl RelayStorage {
                adapter_id=excluded.adapter_id,
                adapter_version=excluded.adapter_version,
                updated_at=excluded.updated_at",
-            params![project_id, next_revision, project_type, adapter_id, adapter_version, now],
-        ).map_err(|error| StorageError::sqlite("write project configuration", error))?;
+            params![
+                project_id,
+                next_revision,
+                project_type,
+                adapter_id,
+                adapter_version,
+                now
+            ],
+        )
+        .map_err(|error| StorageError::sqlite("write project configuration", error))?;
         tx.execute(
             "DELETE FROM project_dependency_edges WHERE project_id = ?1",
             [project_id],
-        ).map_err(|error| StorageError::sqlite("invalidate edges after configuration change", error))?;
-        tx.commit().map_err(|error| StorageError::sqlite("commit project configuration", error))?;
+        )
+        .map_err(|error| {
+            StorageError::sqlite("invalidate edges after configuration change", error)
+        })?;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit project configuration", error))?;
         self.get_project_configuration(project_id)?.ok_or_else(|| {
-            StorageError::new("STORAGE_ERROR", "project configuration disappeared after update")
+            StorageError::new(
+                "STORAGE_ERROR",
+                "project configuration disappeared after update",
+            )
         })
     }
 
@@ -1070,19 +1031,19 @@ impl RelayStorage {
                 },
             )
             .optional()
-            .map_err(|error| {
-                StorageError::sqlite("read project index state", error)
-            })
+            .map_err(|error| StorageError::sqlite("read project index state", error))
     }
 
     pub fn mark_project_index_stale(&self, project_id: &str) -> Result<(), StorageError> {
         let now = sqlite_now(&self.conn)?;
-        self.conn.execute(
-            "UPDATE project_index_state
+        self.conn
+            .execute(
+                "UPDATE project_index_state
              SET status = 'stale', content_verification_required = 1, updated_at = ?2
              WHERE project_id = ?1",
-            params![project_id, now],
-        ).map_err(|error| StorageError::sqlite("mark project index stale", error))?;
+                params![project_id, now],
+            )
+            .map_err(|error| StorageError::sqlite("mark project index stale", error))?;
         Ok(())
     }
 
@@ -1099,9 +1060,7 @@ impl RelayStorage {
                  WHERE project_id = ?1
                  ORDER BY relative_path",
             )
-            .map_err(|error| {
-                StorageError::sqlite("prepare project file list", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("prepare project file list", error))?;
         let rows = statement
             .query_map([project_id], |row| {
                 Ok(IndexedFileSnapshot {
@@ -1111,15 +1070,12 @@ impl RelayStorage {
                     content_sha256: row.get(3)?,
                 })
             })
-            .map_err(|error| {
-                StorageError::sqlite("query project file list", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("query project file list", error))?;
 
         let mut files = Vec::new();
         for row in rows {
-            files.push(row.map_err(|error| {
-                StorageError::sqlite("decode project file row", error)
-            })?);
+            files
+                .push(row.map_err(|error| StorageError::sqlite("decode project file row", error))?);
         }
         Ok(files)
     }
@@ -1141,28 +1097,27 @@ impl RelayStorage {
         project_id: &str,
         relative_paths: &[String],
     ) -> Result<Vec<IndexedFileSnapshot>, StorageError> {
-        let mut statement = self.conn.prepare(
-            "SELECT relative_path, size_bytes, modified_unix_ns, content_sha256
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT relative_path, size_bytes, modified_unix_ns, content_sha256
              FROM project_files
              WHERE project_id = ?1 AND relative_path = ?2",
-        ).map_err(|error| {
-            StorageError::sqlite("prepare hinted file lookup", error)
-        })?;
+            )
+            .map_err(|error| StorageError::sqlite("prepare hinted file lookup", error))?;
         let mut files = Vec::new();
         for relative_path in relative_paths {
-            let file = statement.query_row(
-                params![project_id, relative_path],
-                |row| {
+            let file = statement
+                .query_row(params![project_id, relative_path], |row| {
                     Ok(IndexedFileSnapshot {
                         relative_path: row.get(0)?,
                         size_bytes: row.get::<_, i64>(1)?.max(0) as u64,
                         modified_unix_ns: row.get::<_, i64>(2)?.max(0) as u64,
                         content_sha256: row.get(3)?,
                     })
-                },
-            ).optional().map_err(|error| {
-                StorageError::sqlite("read hinted file", error)
-            })?;
+                })
+                .optional()
+                .map_err(|error| StorageError::sqlite("read hinted file", error))?;
             if let Some(file) = file {
                 files.push(file);
             }
@@ -1177,9 +1132,10 @@ impl RelayStorage {
         total_bytes: u64,
     ) -> Result<ProjectIndexState, StorageError> {
         let now = sqlite_now(&self.conn)?;
-        let tx = self.conn.unchecked_transaction().map_err(|error| {
-            StorageError::sqlite("begin project baseline transaction", error)
-        })?;
+        let tx = self
+            .conn
+            .unchecked_transaction()
+            .map_err(|error| StorageError::sqlite("begin project baseline transaction", error))?;
 
         let project_exists: i64 = tx
             .query_row(
@@ -1187,14 +1143,9 @@ impl RelayStorage {
                 [project_id],
                 |row| row.get(0),
             )
-            .map_err(|error| {
-                StorageError::sqlite("verify project for baseline", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("verify project for baseline", error))?;
         if project_exists == 0 {
-            return Err(StorageError::new(
-                "PROJECT_NOT_FOUND",
-                "project not found",
-            ));
+            return Err(StorageError::new("PROJECT_NOT_FOUND", "project not found"));
         }
 
         let current_generation: Option<i64> = tx
@@ -1205,32 +1156,24 @@ impl RelayStorage {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|error| {
-                StorageError::sqlite("read baseline generation", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("read baseline generation", error))?;
         let generation = current_generation.unwrap_or(0).saturating_add(1);
 
         tx.execute(
             "DELETE FROM project_files WHERE project_id = ?1",
             [project_id],
         )
-        .map_err(|error| {
-            StorageError::sqlite("clear prior project files", error)
-        })?;
+        .map_err(|error| StorageError::sqlite("clear prior project files", error))?;
         tx.execute(
             "DELETE FROM project_changes WHERE project_id = ?1",
             [project_id],
         )
-        .map_err(|error| {
-            StorageError::sqlite("clear prior project changes", error)
-        })?;
+        .map_err(|error| StorageError::sqlite("clear prior project changes", error))?;
         tx.execute(
             "DELETE FROM project_dependency_edges WHERE project_id = ?1",
             [project_id],
         )
-        .map_err(|error| {
-            StorageError::sqlite("clear prior project dependencies", error)
-        })?;
+        .map_err(|error| StorageError::sqlite("clear prior project dependencies", error))?;
 
         for file in files {
             tx.execute(
@@ -1247,9 +1190,7 @@ impl RelayStorage {
                     now,
                 ],
             )
-            .map_err(|error| {
-                StorageError::sqlite("insert baseline file", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("insert baseline file", error))?;
         }
 
         tx.execute(
@@ -1274,18 +1215,16 @@ impl RelayStorage {
                 now,
             ],
         )
-        .map_err(|error| {
-            StorageError::sqlite("write project baseline state", error)
-        })?;
+        .map_err(|error| StorageError::sqlite("write project baseline state", error))?;
 
-        tx.commit().map_err(|error| {
-            StorageError::sqlite("commit project baseline", error)
-        })?;
-        self.get_project_index_state(project_id)?
-            .ok_or_else(|| StorageError::new(
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit project baseline", error))?;
+        self.get_project_index_state(project_id)?.ok_or_else(|| {
+            StorageError::new(
                 "STORAGE_ERROR",
                 "project index state disappeared after baseline write",
-            ))
+            )
+        })
     }
 
     pub fn apply_project_reconciliation(
@@ -1307,9 +1246,10 @@ impl RelayStorage {
             IndexCommitMode::HintsOnly => "stale",
         };
         let now = sqlite_now(&self.conn)?;
-        let tx = self.conn.unchecked_transaction().map_err(|error| {
-            StorageError::sqlite("begin project reconciliation", error)
-        })?;
+        let tx = self
+            .conn
+            .unchecked_transaction()
+            .map_err(|error| StorageError::sqlite("begin project reconciliation", error))?;
 
         let current_state: Option<(i64, bool)> = tx
             .query_row(
@@ -1319,9 +1259,7 @@ impl RelayStorage {
                 |row| Ok((row.get(0)?, row.get::<_, i64>(1)? != 0)),
             )
             .optional()
-            .map_err(|error| {
-                StorageError::sqlite("read reconciliation generation", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("read reconciliation generation", error))?;
 
         let Some((current_generation, verification_required)) = current_state else {
             return Err(StorageError::new(
@@ -1338,7 +1276,8 @@ impl RelayStorage {
             ));
         }
         if matches!(mode, IndexCommitMode::Authoritative)
-            && verification_required && !content_verified
+            && verification_required
+            && !content_verified
         {
             return Err(StorageError::new(
                 "INDEX_CONTENT_VERIFICATION_REQUIRED",
@@ -1348,9 +1287,12 @@ impl RelayStorage {
         let next_generation = current_generation.saturating_add(1);
 
         for change in changes {
-            for path in [Some(change.relative_path.as_str()), change.previous_path.as_deref()]
-                .into_iter()
-                .flatten()
+            for path in [
+                Some(change.relative_path.as_str()),
+                change.previous_path.as_deref(),
+            ]
+            .into_iter()
+            .flatten()
             {
                 tx.execute(
                     "DELETE FROM project_dependency_edges
@@ -1369,9 +1311,7 @@ impl RelayStorage {
                          WHERE project_id = ?1 AND relative_path = ?2",
                         params![project_id, change.relative_path],
                     )
-                    .map_err(|error| {
-                        StorageError::sqlite("delete indexed file", error)
-                    })?;
+                    .map_err(|error| StorageError::sqlite("delete indexed file", error))?;
                 }
                 "renamed" => {
                     if let Some(previous_path) = &change.previous_path {
@@ -1381,10 +1321,7 @@ impl RelayStorage {
                             params![project_id, previous_path],
                         )
                         .map_err(|error| {
-                            StorageError::sqlite(
-                                "remove renamed indexed path",
-                                error,
-                            )
+                            StorageError::sqlite("remove renamed indexed path", error)
                         })?;
                     }
                 }
@@ -1412,9 +1349,7 @@ impl RelayStorage {
                     now,
                 ],
             )
-            .map_err(|error| {
-                StorageError::sqlite("upsert reconciled file", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("upsert reconciled file", error))?;
         }
 
         for change in changes {
@@ -1436,9 +1371,7 @@ impl RelayStorage {
                     now,
                 ],
             )
-            .map_err(|error| {
-                StorageError::sqlite("record project change", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("record project change", error))?;
         }
 
         tx.execute(
@@ -1462,18 +1395,16 @@ impl RelayStorage {
                 now,
             ],
         )
-        .map_err(|error| {
-            StorageError::sqlite("update project index state", error)
-        })?;
+        .map_err(|error| StorageError::sqlite("update project index state", error))?;
 
-        tx.commit().map_err(|error| {
-            StorageError::sqlite("commit project reconciliation", error)
-        })?;
-        self.get_project_index_state(project_id)?
-            .ok_or_else(|| StorageError::new(
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit project reconciliation", error))?;
+        self.get_project_index_state(project_id)?.ok_or_else(|| {
+            StorageError::new(
                 "STORAGE_ERROR",
                 "project index state disappeared after reconciliation",
-            ))
+            )
+        })
     }
 
     pub fn list_project_changes(
@@ -1481,41 +1412,42 @@ impl RelayStorage {
         project_id: &str,
         limit: usize,
     ) -> Result<Vec<ProjectChangeRecord>, StorageError> {
-        let mut statement = self.conn.prepare(
-            "SELECT id, project_id, generation, change_kind,
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT id, project_id, generation, change_kind,
                     relative_path, previous_path,
                     before_sha256, after_sha256, detected_at
              FROM project_changes
              WHERE project_id = ?1
              ORDER BY generation DESC, detected_at DESC, id DESC
              LIMIT ?2",
-        ).map_err(|error| {
-            StorageError::sqlite("prepare project change list", error)
-        })?;
-        let rows = statement.query_map(
-            params![project_id, i64::try_from(limit).unwrap_or(i64::MAX)],
-            |row| {
-                Ok(ProjectChangeRecord {
-                    id: row.get(0)?,
-                    project_id: row.get(1)?,
-                    generation: row.get(2)?,
-                    change_kind: row.get(3)?,
-                    relative_path: row.get(4)?,
-                    previous_path: row.get(5)?,
-                    before_sha256: row.get(6)?,
-                    after_sha256: row.get(7)?,
-                    detected_at: row.get(8)?,
-                })
-            },
-        ).map_err(|error| {
-            StorageError::sqlite("query project change list", error)
-        })?;
+            )
+            .map_err(|error| StorageError::sqlite("prepare project change list", error))?;
+        let rows = statement
+            .query_map(
+                params![project_id, i64::try_from(limit).unwrap_or(i64::MAX)],
+                |row| {
+                    Ok(ProjectChangeRecord {
+                        id: row.get(0)?,
+                        project_id: row.get(1)?,
+                        generation: row.get(2)?,
+                        change_kind: row.get(3)?,
+                        relative_path: row.get(4)?,
+                        previous_path: row.get(5)?,
+                        before_sha256: row.get(6)?,
+                        after_sha256: row.get(7)?,
+                        detected_at: row.get(8)?,
+                    })
+                },
+            )
+            .map_err(|error| StorageError::sqlite("query project change list", error))?;
 
         let mut records = Vec::new();
         for row in rows {
-            records.push(row.map_err(|error| {
-                StorageError::sqlite("decode project change row", error)
-            })?);
+            records.push(
+                row.map_err(|error| StorageError::sqlite("decode project change row", error))?,
+            );
         }
         Ok(records)
     }
@@ -1526,44 +1458,45 @@ impl RelayStorage {
         after_generation: i64,
         limit: usize,
     ) -> Result<Vec<ProjectChangeRecord>, StorageError> {
-        let mut statement = self.conn.prepare(
-            "SELECT id, project_id, generation, change_kind,
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT id, project_id, generation, change_kind,
                     relative_path, previous_path,
                     before_sha256, after_sha256, detected_at
              FROM project_changes
              WHERE project_id = ?1 AND generation > ?2
              ORDER BY generation, relative_path, id
              LIMIT ?3",
-        ).map_err(|error| {
-            StorageError::sqlite("prepare project changes since", error)
-        })?;
-        let rows = statement.query_map(
-            params![
-                project_id,
-                after_generation,
-                i64::try_from(limit).unwrap_or(i64::MAX)
-            ],
-            |row| {
-                Ok(ProjectChangeRecord {
-                    id: row.get(0)?,
-                    project_id: row.get(1)?,
-                    generation: row.get(2)?,
-                    change_kind: row.get(3)?,
-                    relative_path: row.get(4)?,
-                    previous_path: row.get(5)?,
-                    before_sha256: row.get(6)?,
-                    after_sha256: row.get(7)?,
-                    detected_at: row.get(8)?,
-                })
-            },
-        ).map_err(|error| {
-            StorageError::sqlite("query project changes since", error)
-        })?;
+            )
+            .map_err(|error| StorageError::sqlite("prepare project changes since", error))?;
+        let rows = statement
+            .query_map(
+                params![
+                    project_id,
+                    after_generation,
+                    i64::try_from(limit).unwrap_or(i64::MAX)
+                ],
+                |row| {
+                    Ok(ProjectChangeRecord {
+                        id: row.get(0)?,
+                        project_id: row.get(1)?,
+                        generation: row.get(2)?,
+                        change_kind: row.get(3)?,
+                        relative_path: row.get(4)?,
+                        previous_path: row.get(5)?,
+                        before_sha256: row.get(6)?,
+                        after_sha256: row.get(7)?,
+                        detected_at: row.get(8)?,
+                    })
+                },
+            )
+            .map_err(|error| StorageError::sqlite("query project changes since", error))?;
         let mut records = Vec::new();
         for row in rows {
-            records.push(row.map_err(|error| {
-                StorageError::sqlite("decode project change since", error)
-            })?);
+            records.push(
+                row.map_err(|error| StorageError::sqlite("decode project change since", error))?,
+            );
         }
         Ok(records)
     }
@@ -1583,16 +1516,18 @@ impl RelayStorage {
             targets,
         } = replacement;
         let now = sqlite_now(&self.conn)?;
-        let tx = self.conn.unchecked_transaction().map_err(|error| {
-            StorageError::sqlite("begin dependency replacement", error)
-        })?;
-        let index_state: Option<(i64, String)> = tx.query_row(
-            "SELECT generation, status FROM project_index_state WHERE project_id = ?1",
-            [project_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        ).optional().map_err(|error| {
-            StorageError::sqlite("read dependency index generation", error)
-        })?;
+        let tx = self
+            .conn
+            .unchecked_transaction()
+            .map_err(|error| StorageError::sqlite("begin dependency replacement", error))?;
+        let index_state: Option<(i64, String)> = tx
+            .query_row(
+                "SELECT generation, status FROM project_index_state WHERE project_id = ?1",
+                [project_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(|error| StorageError::sqlite("read dependency index generation", error))?;
         let Some((generation, status)) = index_state else {
             return Err(StorageError::new(
                 "INDEX_BASELINE_MISSING",
@@ -1611,33 +1546,36 @@ impl RelayStorage {
                 format!("expected generation {expected_generation}, found {generation}"),
             ));
         }
-        if let Some((expected_revision, expected_adapter_id, expected_adapter_version)) = configuration_guard {
+        if let Some((expected_revision, expected_adapter_id, expected_adapter_version)) =
+            configuration_guard
+        {
             let selected: Option<(i64, Option<String>, Option<String>)> = tx.query_row(
                 "SELECT revision, adapter_id, adapter_version FROM project_configuration WHERE project_id = ?1",
                 [project_id],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             ).optional().map_err(|error| StorageError::sqlite("read parser selection", error))?;
-            if !selected.is_some_and(|(revision, id, version)|
+            if !selected.is_some_and(|(revision, id, version)| {
                 revision == expected_revision
                     && id.as_deref() == Some(expected_adapter_id)
                     && version.as_deref() == Some(expected_adapter_version)
                     && producer_id == expected_adapter_id
-                    && producer_version == expected_adapter_version)
-            {
+                    && producer_version == expected_adapter_version
+            }) {
                 return Err(StorageError::new(
                     "PROJECT_CONFIG_CONFLICT",
                     "project parser selection changed before dependency replacement",
                 ));
             }
         }
-        let source_sha256: Option<String> = tx.query_row(
-            "SELECT content_sha256 FROM project_files
+        let source_sha256: Option<String> = tx
+            .query_row(
+                "SELECT content_sha256 FROM project_files
              WHERE project_id = ?1 AND relative_path = ?2",
-            params![project_id, source_path],
-            |row| row.get(0),
-        ).optional().map_err(|error| {
-            StorageError::sqlite("read dependency source", error)
-        })?;
+                params![project_id, source_path],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| StorageError::sqlite("read dependency source", error))?;
         let Some(source_sha256) = source_sha256 else {
             return Err(StorageError::new(
                 "INDEX_FILE_NOT_FOUND",
@@ -1651,14 +1589,14 @@ impl RelayStorage {
             ));
         }
         for target in targets {
-            let found: i64 = tx.query_row(
-                "SELECT COUNT(*) FROM project_files
+            let found: i64 = tx
+                .query_row(
+                    "SELECT COUNT(*) FROM project_files
                  WHERE project_id = ?1 AND relative_path = ?2",
-                params![project_id, target],
-                |row| row.get(0),
-            ).map_err(|error| {
-                StorageError::sqlite("verify dependency target", error)
-            })?;
+                    params![project_id, target],
+                    |row| row.get(0),
+                )
+                .map_err(|error| StorageError::sqlite("verify dependency target", error))?;
             if found == 0 {
                 return Err(StorageError::new(
                     "INDEX_FILE_NOT_FOUND",
@@ -1671,9 +1609,8 @@ impl RelayStorage {
             "DELETE FROM project_dependency_edges
              WHERE project_id = ?1 AND source_path = ?2 AND producer_id = ?3",
             params![project_id, source_path, producer_id],
-        ).map_err(|error| {
-            StorageError::sqlite("clear prior source dependency edges", error)
-        })?;
+        )
+        .map_err(|error| StorageError::sqlite("clear prior source dependency edges", error))?;
         for target in targets {
             tx.execute(
                 "INSERT INTO project_dependency_edges(
@@ -1681,16 +1618,20 @@ impl RelayStorage {
                     producer_id, producer_version, indexed_generation, updated_at
                  ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
-                    project_id, source_path, target, source_sha256,
-                    producer_id, producer_version, generation, now
+                    project_id,
+                    source_path,
+                    target,
+                    source_sha256,
+                    producer_id,
+                    producer_version,
+                    generation,
+                    now
                 ],
-            ).map_err(|error| {
-                StorageError::sqlite("insert dependency edge", error)
-            })?;
+            )
+            .map_err(|error| StorageError::sqlite("insert dependency edge", error))?;
         }
-        tx.commit().map_err(|error| {
-            StorageError::sqlite("commit dependency replacement", error)
-        })?;
+        tx.commit()
+            .map_err(|error| StorageError::sqlite("commit dependency replacement", error))?;
         Ok(targets.len())
     }
 
@@ -1700,37 +1641,40 @@ impl RelayStorage {
         source_path: Option<&str>,
         limit: usize,
     ) -> Result<Vec<DependencyEdgeRecord>, StorageError> {
-        let mut statement = self.conn.prepare(
-            "SELECT project_id, source_path, target_path, source_sha256,
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT project_id, source_path, target_path, source_sha256,
                     producer_id, producer_version, indexed_generation
              FROM project_dependency_edges
              WHERE project_id = ?1 AND (?2 IS NULL OR source_path = ?2)
              ORDER BY source_path, target_path, producer_id
              LIMIT ?3",
-        ).map_err(|error| {
-            StorageError::sqlite("prepare dependency edge list", error)
-        })?;
-        let rows = statement.query_map(
-            params![project_id, source_path, i64::try_from(limit).unwrap_or(i64::MAX)],
-            |row| {
-                Ok(DependencyEdgeRecord {
-                    project_id: row.get(0)?,
-                    source_path: row.get(1)?,
-                    target_path: row.get(2)?,
-                    source_sha256: row.get(3)?,
-                    producer_id: row.get(4)?,
-                    producer_version: row.get(5)?,
-                    indexed_generation: row.get(6)?,
-                })
-            },
-        ).map_err(|error| {
-            StorageError::sqlite("query dependency edges", error)
-        })?;
+            )
+            .map_err(|error| StorageError::sqlite("prepare dependency edge list", error))?;
+        let rows = statement
+            .query_map(
+                params![
+                    project_id,
+                    source_path,
+                    i64::try_from(limit).unwrap_or(i64::MAX)
+                ],
+                |row| {
+                    Ok(DependencyEdgeRecord {
+                        project_id: row.get(0)?,
+                        source_path: row.get(1)?,
+                        target_path: row.get(2)?,
+                        source_sha256: row.get(3)?,
+                        producer_id: row.get(4)?,
+                        producer_version: row.get(5)?,
+                        indexed_generation: row.get(6)?,
+                    })
+                },
+            )
+            .map_err(|error| StorageError::sqlite("query dependency edges", error))?;
         let mut edges = Vec::new();
         for row in rows {
-            edges.push(row.map_err(|error| {
-                StorageError::sqlite("decode dependency edge", error)
-            })?);
+            edges.push(row.map_err(|error| StorageError::sqlite("decode dependency edge", error))?);
         }
         Ok(edges)
     }
@@ -1771,20 +1715,12 @@ impl RelayStorage {
                     trust
                 ],
             )
-            .map_err(|error| {
-                StorageError::sqlite("store result", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("store result", error))?;
 
         self.get_result(&id)?
-            .ok_or_else(|| StorageError::new(
-                "STORAGE_ERROR",
-                "result disappeared after write",
-            ))
+            .ok_or_else(|| StorageError::new("STORAGE_ERROR", "result disappeared after write"))
     }
-    pub fn get_result(
-        &self,
-        id: &str,
-    ) -> Result<Option<ResultRecord>, StorageError> {
+    pub fn get_result(&self, id: &str) -> Result<Option<ResultRecord>, StorageError> {
         self.conn
             .query_row(
                 "SELECT id, project_id, kind, schema_version,
@@ -1810,15 +1746,10 @@ impl RelayStorage {
                 },
             )
             .optional()
-            .map_err(|error| {
-                StorageError::sqlite("read result", error)
-            })
+            .map_err(|error| StorageError::sqlite("read result", error))
     }
 
-    pub fn describe_result(
-        &self,
-        id: &str,
-    ) -> Result<Option<ResultDescription>, StorageError> {
+    pub fn describe_result(&self, id: &str) -> Result<Option<ResultDescription>, StorageError> {
         self.conn
             .query_row(
                 "SELECT id, project_id, kind, schema_version,
@@ -1841,9 +1772,43 @@ impl RelayStorage {
                 },
             )
             .optional()
-            .map_err(|error| {
-                StorageError::sqlite("describe result", error)
+            .map_err(|error| StorageError::sqlite("describe result", error))
+    }
+
+    /// Return metadata only; payload and provenance remain in result.get.
+    pub fn list_result_descriptions(
+        &self,
+        project_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<ResultDescription>, StorageError> {
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT id, project_id, kind, schema_version,
+                    producer_version, payload_sha256,
+                    length(CAST(payload_json AS BLOB)), trust, created_at
+             FROM results
+             WHERE (?1 IS NULL OR project_id = ?1)
+             ORDER BY created_at DESC, id DESC LIMIT ?2",
+            )
+            .map_err(|error| StorageError::sqlite("prepare result list", error))?;
+        let rows = statement
+            .query_map(params![project_id, limit as i64], |row| {
+                Ok(ResultDescription {
+                    id: row.get(0)?,
+                    project_id: row.get(1)?,
+                    kind: row.get(2)?,
+                    schema_version: row.get(3)?,
+                    producer_version: row.get(4)?,
+                    payload_sha256: row.get(5)?,
+                    payload_bytes: row.get(6)?,
+                    trust: row.get(7)?,
+                    created_at: row.get(8)?,
+                })
             })
+            .map_err(|error| StorageError::sqlite("query result list", error))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| StorageError::sqlite("decode result list", error))
     }
 
     pub fn checkpoint_job(
@@ -1894,21 +1859,13 @@ impl RelayStorage {
                     trust
                 ],
             )
-            .map_err(|error| {
-                StorageError::sqlite("checkpoint job", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("checkpoint job", error))?;
 
         self.get_job(&id)?
-            .ok_or_else(|| StorageError::new(
-                "STORAGE_ERROR",
-                "job disappeared after write",
-            ))
+            .ok_or_else(|| StorageError::new("STORAGE_ERROR", "job disappeared after write"))
     }
 
-    pub fn get_job(
-        &self,
-        id: &str,
-    ) -> Result<Option<JobRecord>, StorageError> {
+    pub fn get_job(&self, id: &str) -> Result<Option<JobRecord>, StorageError> {
         self.conn
             .query_row(
                 "SELECT id, project_id, command, state,
@@ -1935,15 +1892,10 @@ impl RelayStorage {
                 },
             )
             .optional()
-            .map_err(|error| {
-                StorageError::sqlite("read job", error)
-            })
+            .map_err(|error| StorageError::sqlite("read job", error))
     }
 
-    pub fn get_idempotency(
-        &self,
-        key: &str,
-    ) -> Result<Option<IdempotencyRecord>, StorageError> {
+    pub fn get_idempotency(&self, key: &str) -> Result<Option<IdempotencyRecord>, StorageError> {
         self.conn
             .query_row(
                 "SELECT key, command, request_sha256, response_json
@@ -1959,9 +1911,7 @@ impl RelayStorage {
                 },
             )
             .optional()
-            .map_err(|error| {
-                StorageError::sqlite("read idempotency record", error)
-            })
+            .map_err(|error| StorageError::sqlite("read idempotency record", error))
     }
     pub fn put_idempotency(
         &self,
@@ -1977,28 +1927,16 @@ impl RelayStorage {
                     key, command, request_sha256,
                     response_json, created_at
                  ) VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![
-                    key,
-                    command,
-                    request_sha256,
-                    response_json,
-                    created_at
-                ],
+                params![key, command, request_sha256, response_json, created_at],
             )
             .map_err(|error| {
                 if matches!(
                     error.sqlite_error_code(),
                     Some(rusqlite::ErrorCode::ConstraintViolation)
                 ) {
-                    StorageError::new(
-                        "IDEMPOTENCY_CONFLICT",
-                        "idempotency key already exists",
-                    )
+                    StorageError::new("IDEMPOTENCY_CONFLICT", "idempotency key already exists")
                 } else {
-                    StorageError::sqlite(
-                        "store idempotency record",
-                        error,
-                    )
+                    StorageError::sqlite("store idempotency record", error)
                 }
             })?;
         Ok(())
@@ -2040,14 +1978,9 @@ impl RelayStorage {
                     now,
                 ],
             )
-            .map_err(|error| {
-                StorageError::sqlite("begin transaction record", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("begin transaction record", error))?;
         self.get_transaction(&id)?.ok_or_else(|| {
-            StorageError::new(
-                "STORAGE_ERROR",
-                "transaction disappeared after write",
-            )
+            StorageError::new("STORAGE_ERROR", "transaction disappeared after write")
         })
     }
 
@@ -2070,21 +2003,21 @@ impl RelayStorage {
                      project_id=COALESCE(?8, project_id)
                  WHERE id=?1",
                 params![
-                    id, state, after_ref, verification,
-                    result_id, job_id, now, project_id
+                    id,
+                    state,
+                    after_ref,
+                    verification,
+                    result_id,
+                    job_id,
+                    now,
+                    project_id
                 ],
             )
-            .map_err(|error| {
-                StorageError::sqlite("finish transaction record", error)
-            })?;
-        self.get_transaction(id)?.ok_or_else(|| {
-            StorageError::new("TRANSACTION_NOT_FOUND", "transaction not found")
-        })
+            .map_err(|error| StorageError::sqlite("finish transaction record", error))?;
+        self.get_transaction(id)?
+            .ok_or_else(|| StorageError::new("TRANSACTION_NOT_FOUND", "transaction not found"))
     }
-    pub fn get_transaction(
-        &self,
-        id: &str,
-    ) -> Result<Option<TransactionRecord>, StorageError> {
+    pub fn get_transaction(&self, id: &str) -> Result<Option<TransactionRecord>, StorageError> {
         self.conn
             .query_row(
                 "SELECT id, project_id, request_id, command,
@@ -2122,9 +2055,7 @@ impl RelayStorage {
                 },
             )
             .optional()
-            .map_err(|error| {
-                StorageError::sqlite("read transaction record", error)
-            })
+            .map_err(|error| StorageError::sqlite("read transaction record", error))
     }
 
     pub fn list_transactions(
@@ -2140,29 +2071,22 @@ impl RelayStorage {
                  WHERE (?1 IS NULL OR project_id=?1)
                  ORDER BY created_at DESC, id DESC LIMIT ?2",
             )
-            .map_err(|error| {
-                StorageError::sqlite("prepare transaction list", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("prepare transaction list", error))?;
         let ids = statement
             .query_map(params![project_id, limit], |row| row.get::<_, String>(0))
-            .map_err(|error| {
-                StorageError::sqlite("query transaction list", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("query transaction list", error))?;
         let mut output = Vec::new();
         for id in ids {
-            if let Some(record) = self.get_transaction(&id.map_err(|error| {
-                StorageError::sqlite("decode transaction ID", error)
-            })?)? {
+            if let Some(record) = self.get_transaction(
+                &id.map_err(|error| StorageError::sqlite("decode transaction ID", error))?,
+            )? {
                 output.push(record);
             }
         }
         Ok(output)
     }
 
-    pub fn record_usage(
-        &self,
-        input: UsageMetricInput<'_>,
-    ) -> Result<(), StorageError> {
+    pub fn record_usage(&self, input: UsageMetricInput<'_>) -> Result<(), StorageError> {
         let id = opaque_id("USG");
         let now = sqlite_now(&self.conn)?;
         self.conn
@@ -2201,9 +2125,7 @@ impl RelayStorage {
                     now,
                 ],
             )
-            .map_err(|error| {
-                StorageError::sqlite("record usage metric", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("record usage metric", error))?;
         Ok(())
     }
 
@@ -2238,9 +2160,7 @@ impl RelayStorage {
                     })
                 },
             )
-            .map_err(|error| {
-                StorageError::sqlite("read usage summary", error)
-            })
+            .map_err(|error| StorageError::sqlite("read usage summary", error))
     }
 
     pub fn upsert_credential_handle(
@@ -2251,14 +2171,12 @@ impl RelayStorage {
         status: &str,
     ) -> Result<CredentialHandleRecord, StorageError> {
         let now = sqlite_now(&self.conn)?;
-        let scopes_json = json_text(
-            &serde_json::to_value(scopes).map_err(|error| {
-                StorageError::new(
-                    "STORAGE_ERROR",
-                    format!("serialize credential scopes: {error}"),
-                )
-            })?,
-        )?;
+        let scopes_json = json_text(&serde_json::to_value(scopes).map_err(|error| {
+            StorageError::new(
+                "STORAGE_ERROR",
+                format!("serialize credential scopes: {error}"),
+            )
+        })?)?;
         self.conn
             .execute(
                 "INSERT INTO credential_handles(
@@ -2272,17 +2190,9 @@ impl RelayStorage {
                    updated_at=excluded.updated_at",
                 params![id, integration, scopes_json, status, now],
             )
-            .map_err(|error| {
-                StorageError::sqlite(
-                    "store credential handle metadata",
-                    error,
-                )
-            })?;
+            .map_err(|error| StorageError::sqlite("store credential handle metadata", error))?;
         self.get_credential_handle(id)?.ok_or_else(|| {
-            StorageError::new(
-                "STORAGE_ERROR",
-                "credential handle disappeared after write",
-            )
+            StorageError::new("STORAGE_ERROR", "credential handle disappeared after write")
         })
     }
 
@@ -2317,32 +2227,20 @@ impl RelayStorage {
                 },
             )
             .optional()
-            .map_err(|error| {
-                StorageError::sqlite(
-                    "read credential handle metadata",
-                    error,
-                )
-            })
+            .map_err(|error| StorageError::sqlite("read credential handle metadata", error))
     }
 
-    pub fn revoke_credential_handle(
-        &self,
-        id: &str,
-    ) -> Result<(), StorageError> {
+    pub fn revoke_credential_handle(&self, id: &str) -> Result<(), StorageError> {
         let now = sqlite_now(&self.conn)?;
-        let changed = self.conn
+        let changed = self
+            .conn
             .execute(
                 "UPDATE credential_handles
                  SET status='revoked', updated_at=?2
                  WHERE id=?1",
                 params![id, now],
             )
-            .map_err(|error| {
-                StorageError::sqlite(
-                    "revoke credential handle metadata",
-                    error,
-                )
-            })?;
+            .map_err(|error| StorageError::sqlite("revoke credential handle metadata", error))?;
         if changed == 0 {
             return Err(StorageError::new(
                 "CREDENTIAL_HANDLE_NOT_FOUND",
@@ -2358,27 +2256,24 @@ impl RelayStorage {
     ) -> Result<EgressLedgerRecord, StorageError> {
         let id = opaque_id("EGR");
         let now = sqlite_now(&self.conn)?;
-        let data_classes_json =
-            serde_json::to_string(input.data_classes).map_err(|error| {
-                StorageError::new(
-                    "STORAGE_ERROR",
-                    format!("serialize egress data classes: {error}"),
-                )
-            })?;
-        let modalities_json =
-            serde_json::to_string(input.modalities).map_err(|error| {
-                StorageError::new(
-                    "STORAGE_ERROR",
-                    format!("serialize egress modalities: {error}"),
-                )
-            })?;
-        let source_refs_json =
-            serde_json::to_string(input.source_refs).map_err(|error| {
-                StorageError::new(
-                    "STORAGE_ERROR",
-                    format!("serialize egress source refs: {error}"),
-                )
-            })?;
+        let data_classes_json = serde_json::to_string(input.data_classes).map_err(|error| {
+            StorageError::new(
+                "STORAGE_ERROR",
+                format!("serialize egress data classes: {error}"),
+            )
+        })?;
+        let modalities_json = serde_json::to_string(input.modalities).map_err(|error| {
+            StorageError::new(
+                "STORAGE_ERROR",
+                format!("serialize egress modalities: {error}"),
+            )
+        })?;
+        let source_refs_json = serde_json::to_string(input.source_refs).map_err(|error| {
+            StorageError::new(
+                "STORAGE_ERROR",
+                format!("serialize egress source refs: {error}"),
+            )
+        })?;
 
         self.conn
             .execute(
@@ -2413,9 +2308,7 @@ impl RelayStorage {
                     now,
                 ],
             )
-            .map_err(|error| {
-                StorageError::sqlite("record egress ledger entry", error)
-            })?;
+            .map_err(|error| StorageError::sqlite("record egress ledger entry", error))?;
         self.get_egress(&id)?.ok_or_else(|| {
             StorageError::new(
                 "STORAGE_ERROR",
@@ -2424,10 +2317,7 @@ impl RelayStorage {
         })
     }
 
-    pub fn get_egress(
-        &self,
-        id: &str,
-    ) -> Result<Option<EgressLedgerRecord>, StorageError> {
+    pub fn get_egress(&self, id: &str) -> Result<Option<EgressLedgerRecord>, StorageError> {
         self.conn
             .query_row(
                 "SELECT id, project_id, request_id,
@@ -2450,32 +2340,29 @@ impl RelayStorage {
                         client_id: row.get(4)?,
                         delegator_id: row.get(5)?,
                         destination: row.get(6)?,
-                        data_classes: serde_json::from_str(
-                            &data_classes_json,
-                        )
-                        .map_err(|error| {
+                        data_classes: serde_json::from_str(&data_classes_json).map_err(
+                            |error| {
+                                rusqlite::Error::FromSqlConversionFailure(
+                                    7,
+                                    rusqlite::types::Type::Text,
+                                    Box::new(error),
+                                )
+                            },
+                        )?,
+                        modalities: serde_json::from_str(&modalities_json).map_err(|error| {
                             rusqlite::Error::FromSqlConversionFailure(
-                                7,
+                                8,
                                 rusqlite::types::Type::Text,
                                 Box::new(error),
                             )
                         })?,
-                        modalities: serde_json::from_str(&modalities_json)
-                            .map_err(|error| {
-                                rusqlite::Error::FromSqlConversionFailure(
-                                    8,
-                                    rusqlite::types::Type::Text,
-                                    Box::new(error),
-                                )
-                            })?,
-                        source_refs: serde_json::from_str(&source_refs_json)
-                            .map_err(|error| {
-                                rusqlite::Error::FromSqlConversionFailure(
-                                    9,
-                                    rusqlite::types::Type::Text,
-                                    Box::new(error),
-                                )
-                            })?,
+                        source_refs: serde_json::from_str(&source_refs_json).map_err(|error| {
+                            rusqlite::Error::FromSqlConversionFailure(
+                                9,
+                                rusqlite::types::Type::Text,
+                                Box::new(error),
+                            )
+                        })?,
                         purpose: row.get(10)?,
                         approx_bytes: row.get::<_, i64>(11)? as u64,
                         approx_tokens: row.get::<_, i64>(12)? as u64,
@@ -2487,13 +2374,9 @@ impl RelayStorage {
                 },
             )
             .optional()
-            .map_err(|error| {
-                StorageError::sqlite("read egress ledger entry", error)
-            })
+            .map_err(|error| StorageError::sqlite("read egress ledger entry", error))
     }
-
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -2528,7 +2411,8 @@ mod tests {
                created_at TEXT NOT NULL,
                updated_at TEXT NOT NULL
              );",
-        ).unwrap();
+        )
+        .unwrap();
         conn.execute_batch(
             "CREATE TABLE results (
                id TEXT PRIMARY KEY,
@@ -2554,7 +2438,8 @@ mod tests {
                ON results(project_id, created_at);
              CREATE INDEX jobs_project_updated
                ON jobs(project_id, updated_at);",
-        ).unwrap();
+        )
+        .unwrap();
         conn.execute(
             "INSERT INTO projects VALUES (?1,?2,?3,?4,?5)",
             params![
@@ -2564,7 +2449,8 @@ mod tests {
                 "2026-09-25T00:00:00Z",
                 "2026-09-25T00:00:00Z"
             ],
-        ).unwrap();
+        )
+        .unwrap();
         let payload = r#"{"value":42}"#;
         conn.execute(
             "INSERT INTO results VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
@@ -2578,7 +2464,8 @@ mod tests {
                 sha256_hex(payload.as_bytes()),
                 "2026-09-25T00:00:00Z"
             ],
-        ).unwrap();
+        )
+        .unwrap();
         conn.execute(
             "INSERT INTO jobs VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
             params![
@@ -2591,7 +2478,8 @@ mod tests {
                 "2026-09-25T00:00:00Z",
                 "2026-09-25T00:00:00Z"
             ],
-        ).unwrap();
+        )
+        .unwrap();
     }
 
     fn create_schema_two_fixture(path: &Path) {
@@ -2712,10 +2600,7 @@ mod tests {
         let result = storage.get_result("RES-phase1").unwrap().unwrap();
         assert_eq!(result.payload["value"], 42);
         assert_eq!(result.trust, "local");
-        let replay = storage
-            .get_idempotency("IDEMP-schema2")
-            .unwrap()
-            .unwrap();
+        let replay = storage.get_idempotency("IDEMP-schema2").unwrap().unwrap();
         assert_eq!(replay.command, "result.put");
         assert_eq!(replay.request_sha256, "fixture-sha");
         assert_eq!(storage.usage_summary().unwrap().command_count, 0);
@@ -2819,8 +2704,14 @@ mod tests {
 
         let migrated = RelayStorage::open(&path).unwrap();
         assert_eq!(migrated.schema_version().unwrap(), 7);
-        assert_eq!(migrated.get_project("PRJ-phase1").unwrap().unwrap().name, "Phase 1 Fixture");
-        assert_eq!(migrated.get_result("RES-phase1").unwrap().unwrap().payload["value"], 42);
+        assert_eq!(
+            migrated.get_project("PRJ-phase1").unwrap().unwrap().name,
+            "Phase 1 Fixture"
+        );
+        assert_eq!(
+            migrated.get_result("RES-phase1").unwrap().unwrap().payload["value"],
+            42
+        );
         assert!(migrated.get_job("JOB-phase1").unwrap().is_some());
         assert!(migrated.get_idempotency("IDEMP-schema2").unwrap().is_some());
         let preserved = migrated.get_transaction(&transaction.id).unwrap().unwrap();
@@ -2830,12 +2721,29 @@ mod tests {
         assert_eq!(preserved.state, "COMPLETED");
         assert_eq!(migrated.usage_summary().unwrap().command_count, 1);
         assert_eq!(
-            migrated.get_credential_handle("credential.schema3").unwrap().unwrap().status,
+            migrated
+                .get_credential_handle("credential.schema3")
+                .unwrap()
+                .unwrap()
+                .status,
             "active"
         );
-        assert_eq!(migrated.get_egress(&egress.id).unwrap().unwrap().decision, "blocked");
-        assert!(migrated.get_project_index_state("PRJ-phase1").unwrap().is_none());
-        assert!(migrated.list_project_files("PRJ-phase1").unwrap().is_empty());
+        assert_eq!(
+            migrated.get_egress(&egress.id).unwrap().unwrap().decision,
+            "blocked"
+        );
+        assert!(
+            migrated
+                .get_project_index_state("PRJ-phase1")
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            migrated
+                .list_project_files("PRJ-phase1")
+                .unwrap()
+                .is_empty()
+        );
         drop(migrated);
         fs::remove_dir_all(dir).unwrap();
     }
@@ -2851,56 +2759,85 @@ mod tests {
             conn,
         };
         schema_four.configure().unwrap();
-        schema_four.conn.execute_batch(
-            "CREATE TABLE schema_migrations (
+        schema_four
+            .conn
+            .execute_batch(
+                "CREATE TABLE schema_migrations (
                 version INTEGER PRIMARY KEY,
                 applied_at TEXT NOT NULL
             );",
-        ).unwrap();
+            )
+            .unwrap();
         schema_four.apply_schema_one().unwrap();
         schema_four.apply_schema_two().unwrap();
         schema_four.apply_schema_three().unwrap();
         schema_four.apply_schema_four().unwrap();
         assert_eq!(schema_four.schema_version().unwrap(), 4);
-        schema_four.conn.execute(
-            "INSERT INTO projects(id, name, root_uri, created_at, updated_at)
+        schema_four
+            .conn
+            .execute(
+                "INSERT INTO projects(id, name, root_uri, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?4)",
-            params!["PRJ-schema4", "Schema 4", "file:///fixture", "fixture"],
-        ).unwrap();
-        schema_four.conn.execute(
-            "INSERT INTO project_index_state(
+                params!["PRJ-schema4", "Schema 4", "file:///fixture", "fixture"],
+            )
+            .unwrap();
+        schema_four
+            .conn
+            .execute(
+                "INSERT INTO project_index_state(
                 project_id, generation, status, file_count,
                 total_bytes, last_reconciled_at, updated_at
              ) VALUES (?1, 3, 'ready', 1, 4, 'fixture', 'fixture')",
-            ["PRJ-schema4"],
-        ).unwrap();
-        schema_four.conn.execute(
-            "INSERT INTO project_files(
+                ["PRJ-schema4"],
+            )
+            .unwrap();
+        schema_four
+            .conn
+            .execute(
+                "INSERT INTO project_files(
                 project_id, relative_path, size_bytes,
                 modified_unix_ns, content_sha256, indexed_at
              ) VALUES (?1, ?2, 4, 42, ?3, 'fixture')",
-            params!["PRJ-schema4", "src/a.txt", "a".repeat(64)],
-        ).unwrap();
-        schema_four.conn.execute(
-            "INSERT INTO project_changes(
+                params!["PRJ-schema4", "src/a.txt", "a".repeat(64)],
+            )
+            .unwrap();
+        schema_four
+            .conn
+            .execute(
+                "INSERT INTO project_changes(
                 id, project_id, generation, change_kind,
                 relative_path, previous_path, before_sha256,
                 after_sha256, detected_at
              ) VALUES (?1, ?2, 3, 'added', ?3, NULL, NULL, ?4, 'fixture')",
-            params!["CHG-schema4", "PRJ-schema4", "src/a.txt", "a".repeat(64)],
-        ).unwrap();
+                params!["CHG-schema4", "PRJ-schema4", "src/a.txt", "a".repeat(64)],
+            )
+            .unwrap();
         drop(schema_four);
 
         let migrated = RelayStorage::open(&path).unwrap();
         assert_eq!(migrated.schema_version().unwrap(), 7);
-        let state = migrated.get_project_index_state("PRJ-schema4").unwrap().unwrap();
+        let state = migrated
+            .get_project_index_state("PRJ-schema4")
+            .unwrap()
+            .unwrap();
         assert_eq!(state.generation, 3);
         assert_eq!(state.baseline_generation, 3);
         assert_eq!(state.status, "stale");
         assert!(state.content_verification_required);
         assert_eq!(migrated.list_project_files("PRJ-schema4").unwrap().len(), 1);
-        assert_eq!(migrated.list_project_changes("PRJ-schema4", 10).unwrap().len(), 1);
-        assert!(migrated.list_project_dependency_edges("PRJ-schema4", None, 10).unwrap().is_empty());
+        assert_eq!(
+            migrated
+                .list_project_changes("PRJ-schema4", 10)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            migrated
+                .list_project_dependency_edges("PRJ-schema4", None, 10)
+                .unwrap()
+                .is_empty()
+        );
         drop(migrated);
         fs::remove_dir_all(dir).unwrap();
     }
@@ -2911,7 +2848,10 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
         let conn = Connection::open(&path).unwrap();
-        let mut schema_five = RelayStorage { db_path: path.clone(), conn };
+        let mut schema_five = RelayStorage {
+            db_path: path.clone(),
+            conn,
+        };
         schema_five.configure().unwrap();
         schema_five.conn.execute_batch(
             "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);"
@@ -2922,22 +2862,31 @@ mod tests {
         schema_five.apply_schema_four().unwrap();
         schema_five.apply_schema_five().unwrap();
         assert_eq!(schema_five.schema_version().unwrap(), 5);
-        schema_five.conn.execute(
-            "INSERT INTO projects(id, name, root_uri, created_at, updated_at)
+        schema_five
+            .conn
+            .execute(
+                "INSERT INTO projects(id, name, root_uri, created_at, updated_at)
              VALUES ('PRJ-schema5', 'Schema 5', 'file:///fixture', 'fixture', 'fixture')",
-            [],
-        ).unwrap();
-        schema_five.conn.execute(
-            "INSERT INTO project_index_state(project_id, generation, baseline_generation,
+                [],
+            )
+            .unwrap();
+        schema_five
+            .conn
+            .execute(
+                "INSERT INTO project_index_state(project_id, generation, baseline_generation,
              status, file_count, total_bytes, last_reconciled_at, updated_at)
              VALUES ('PRJ-schema5', 4, 1, 'ready', 0, 0, 'fixture', 'fixture')",
-            [],
-        ).unwrap();
+                [],
+            )
+            .unwrap();
         drop(schema_five);
 
         let migrated = RelayStorage::open(&path).unwrap();
         assert_eq!(migrated.schema_version().unwrap(), 7);
-        let state = migrated.get_project_index_state("PRJ-schema5").unwrap().unwrap();
+        let state = migrated
+            .get_project_index_state("PRJ-schema5")
+            .unwrap()
+            .unwrap();
         assert_eq!(state.generation, 4);
         assert_eq!(state.baseline_generation, 1);
         assert_eq!(state.status, "stale");
@@ -2952,7 +2901,10 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
         let conn = Connection::open(&path).unwrap();
-        let mut schema_six = RelayStorage { db_path: path.clone(), conn };
+        let mut schema_six = RelayStorage {
+            db_path: path.clone(),
+            conn,
+        };
         schema_six.configure().unwrap();
         schema_six.conn.execute_batch(
             "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);"
@@ -2964,24 +2916,38 @@ mod tests {
         schema_six.apply_schema_five().unwrap();
         schema_six.apply_schema_six().unwrap();
         assert_eq!(schema_six.schema_version().unwrap(), 6);
-        schema_six.conn.execute(
-            "INSERT INTO projects(id, name, root_uri, created_at, updated_at)
+        schema_six
+            .conn
+            .execute(
+                "INSERT INTO projects(id, name, root_uri, created_at, updated_at)
              VALUES ('PRJ-schema6', 'Schema 6', 'file:///fixture', 'fixture', 'fixture')",
-            [],
-        ).unwrap();
-        schema_six.conn.execute(
-            "INSERT INTO project_index_state(project_id, generation, baseline_generation,
+                [],
+            )
+            .unwrap();
+        schema_six
+            .conn
+            .execute(
+                "INSERT INTO project_index_state(project_id, generation, baseline_generation,
              status, file_count, total_bytes, last_reconciled_at, updated_at,
              content_verification_required)
              VALUES ('PRJ-schema6', 4, 1, 'stale', 0, 0, 'fixture', 'fixture', 1)",
-            [],
-        ).unwrap();
+                [],
+            )
+            .unwrap();
         drop(schema_six);
 
         let migrated = RelayStorage::open(&path).unwrap();
         assert_eq!(migrated.schema_version().unwrap(), 7);
-        assert!(migrated.get_project_configuration("PRJ-schema6").unwrap().is_none());
-        let index = migrated.get_project_index_state("PRJ-schema6").unwrap().unwrap();
+        assert!(
+            migrated
+                .get_project_configuration("PRJ-schema6")
+                .unwrap()
+                .is_none()
+        );
+        let index = migrated
+            .get_project_index_state("PRJ-schema6")
+            .unwrap()
+            .unwrap();
         assert_eq!(index.generation, 4);
         assert!(index.content_verification_required);
         drop(migrated);
@@ -2995,18 +2961,10 @@ mod tests {
         let path = dir.join("relay.sqlite3");
         let storage = RelayStorage::open(&path).unwrap();
         storage
-            .register_project(
-                Some("PRJ-index-a"),
-                "Index A",
-                "file:///fixture-a",
-            )
+            .register_project(Some("PRJ-index-a"), "Index A", "file:///fixture-a")
             .unwrap();
         storage
-            .register_project(
-                Some("PRJ-index-b"),
-                "Index B",
-                "file:///fixture-b",
-            )
+            .register_project(Some("PRJ-index-b"), "Index B", "file:///fixture-b")
             .unwrap();
 
         let a_files = vec![
@@ -3069,17 +3027,11 @@ mod tests {
             .unwrap();
         assert_eq!(next.generation, 2);
         assert_eq!(
-            storage.list_project_files("PRJ-index-a").unwrap()[0]
-                .content_sha256,
+            storage.list_project_files("PRJ-index-a").unwrap()[0].content_sha256,
             "d".repeat(64)
         );
-        assert_eq!(
-            storage.list_project_files("PRJ-index-b").unwrap(),
-            b_files
-        );
-        let history = storage
-            .list_project_changes("PRJ-index-a", 10)
-            .unwrap();
+        assert_eq!(storage.list_project_files("PRJ-index-b").unwrap(), b_files);
+        let history = storage.list_project_changes("PRJ-index-a", 10).unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].generation, 2);
 
@@ -3108,10 +3060,7 @@ mod tests {
                 .generation,
             2
         );
-        assert_eq!(
-            reopened.list_project_files("PRJ-index-b").unwrap(),
-            b_files
-        );
+        assert_eq!(reopened.list_project_files("PRJ-index-b").unwrap(), b_files);
         drop(reopened);
         fs::remove_dir_all(dir).unwrap();
     }
@@ -3122,19 +3071,26 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("relay.sqlite3");
         let storage = RelayStorage::open(&path).unwrap();
-        storage.register_project(Some("PRJ-recovery"), "Recovery", "file:///fixture").unwrap();
+        storage
+            .register_project(Some("PRJ-recovery"), "Recovery", "file:///fixture")
+            .unwrap();
         let file = IndexedFileSnapshot {
             relative_path: "one.txt".to_string(),
             size_bytes: 1,
             modified_unix_ns: 1,
             content_sha256: "a".repeat(64),
         };
-        storage.replace_project_baseline("PRJ-recovery", &[file], 1).unwrap();
+        storage
+            .replace_project_baseline("PRJ-recovery", &[file], 1)
+            .unwrap();
         storage.mark_project_index_stale("PRJ-recovery").unwrap();
         drop(storage);
 
         let reopened = RelayStorage::open(&path).unwrap();
-        let state = reopened.get_project_index_state("PRJ-recovery").unwrap().unwrap();
+        let state = reopened
+            .get_project_index_state("PRJ-recovery")
+            .unwrap()
+            .unwrap();
         assert_eq!(state.status, "stale");
         assert!(state.content_verification_required);
         let commit = |content_verified| ProjectIndexCommit {
@@ -3147,9 +3103,18 @@ mod tests {
             mode: IndexCommitMode::Authoritative,
             content_verified,
         };
-        let error = reopened.apply_project_reconciliation(commit(false)).unwrap_err();
+        let error = reopened
+            .apply_project_reconciliation(commit(false))
+            .unwrap_err();
         assert_eq!(error.code, "INDEX_CONTENT_VERIFICATION_REQUIRED");
-        assert_eq!(reopened.get_project_index_state("PRJ-recovery").unwrap().unwrap().generation, 1);
+        assert_eq!(
+            reopened
+                .get_project_index_state("PRJ-recovery")
+                .unwrap()
+                .unwrap()
+                .generation,
+            1
+        );
         let ready = reopened.apply_project_reconciliation(commit(true)).unwrap();
         assert_eq!(ready.status, "ready");
         assert!(!ready.content_verification_required);
@@ -3161,31 +3126,17 @@ mod tests {
     fn idempotency_record_round_trip_and_conflict() {
         let dir = temp_dir("idempotency");
         fs::create_dir_all(&dir).unwrap();
-        let storage =
-            RelayStorage::open(dir.join("relay.sqlite3")).unwrap();
+        let storage = RelayStorage::open(dir.join("relay.sqlite3")).unwrap();
 
         storage
-            .put_idempotency(
-                "IDEMP-fixture",
-                "result.put",
-                "abc123",
-                r#"{"ok":true}"#,
-            )
+            .put_idempotency("IDEMP-fixture", "result.put", "abc123", r#"{"ok":true}"#)
             .unwrap();
-        let record = storage
-            .get_idempotency("IDEMP-fixture")
-            .unwrap()
-            .unwrap();
+        let record = storage.get_idempotency("IDEMP-fixture").unwrap().unwrap();
         assert_eq!(record.command, "result.put");
         assert_eq!(record.request_sha256, "abc123");
 
         let error = storage
-            .put_idempotency(
-                "IDEMP-fixture",
-                "result.put",
-                "different",
-                r#"{"ok":true}"#,
-            )
+            .put_idempotency("IDEMP-fixture", "result.put", "different", r#"{"ok":true}"#)
             .expect_err("duplicate idempotency key must fail");
         assert_eq!(error.code, "IDEMPOTENCY_CONFLICT");
         drop(storage);
@@ -3195,8 +3146,7 @@ mod tests {
     fn schema_five_transaction_usage_credential_and_egress_round_trip() {
         let dir = temp_dir("schema3");
         fs::create_dir_all(&dir).unwrap();
-        let storage =
-            RelayStorage::open(dir.join("relay.sqlite3")).unwrap();
+        let storage = RelayStorage::open(dir.join("relay.sqlite3")).unwrap();
         storage
             .register_project(
                 Some("PRJ-created"),
@@ -3321,7 +3271,8 @@ mod tests {
                    applied_at TEXT NOT NULL
                  );
                  INSERT INTO schema_migrations VALUES (999,'future');",
-            ).unwrap();
+            )
+            .unwrap();
         }
         let error = RelayStorage::open(&future)
             .err()

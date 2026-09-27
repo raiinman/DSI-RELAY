@@ -10,6 +10,11 @@ publish = false
 relay-contracts = { path = "../relay-contracts" }
 relay-core = { path = "../relay-core" }
 relay-adapter = { path = "../relay-adapter" }
+relay-uefn = { path = "../relay-uefn" }
+relay-uefn-mcp = { path = "../relay-uefn-mcp" }
+relay-assets = { path = "../relay-assets" }
+relay-krita = { path = "../relay-krita" }
+relay-verse = { path = "../relay-verse" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

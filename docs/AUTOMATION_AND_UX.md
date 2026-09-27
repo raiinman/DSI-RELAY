@@ -314,6 +314,8 @@ Provide a one-click diagnostic bundle that gathers:
 - service health
 - non-sensitive project metadata as needed
 
+The dashboard Diagnostics/Debug section must also show the current health summary and, when a full workflow run exists, each workflow's PASS, FAIL, BLOCKED, or UNTESTED state. Show fixed failure codes, versions, elapsed time, resource measurements with units, evidence completeness, and the next reproducible step. Offer the same run/report through the CLI command surface. An absent creator app or required hardware remains UNTESTED, even when an internal synthetic fixture passed. Keep detailed logs local behind result IDs and let the user preview an allowlisted report before sharing it.
+
 Redact:
 
 - tokens

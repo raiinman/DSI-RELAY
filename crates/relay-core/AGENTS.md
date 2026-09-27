@@ -16,7 +16,12 @@ Own production RELAY Core deterministic local business logic and durable state.
 - Validation happens before business logic; incompatible command versions fail explicitly.
 - Durable result/job outputs carry provenance/trust metadata.
 - Result descriptions query stored metadata and payload byte size without loading or serializing the payload; the same project-scope rule as full result retrieval applies.
-- Compact result context preserves selected exact scalar facts under an explicit serialized byte limit, excludes path/secret-keyed and unsafe-key content, reports omissions, and retains the full result ID. Bounded required JSON Pointers reorder only already eligible facts and fail if unavailable or over budget. It is presentation filtering, not data-egress authorization.
+- Bounded result listing reads descriptions only; scoped clients must name an authorized project.
+- Compact result context preserves exact eligible scalar facts under an explicit serialized byte limit, excludes path/secret-keyed and unsafe-key content, reports omissions, and retains the full result ID. Bounded literal focus terms rank already eligible facts; repeated equivalent array observations are deduplicated. Bounded required JSON Pointers take precedence and fail if unavailable or over budget. Source timestamp, schema/producer versions, trust, and payload digest remain visible for freshness/provenance assessment without exposing stored provenance actor details. It is presentation filtering, not data-egress authorization.
+- Bounded task focus terms may reprioritize safe context facts but cannot change eligibility, required-fact guarantees, or project scope. Diagnostic summaries expose only fixed health and aggregate counts.
+- Trusted host extensions execute only after shared command validation and Core authority checks; Core validates extension result schemas. The generic ready-index snapshot returns project-relative names only and requires ready continuity. Core contains no UEFN-specific parser.
+- Trusted project-root lookup serves authorized local adapters only; public results and diagnostics do not include that path.
+- Generic registered-project checks let host adapters bind caller-supplied capture analysis to an authorized project without adding Verse logic to Core.
 - Phase 3 project baselines and change rows are project-scoped, derived state. Canonical roots stay local; machine-facing index paths are project-relative. Reconciliation treats watcher paths as hints and hashes changed candidates after authoritative metadata enumeration.
 - Schema-5 delta reads and dependency edges are bounded, project-scoped derived state. Edge replacement requires the current index generation and source content hash; source/target changes invalidate edges, and rebuild resets the delta boundary.
 - Schema-7 project configuration is separate from derived index state, versioned by format and revision, and limited to a project type plus an optional declared adapter ID/version pair. Core must not treat that declaration as installed capability or parser authority.
@@ -40,6 +45,7 @@ Own production RELAY Core deterministic local business logic and durable state.
 - Result-description tests cover no payload/provenance exposure, UTF-8 byte size, project-scope denial, and restart persistence.
 - Result-context tests cover exact allowlisted facts, byte ceilings, deterministic ordering, unsafe path/token omission, full-payload size comparison, and project-scope denial.
 - Required-pointer tests cover schema bounds and uniqueness, pointer syntax, exact retention under competing eligible facts, unsafe/missing fact denial, project scope, and all-required budget failure.
+- Focused-context tests cover literal term bounds, relevance ordering, duplicate suppression, exact required facts, source metadata, privacy filtering, deterministic output, and byte ceilings.
 - The deterministic Context Gauntlet integration fixture stores and re-reads results through Core commands, compares serialized payload/context body bytes, asserts required exact facts, reports retention of exploratory fields without treating current omissions as invariants, and checks repeat output.
 
 # Child DOX Index

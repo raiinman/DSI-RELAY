@@ -29,6 +29,8 @@ Therefore:
 - RELAY needs integration tests across explicitly supported UEFN versions
 - fallback/non-MCP paths should exist where practical rather than being assumed impossible or guaranteed
 
+Current construction status: RELAY has a read-only static index inspector, a localhost-only MCP handshake/tool-discovery client, and a local structured Verse capture parser. The MCP client has not been exercised against a live UEFN editor, and it does not call editor tools. The capture parser cannot verify that caller-supplied text came from a real play session. Editor, spawn, capture, and gameplay assertions stay UNTESTED until one integrated run uses real UEFN evidence. Epic's documented MCP toolsets and connection requirements are at https://dev.epicgames.com/documentation/fortnite/uefn-mcp.
+
 ## Integration layers
 
 ### Static project layer

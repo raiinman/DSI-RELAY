@@ -1,25 +1,20 @@
 use crate::context;
 use crate::diagnostics::{
-    DiagnosticConfig, DiagnosticEvent, DiagnosticHealth,
-    JsonlDiagnostics, Severity,
+    DiagnosticConfig, DiagnosticEvent, DiagnosticHealth, JsonlDiagnostics, Severity,
 };
 use crate::indexing;
 use crate::policy::{
-    CredentialHandle, DataClass, EgressDecision, EgressRequest,
-    ExecutionAuthority,
+    CredentialHandle, DataClass, EgressDecision, EgressRequest, ExecutionAuthority,
 };
 use crate::storage::{
     CredentialHandleRecord, DependencyReplacement, EgressLedgerInput, IndexCommitMode,
-    NewTransaction, ProjectIndexCommit, ProjectConfiguration, RelayStorage, StorageError, StorageHealth,
-    UsageMetricInput,
+    NewTransaction, ProjectConfiguration, ProjectIndexCommit, RelayStorage, StorageError,
+    StorageHealth, UsageMetricInput,
 };
 use relay_contracts::registry::{self, ResolveError};
-use relay_contracts::{
-    CommandRequest, CommandResponse, Producer,
-    PROTOCOL_MAX, PROTOCOL_MIN,
-};
-use serde_json::{json, Map, Value};
+use relay_contracts::{CommandRequest, CommandResponse, PROTOCOL_MAX, PROTOCOL_MIN, Producer};
 use serde::Serialize;
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -113,7 +108,82 @@ pub struct ParserProjectSnapshot {
     pub files: Vec<indexing::IndexedFileSnapshot>,
 }
 
+/// Trusted host input for read-only integrations. Paths are project-relative and
+/// are returned only from a complete, current index after command authorization.
+pub struct ReadyIndexSnapshot {
+    pub generation: i64,
+    pub relative_paths: Vec<String>,
+}
+
+pub struct ExtensionError {
+    pub code: &'static str,
+    pub message: &'static str,
+}
+
+impl ExtensionError {
+    pub fn new(code: &'static str, message: &'static str) -> Self {
+        Self { code, message }
+    }
+}
+
 impl RelayCore {
+    pub fn ready_index_snapshot(
+        &self,
+        project_id: &str,
+    ) -> Result<ReadyIndexSnapshot, ExtensionError> {
+        self.with_storage(|storage| {
+            if storage.get_project(project_id)?.is_none() {
+                return Ok(None);
+            }
+            let state = storage.get_project_index_state(project_id)?;
+            let files = if state.as_ref().is_some_and(|state| {
+                state.status == "ready" && !state.content_verification_required
+            }) {
+                Some(storage.list_project_files(project_id)?)
+            } else {
+                None
+            };
+            Ok(Some((state, files)))
+        })
+        .map_err(|_| ExtensionError::new("STORAGE_UNAVAILABLE", "project index is unavailable"))?
+        .ok_or_else(|| ExtensionError::new("PROJECT_NOT_FOUND", "project not found"))
+        .and_then(|(state, files)| {
+            let (Some(state), Some(files)) = (state, files) else {
+                return Err(ExtensionError::new(
+                    "INDEX_NOT_READY",
+                    "project index is not ready",
+                ));
+            };
+            Ok(ReadyIndexSnapshot {
+                generation: state.generation,
+                relative_paths: files.into_iter().map(|file| file.relative_path).collect(),
+            })
+        })
+    }
+
+    /// Trusted host path lookup after shared command authorization. This path
+    /// is never returned in a public command result or diagnostic event.
+    pub fn trusted_project_root(&self, project_id: &str) -> Result<PathBuf, ExtensionError> {
+        let project = self
+            .with_storage(|storage| storage.get_project(project_id))
+            .map_err(|_| {
+                ExtensionError::new("STORAGE_UNAVAILABLE", "project registry is unavailable")
+            })?
+            .ok_or_else(|| ExtensionError::new("PROJECT_NOT_FOUND", "project not found"))?;
+        indexing::canonical_project_root(&project.root_uri).map_err(|_| {
+            ExtensionError::new("PROJECT_ROOT_UNAVAILABLE", "project root is unavailable")
+        })
+    }
+
+    pub fn require_registered_project(&self, project_id: &str) -> Result<(), ExtensionError> {
+        self.with_storage(|storage| storage.get_project(project_id))
+            .map_err(|_| {
+                ExtensionError::new("STORAGE_UNAVAILABLE", "project registry is unavailable")
+            })?
+            .map(|_| ())
+            .ok_or_else(|| ExtensionError::new("PROJECT_NOT_FOUND", "project not found"))
+    }
+
     /// Local host health input; exposes no project roots or source paths.
     pub fn parser_declared_bindings(&self) -> Result<Vec<(String, String, String)>, String> {
         self.with_storage(|storage| {
@@ -127,7 +197,8 @@ impl RelayCore {
                 }
             }
             Ok(bindings)
-        }).map_err(|error| error.message)
+        })
+        .map_err(|error| error.message)
     }
 
     /// Append only fixed daemon event labels and codes; never source or worker text.
@@ -141,13 +212,29 @@ impl RelayCore {
             && let Ok(mut logger) = logger.lock()
         {
             let mut event = DiagnosticEvent::new(
-                if recovered { "relay.host.component.recovered" } else { "relay.host.component.failed" },
-                if recovered { Severity::Info } else { Severity::Warn },
+                if recovered {
+                    "relay.host.component.recovered"
+                } else {
+                    "relay.host.component.failed"
+                },
+                if recovered {
+                    Severity::Info
+                } else {
+                    Severity::Warn
+                },
                 "host.component",
-                if recovered { "Host component recovered" } else { "Host component needs attention" },
+                if recovered {
+                    "Host component recovered"
+                } else {
+                    "Host component needs attention"
+                },
             );
-            event.attributes.insert("component".to_string(), json!(component));
-            event.attributes.insert("error_code".to_string(), json!(code));
+            event
+                .attributes
+                .insert("component".to_string(), json!(component));
+            event
+                .attributes
+                .insert("error_code".to_string(), json!(code));
             let _ = logger.append(event);
         }
     }
@@ -177,7 +264,8 @@ impl RelayCore {
                 });
             }
             Ok(ready)
-        }).map_err(|error| error.message)
+        })
+        .map_err(|error| error.message)
     }
 
     /// Fetch source identities only when a daemon-observed ready generation changes.
@@ -190,13 +278,15 @@ impl RelayCore {
             let Some(state) = storage.get_project_index_state(project_id)? else {
                 return Ok(None);
             };
-            if state.status != "ready" || state.content_verification_required
+            if state.status != "ready"
+                || state.content_verification_required
                 || state.generation != expected_generation
             {
                 return Ok(None);
             }
             storage.list_project_files(project_id).map(Some)
-        }).map_err(|error| error.message)
+        })
+        .map_err(|error| error.message)
     }
 
     /// A bounded invalidation hint for daemon parser scheduling. None requires a full
@@ -211,7 +301,8 @@ impl RelayCore {
             let Some(state) = storage.get_project_index_state(project_id)? else {
                 return Ok(None);
             };
-            if state.status != "ready" || state.generation != expected_generation
+            if state.status != "ready"
+                || state.generation != expected_generation
                 || after_generation < state.baseline_generation
             {
                 return Ok(None);
@@ -228,7 +319,8 @@ impl RelayCore {
                 }
             }
             Ok(Some(paths))
-        }).map_err(|error| error.message)
+        })
+        .map_err(|error| error.message)
     }
 
     /// Recheck the selected parser and indexed source immediately before source delivery.
@@ -246,15 +338,17 @@ impl RelayCore {
             let state = storage.get_project_index_state(project_id)?;
             let configuration = storage.get_project_configuration(project_id)?;
             let indexed_sha256 = storage.project_file_sha256(project_id, source_path)?;
-            Ok(state.is_some_and(|state| state.status == "ready"
-                && !state.content_verification_required
-                && state.generation == generation)
-                && configuration.is_some_and(|config|
-                    config.revision == configuration_revision
-                        && config.adapter_id.as_deref() == Some(adapter_id)
-                        && config.adapter_version.as_deref() == Some(adapter_version))
-                && indexed_sha256.as_deref() == Some(source_sha256))
-        }).unwrap_or(false)
+            Ok(state.is_some_and(|state| {
+                state.status == "ready"
+                    && !state.content_verification_required
+                    && state.generation == generation
+            }) && configuration.is_some_and(|config| {
+                config.revision == configuration_revision
+                    && config.adapter_id.as_deref() == Some(adapter_id)
+                    && config.adapter_version.as_deref() == Some(adapter_version)
+            }) && indexed_sha256.as_deref() == Some(source_sha256))
+        })
+        .unwrap_or(false)
     }
     /// Local daemon input only; never return canonical roots through command results.
     pub fn index_watch_targets(&self) -> Result<Vec<(String, String)>, String> {
@@ -277,7 +371,10 @@ impl RelayCore {
     }
 
     /// Local daemon recovery input; exposes only index state, never a canonical root.
-    pub fn index_recovery_state(&self, project_id: &str) -> Result<Option<crate::storage::ProjectIndexState>, String> {
+    pub fn index_recovery_state(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<crate::storage::ProjectIndexState>, String> {
         self.with_storage(|storage| storage.get_project_index_state(project_id))
             .map_err(|error| error.message)
     }
@@ -300,28 +397,22 @@ impl RelayCore {
     pub fn open(config: CoreConfig) -> Self {
         let _ = std::fs::create_dir_all(&config.data_dir);
 
-        let (storage, storage_fallback) =
-            match RelayStorage::open(config.database_path()) {
-                Ok(storage) => {
-                    let health = storage.integrity().unwrap_or_else(|error| {
-                        StorageHealth::unavailable(error.to_string())
-                    });
-                    if health.ok {
-                        (Some(Mutex::new(storage)), health)
-                    } else {
-                        (None, health)
-                    }
+        let (storage, storage_fallback) = match RelayStorage::open(config.database_path()) {
+            Ok(storage) => {
+                let health = storage
+                    .integrity()
+                    .unwrap_or_else(|error| StorageHealth::unavailable(error.to_string()));
+                if health.ok {
+                    (Some(Mutex::new(storage)), health)
+                } else {
+                    (None, health)
                 }
-                Err(error) => (
-                    None,
-                    StorageHealth::unavailable(error.to_string()),
-                ),
-            };
+            }
+            Err(error) => (None, StorageHealth::unavailable(error.to_string())),
+        };
 
         let (diagnostics, diagnostics_fallback) =
-            match JsonlDiagnostics::open(
-                DiagnosticConfig::new(config.diagnostics_dir()),
-            ) {
+            match JsonlDiagnostics::open(DiagnosticConfig::new(config.diagnostics_dir())) {
                 Ok(mut logger) => {
                     let event = DiagnosticEvent::new(
                         "relay.core.started",
@@ -333,10 +424,7 @@ impl RelayCore {
                     let health = logger.health();
                     (Some(Mutex::new(logger)), health)
                 }
-                Err(error) => (
-                    None,
-                    DiagnosticHealth::unavailable(error.to_string()),
-                ),
+                Err(error) => (None, DiagnosticHealth::unavailable(error.to_string())),
             };
         Self {
             storage,
@@ -366,20 +454,11 @@ impl RelayCore {
                 "RELAY operational storage lock is unavailable",
             )
         })?;
-        let scopes: Vec<String> =
-            handle.scopes.iter().cloned().collect();
-        guard.upsert_credential_handle(
-            &handle.id,
-            &handle.integration,
-            &scopes,
-            &handle.status,
-        )
+        let scopes: Vec<String> = handle.scopes.iter().cloned().collect();
+        guard.upsert_credential_handle(&handle.id, &handle.integration, &scopes, &handle.status)
     }
 
-    pub fn revoke_credential_handle_metadata(
-        &self,
-        handle_id: &str,
-    ) -> Result<(), StorageError> {
+    pub fn revoke_credential_handle_metadata(&self, handle_id: &str) -> Result<(), StorageError> {
         let storage = self.storage.as_ref().ok_or_else(|| {
             StorageError::new(
                 "STORAGE_UNAVAILABLE",
@@ -414,11 +493,7 @@ impl RelayCore {
         guard.get_credential_handle(handle_id)
     }
 
-    pub fn execute(
-        &self,
-        request: CommandRequest,
-        runtime: &RuntimeContext,
-    ) -> CommandResponse {
+    pub fn execute(&self, request: CommandRequest, runtime: &RuntimeContext) -> CommandResponse {
         let mut authority = ExecutionAuthority::local_user(
             request
                 .context
@@ -435,19 +510,28 @@ impl RelayCore {
 
     pub fn execute_authorized(
         &self,
+        request: CommandRequest,
+        runtime: &RuntimeContext,
+        authority: &ExecutionAuthority,
+    ) -> CommandResponse {
+        self.execute_authorized_with_extension(request, runtime, authority, |_| None)
+    }
+
+    /// Extensions run only after the shared registry validates arguments and
+    /// the Core authority checks pass. Core validates their returned schema.
+    pub fn execute_authorized_with_extension(
+        &self,
         mut request: CommandRequest,
         runtime: &RuntimeContext,
         authority: &ExecutionAuthority,
+        extension: impl Fn(&CommandRequest) -> Option<Result<Value, ExtensionError>>,
     ) -> CommandResponse {
         let started = Instant::now();
         request.context.actor_id = Some(authority.actor_id.clone());
         request.context.client_id = Some(authority.client_id.clone());
         request.context.delegator_id = authority.delegator_id.clone();
 
-        let spec = match registry::resolve_command(
-            &request.command,
-            request.command_version,
-        ) {
+        let spec = match registry::resolve_command(&request.command, request.command_version) {
             Ok(spec) => spec,
             Err(ResolveError::UnknownCommand) => {
                 let response = self.failure(
@@ -456,14 +540,7 @@ impl RelayCore {
                     "COMMAND_UNKNOWN",
                     format!("unknown command {}", request.command),
                 );
-                return self.finalize(
-                    &request,
-                    response,
-                    "unknown",
-                    "unknown",
-                    authority,
-                    started,
-                );
+                return self.finalize(&request, response, "unknown", "unknown", authority, started);
             }
             Err(ResolveError::VersionIncompatible { supported }) => {
                 let response = self.failure(
@@ -475,20 +552,11 @@ impl RelayCore {
                         request.command, supported
                     ),
                 );
-                return self.finalize(
-                    &request,
-                    response,
-                    "unknown",
-                    "unknown",
-                    authority,
-                    started,
-                );
+                return self.finalize(&request, response, "unknown", "unknown", authority, started);
             }
         };
 
-        if let Err(error) =
-            registry::validate_value(&spec.arguments_schema, &request.arguments)
-        {
+        if let Err(error) = registry::validate_value(&spec.arguments_schema, &request.arguments) {
             let response = self.failure(
                 &request,
                 spec.version,
@@ -505,18 +573,10 @@ impl RelayCore {
             );
         }
 
-        if let Err(error) = self.authorize_preflight(
-            &request,
-            &spec.effect_class,
-            &spec.permission,
-            authority,
-        ) {
-            let response = self.failure(
-                &request,
-                spec.version,
-                error.code,
-                error.message,
-            );
+        if let Err(error) =
+            self.authorize_preflight(&request, &spec.effect_class, &spec.permission, authority)
+        {
+            let response = self.failure(&request, spec.version, error.code, error.message);
             return self.finalize(
                 &request,
                 response,
@@ -548,12 +608,7 @@ impl RelayCore {
         ) {
             Ok(transaction) => transaction,
             Err(error) => {
-                let response = self.failure(
-                    &request,
-                    spec.version,
-                    error.code,
-                    error.message,
-                );
+                let response = self.failure(&request, spec.version, error.code, error.message);
                 return self.finalize(
                     &request,
                     response,
@@ -565,17 +620,26 @@ impl RelayCore {
             }
         };
 
-        let business = self.dispatch(
-            &request,
-            spec.version,
-            runtime,
-            authority,
-        );
+        let business = if request.command.starts_with("uefn.")
+            || request.command.starts_with("assets.")
+            || request.command.starts_with("runtime.")
+        {
+            extension(&request)
+                .map(|result| {
+                    result.map_err(|error| CoreCommandError::new(error.code, error.message))
+                })
+                .unwrap_or_else(|| {
+                    Err(CoreCommandError::new(
+                        "INTEGRATION_UNAVAILABLE",
+                        "integration command is unavailable on this host",
+                    ))
+                })
+        } else {
+            self.dispatch(&request, spec.version, runtime, authority)
+        };
         let mut response = match business {
             Ok(result) => {
-                if let Err(error) =
-                    registry::validate_value(&spec.result_schema, &result)
-                {
+                if let Err(error) = registry::validate_value(&spec.result_schema, &result) {
                     self.failure(
                         &request,
                         spec.version,
@@ -583,43 +647,18 @@ impl RelayCore {
                         format!("{} {}", error.path, error.message),
                     )
                 } else {
-                    CommandResponse::success(
-                        &request,
-                        spec.version,
-                        self.producer.clone(),
-                        result,
-                    )
+                    CommandResponse::success(&request, spec.version, self.producer.clone(), result)
                 }
             }
-            Err(error) => self.failure(
-                &request,
-                spec.version,
-                error.code,
-                error.message,
-            ),
+            Err(error) => self.failure(&request, spec.version, error.code, error.message),
         };
 
-        if response.ok
-            && spec.idempotency != "safe"
-            && request.idempotency_key.is_some()
-        {
-            response = self.persist_idempotency(
-                &request,
-                spec.version,
-                response,
-            );
+        if response.ok && spec.idempotency != "safe" && request.idempotency_key.is_some() {
+            response = self.persist_idempotency(&request, spec.version, response);
         }
 
-        response = self.finish_transaction_if_needed(
-            &request,
-            response,
-            transaction.as_deref(),
-        );
-        response = self.enforce_error_contract(
-            &request,
-            spec,
-            response,
-        );
+        response = self.finish_transaction_if_needed(&request, response, transaction.as_deref());
+        response = self.enforce_error_contract(&request, spec, response);
 
         self.finalize(
             &request,
@@ -680,9 +719,7 @@ impl RelayCore {
                 "RELAY operational storage lock is unavailable",
             )
         })?;
-        operation(&guard).map_err(|error| {
-            CoreCommandError::new(error.code, error.message)
-        })
+        operation(&guard).map_err(|error| CoreCommandError::new(error.code, error.message))
     }
 
     fn storage_health(&self) -> StorageHealth {
@@ -691,11 +728,7 @@ impl RelayCore {
                 .lock()
                 .map_err(|_| ())
                 .and_then(|storage| storage.integrity().map_err(|_| ()))
-                .unwrap_or_else(|_| {
-                    StorageHealth::unavailable(
-                        "storage health check unavailable",
-                    )
-                }),
+                .unwrap_or_else(|_| StorageHealth::unavailable("storage health check unavailable")),
             None => self.storage_fallback.clone(),
         }
     }
@@ -706,9 +739,7 @@ impl RelayCore {
                 .lock()
                 .map(|logger| logger.health())
                 .unwrap_or_else(|_| {
-                    DiagnosticHealth::unavailable(
-                        "diagnostics health check unavailable",
-                    )
+                    DiagnosticHealth::unavailable("diagnostics health check unavailable")
                 }),
             None => self.diagnostics_fallback.clone(),
         }
@@ -741,29 +772,19 @@ impl RelayCore {
     ) -> Result<(), CoreCommandError> {
         authority
             .require_permission(permission)
-            .map_err(|error| {
-                CoreCommandError::new(error.code, error.message)
-            })?;
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
         authority
             .require_effect(effect_class)
-            .map_err(|error| {
-                CoreCommandError::new(error.code, error.message)
-            })?;
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
 
         let project_id = match request.command.as_str() {
             "project.register" | "project.import" => {
                 request.arguments.get("id").and_then(Value::as_str)
             }
             "result.put" | "job.checkpoint" => {
-                request
-                    .arguments
-                    .get("project_id")
-                    .and_then(Value::as_str)
+                request.arguments.get("project_id").and_then(Value::as_str)
             }
-            _ => request
-                .arguments
-                .get("project_id")
-                .and_then(Value::as_str),
+            _ => request.arguments.get("project_id").and_then(Value::as_str),
         };
 
         if project_id.is_some()
@@ -773,9 +794,9 @@ impl RelayCore {
                     "project.register" | "project.import"
                 ))
         {
-            authority.require_project(project_id).map_err(|error| {
-                CoreCommandError::new(error.code, error.message)
-            })?;
+            authority
+                .require_project(project_id)
+                .map_err(|error| CoreCommandError::new(error.code, error.message))?;
         }
         Ok(())
     }
@@ -791,19 +812,14 @@ impl RelayCore {
         )
     }
 
-    fn transaction_project_id<'a>(
-        request: &'a CommandRequest,
-    ) -> Option<&'a str> {
+    fn transaction_project_id<'a>(request: &'a CommandRequest) -> Option<&'a str> {
         if matches!(
             request.command.as_str(),
             "project.register" | "project.import"
         ) {
             return None;
         }
-        request
-            .arguments
-            .get("project_id")
-            .and_then(Value::as_str)
+        request.arguments.get("project_id").and_then(Value::as_str)
     }
 
     fn begin_transaction_if_needed(
@@ -816,8 +832,7 @@ impl RelayCore {
         if !Self::transactional_effect(effect_class) {
             return Ok(None);
         }
-        let request_sha256 =
-            request_fingerprint(request, request.command_version.unwrap_or(1));
+        let request_sha256 = request_fingerprint(request, request.command_version.unwrap_or(1));
         let intended_summary = format!(
             "{} requested through validated command contract",
             request.command
@@ -926,16 +941,13 @@ impl RelayCore {
                     request,
                     response.command_version,
                     "INTERNAL_CONTRACT_VIOLATION",
-                    format!(
-                        "error envelope could not be serialized: {serialize_error}"
-                    ),
+                    format!("error envelope could not be serialized: {serialize_error}"),
                 );
             }
         };
-        if let Err(validation) = registry::validate_value(
-            &registry::registry().error_schema,
-            &error_value,
-        ) {
+        if let Err(validation) =
+            registry::validate_value(&registry::registry().error_schema, &error_value)
+        {
             return self.failure(
                 request,
                 response.command_version,
@@ -960,21 +972,15 @@ impl RelayCore {
         response
     }
 
-    fn usage_project_id(
-        request: &CommandRequest,
-        response: &CommandResponse,
-    ) -> Option<String> {
-        if let Some(project_id) = request
-            .arguments
-            .get("project_id")
-            .and_then(Value::as_str)
-        {
+    fn usage_project_id(request: &CommandRequest, response: &CommandResponse) -> Option<String> {
+        if let Some(project_id) = request.arguments.get("project_id").and_then(Value::as_str) {
             return Some(project_id.to_string());
         }
         if matches!(
             request.command.as_str(),
             "project.register" | "project.import"
-        ) && response.ok {
+        ) && response.ok
+        {
             return response
                 .result
                 .as_ref()
@@ -1053,6 +1059,7 @@ impl RelayCore {
         match request.command.as_str() {
             "system.status" => self.status(runtime),
             "system.doctor" => self.doctor(runtime),
+            "diagnostics.summary" => self.diagnostics_summary(),
             "system.echo" => Ok(json!({
                 "echo": request.arguments
             })),
@@ -1060,13 +1067,9 @@ impl RelayCore {
                 "shutting_down": true
             })),
             "registry.list" => self.registry_list(&request.arguments),
-            "registry.describe" => {
-                self.registry_describe(&request.arguments)
-            }
+            "registry.describe" => self.registry_describe(&request.arguments),
             "storage.integrity" => {
-                let health = self.with_storage(|storage| {
-                    storage.integrity()
-                })?;
+                let health = self.with_storage(|storage| storage.integrity())?;
                 serde_json::to_value(health).map_err(|error| {
                     CoreCommandError::new(
                         "STORAGE_ERROR",
@@ -1074,74 +1077,79 @@ impl RelayCore {
                     )
                 })
             }
-            "project.register" => {
-                self.project_register(&request.arguments)
-            }
-            "project.import" => {
-                self.project_import(&request.arguments)
-            }
+            "project.register" => self.project_register(&request.arguments),
+            "project.import" => self.project_import(&request.arguments),
             "project.list" => self.project_list(authority),
-            "project.configuration.put" => {
-                self.project_configuration_put(&request.arguments)
-            }
-            "project.configuration.get" => {
-                self.project_configuration_get(&request.arguments)
-            }
-            "project.index.build" => {
-                self.project_index_build(&request.arguments)
-            }
-            "project.index.apply_hints" => {
-                self.project_index_apply_hints(&request.arguments)
-            }
-            "project.index.reconcile" => {
-                self.project_index_reconcile(&request.arguments)
-            }
-            "project.capabilities" => {
-                self.project_capabilities(&request.arguments)
-            }
-            "project.changes" => {
-                self.project_changes(&request.arguments)
-            }
-            "project.dependencies.replace" => {
-                self.project_dependencies_replace(&request.arguments)
-            }
-            "project.dependencies.list" => {
-                self.project_dependencies_list(&request.arguments)
-            }
+            "project.configuration.put" => self.project_configuration_put(&request.arguments),
+            "project.configuration.get" => self.project_configuration_get(&request.arguments),
+            "project.index.build" => self.project_index_build(&request.arguments),
+            "project.index.apply_hints" => self.project_index_apply_hints(&request.arguments),
+            "project.index.reconcile" => self.project_index_reconcile(&request.arguments),
+            "project.capabilities" => self.project_capabilities(&request.arguments),
+            "project.changes" => self.project_changes(&request.arguments),
+            "project.dependencies.replace" => self.project_dependencies_replace(&request.arguments),
+            "project.dependencies.list" => self.project_dependencies_list(&request.arguments),
             "result.put" => self.result_put(request),
             "result.get" => self.result_get(&request.arguments, authority),
-            "result.describe" => {
-                self.result_describe(&request.arguments, authority)
-            }
-            "result.context" => {
-                self.result_context(&request.arguments, authority)
-            }
+            "result.list" => self.result_list(&request.arguments, authority),
+            "result.describe" => self.result_describe(&request.arguments, authority),
+            "result.context" => self.result_context(&request.arguments, authority),
             "job.checkpoint" => self.job_checkpoint(request),
             "job.get" => self.job_get(&request.arguments, authority),
-            "transaction.list" => {
-                self.transaction_list(&request.arguments, authority)
-            }
+            "transaction.list" => self.transaction_list(&request.arguments, authority),
             "usage.summary" => self.usage_summary(),
-            "policy.egress.check" => {
-                self.policy_egress_check(request, authority)
-            }
+            "policy.egress.check" => self.policy_egress_check(request, authority),
             other => Err(CoreCommandError::new(
                 "COMMAND_UNKNOWN",
-                format!(
-                    "command {other}@{command_version} is not implemented"
-                ),
+                format!("command {other}@{command_version} is not implemented"),
             )),
         }
     }
 
-    fn status(
-        &self,
-        runtime: &RuntimeContext,
-    ) -> Result<Value, CoreCommandError> {
+    fn diagnostics_summary(&self) -> Result<Value, CoreCommandError> {
+        let health = self.diagnostics_health();
+        let (available, events, error_code) = match &self.diagnostics {
+            None => (false, Value::Null, Some("DIAGNOSTICS_UNAVAILABLE")),
+            Some(logger) => match logger.lock() {
+                Err(_) => (false, Value::Null, Some("DIAGNOSTICS_LOCK_UNAVAILABLE")),
+                Ok(logger) => match logger.support_summary() {
+                    Err(_) => (false, Value::Null, Some("DIAGNOSTICS_READ_FAILED")),
+                    Ok(summary) => (
+                        true,
+                        json!({
+                            "total": summary.aggregate.total_events,
+                            "incomplete": summary.aggregate.incomplete_events,
+                            "sampled": summary.aggregate.sampled_events,
+                            "invalid_lines": summary.aggregate.invalid_lines,
+                            "by_severity": summary.aggregate.by_severity,
+                        }),
+                        None,
+                    ),
+                },
+            },
+        };
+        Ok(json!({
+            "schema_version": 1,
+            "relay_version": crate::CORE_VERSION,
+            "generated_unix_ms": crate::diagnostics::unix_ms(),
+            "available": available,
+            "health": {
+                "ok": health.ok,
+                "retention_evicted_events": health.evicted_events,
+                "retention_evicted_files": health.evicted_files,
+            },
+            "events": events,
+            "error_code": error_code,
+        }))
+    }
+
+    fn status(&self, runtime: &RuntimeContext) -> Result<Value, CoreCommandError> {
         let storage = self.storage_health();
         let diagnostics = self.diagnostics_health();
-        let host_healthy = runtime.host_components.iter().all(|component|
-            component.state != HostComponentState::Degraded);
+        let host_healthy = runtime
+            .host_components
+            .iter()
+            .all(|component| component.state != HostComponentState::Degraded);
         let healthy = storage.ok && diagnostics.ok && runtime.ipc_healthy && host_healthy;
         Ok(json!({
             "process_health": "running",
@@ -1162,14 +1170,13 @@ impl RelayCore {
             "uptime_ms": runtime.uptime_ms
         }))
     }
-    fn doctor(
-        &self,
-        runtime: &RuntimeContext,
-    ) -> Result<Value, CoreCommandError> {
+    fn doctor(&self, runtime: &RuntimeContext) -> Result<Value, CoreCommandError> {
         let storage = self.storage_health();
         let diagnostics = self.diagnostics_health();
-        let host_healthy = runtime.host_components.iter().all(|component|
-            component.state != HostComponentState::Degraded);
+        let host_healthy = runtime
+            .host_components
+            .iter()
+            .all(|component| component.state != HostComponentState::Degraded);
         let healthy = storage.ok && diagnostics.ok && runtime.ipc_healthy && host_healthy;
         let mut report = json!({
             "healthy": healthy,
@@ -1255,10 +1262,7 @@ impl RelayCore {
         Ok(report)
     }
 
-    fn registry_list(
-        &self,
-        arguments: &Value,
-    ) -> Result<Value, CoreCommandError> {
+    fn registry_list(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
         let surface = arguments.get("surface").and_then(Value::as_str);
         let prefix = arguments.get("prefix").and_then(Value::as_str);
         let limit = arguments
@@ -1269,42 +1273,26 @@ impl RelayCore {
         Ok(registry::compact_list(surface, prefix, limit))
     }
 
-    fn registry_describe(
-        &self,
-        arguments: &Value,
-    ) -> Result<Value, CoreCommandError> {
+    fn registry_describe(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
         let command = arguments
             .get("command")
             .and_then(Value::as_str)
-            .ok_or_else(|| {
-                CoreCommandError::new(
-                    "VALIDATION_FAILED",
-                    "command is required",
-                )
-            })?;
+            .ok_or_else(|| CoreCommandError::new("VALIDATION_FAILED", "command is required"))?;
         let version = arguments
             .get("version")
             .and_then(Value::as_u64)
             .map(|value| value as u32);
-        registry::describe(command, version).map_err(|error| {
-            match error {
-                ResolveError::UnknownCommand => CoreCommandError::new(
-                    "COMMAND_UNKNOWN",
-                    format!("unknown command {command}"),
-                ),
-                ResolveError::VersionIncompatible { supported } => {
-                    CoreCommandError::new(
-                        "COMMAND_VERSION_INCOMPATIBLE",
-                        format!("supported versions: {supported:?}"),
-                    )
-                }
+        registry::describe(command, version).map_err(|error| match error {
+            ResolveError::UnknownCommand => {
+                CoreCommandError::new("COMMAND_UNKNOWN", format!("unknown command {command}"))
             }
+            ResolveError::VersionIncompatible { supported } => CoreCommandError::new(
+                "COMMAND_VERSION_INCOMPATIBLE",
+                format!("supported versions: {supported:?}"),
+            ),
         })
     }
-    fn project_register(
-        &self,
-        arguments: &Value,
-    ) -> Result<Value, CoreCommandError> {
+    fn project_register(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
         let name = arguments["name"]
             .as_str()
             .expect("registry validation requires name");
@@ -1312,21 +1300,13 @@ impl RelayCore {
             .as_str()
             .expect("registry validation requires root_uri");
         let id = arguments.get("id").and_then(Value::as_str);
-        let project = self.with_storage(|storage| {
-            storage.register_project(id, name, root_uri)
-        })?;
+        let project = self.with_storage(|storage| storage.register_project(id, name, root_uri))?;
         serde_json::to_value(project).map_err(|error| {
-            CoreCommandError::new(
-                "STORAGE_ERROR",
-                format!("serialize project: {error}"),
-            )
+            CoreCommandError::new("STORAGE_ERROR", format!("serialize project: {error}"))
         })
     }
 
-    fn project_import(
-        &self,
-        arguments: &Value,
-    ) -> Result<Value, CoreCommandError> {
+    fn project_import(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
         let name = arguments["name"]
             .as_str()
             .expect("registry validation requires name");
@@ -1337,9 +1317,7 @@ impl RelayCore {
         let root = indexing::canonical_project_root(root_path)
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
         let root_uri = root.to_string_lossy().to_string();
-        let project = self.with_storage(|storage| {
-            storage.register_project(id, name, &root_uri)
-        })?;
+        let project = self.with_storage(|storage| storage.register_project(id, name, &root_uri))?;
         Ok(json!({
             "id": project.id,
             "name": project.name,
@@ -1348,13 +1326,8 @@ impl RelayCore {
         }))
     }
 
-    fn project_list(
-        &self,
-        authority: &ExecutionAuthority,
-    ) -> Result<Value, CoreCommandError> {
-        let mut projects = self.with_storage(|storage| {
-            storage.list_projects()
-        })?;
+    fn project_list(&self, authority: &ExecutionAuthority) -> Result<Value, CoreCommandError> {
+        let mut projects = self.with_storage(|storage| storage.list_projects())?;
         if let Some(allowed) = &authority.project_ids {
             projects.retain(|project| allowed.contains(&project.id));
         }
@@ -1366,19 +1339,18 @@ impl RelayCore {
         Ok(json!({ "projects": projects }))
     }
 
-    fn project_configuration_put(
-        &self,
-        arguments: &Value,
-    ) -> Result<Value, CoreCommandError> {
+    fn project_configuration_put(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
         let project_id = arguments["project_id"].as_str().unwrap();
         let expected_revision = arguments["expected_revision"].as_i64().unwrap();
         let project_type = arguments["project_type"].as_str().unwrap();
         let adapter_id = arguments.get("adapter_id").and_then(Value::as_str);
         let adapter_version = arguments.get("adapter_version").and_then(Value::as_str);
         let valid_token = |value: &str, max: usize| {
-            !value.is_empty() && value.len() <= max && value.bytes().all(|byte| {
-                byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'+')
-            })
+            !value.is_empty()
+                && value.len() <= max
+                && value.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'+')
+                })
         };
         if !valid_token(project_type, 128)
             || adapter_id.is_some() != adapter_version.is_some()
@@ -1390,9 +1362,15 @@ impl RelayCore {
                 "project type and optional adapter binding must be bounded identifiers",
             ));
         }
-        let config = self.with_storage(|storage| storage.put_project_configuration(
-            project_id, expected_revision, project_type, adapter_id, adapter_version,
-        ))?;
+        let config = self.with_storage(|storage| {
+            storage.put_project_configuration(
+                project_id,
+                expected_revision,
+                project_type,
+                adapter_id,
+                adapter_version,
+            )
+        })?;
         Ok(json!({
             "project_id": config.project_id,
             "configured": true,
@@ -1405,10 +1383,7 @@ impl RelayCore {
         }))
     }
 
-    fn project_configuration_get(
-        &self,
-        arguments: &Value,
-    ) -> Result<Value, CoreCommandError> {
+    fn project_configuration_get(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
         let project_id = arguments["project_id"].as_str().unwrap();
         let config = self.with_storage(|storage| {
             if storage.get_project(project_id)?.is_none() {
@@ -1440,28 +1415,19 @@ impl RelayCore {
         }
     }
 
-    fn project_index_build(
-        &self,
-        arguments: &Value,
-    ) -> Result<Value, CoreCommandError> {
+    fn project_index_build(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
         let project_id = arguments["project_id"]
             .as_str()
             .expect("registry validation requires project_id");
-        let project = self.with_storage(|storage| {
-            storage.get_project(project_id)
-        })?.ok_or_else(|| {
-            CoreCommandError::new("PROJECT_NOT_FOUND", "project not found")
-        })?;
+        let project = self
+            .with_storage(|storage| storage.get_project(project_id))?
+            .ok_or_else(|| CoreCommandError::new("PROJECT_NOT_FOUND", "project not found"))?;
         let root = indexing::canonical_project_root(&project.root_uri)
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
         let plan = indexing::build_baseline(&root)
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
         let state = self.with_storage(|storage| {
-            storage.replace_project_baseline(
-                project_id,
-                &plan.files,
-                plan.stats.total_bytes,
-            )
+            storage.replace_project_baseline(project_id, &plan.files, plan.stats.total_bytes)
         })?;
         Ok(json!({
             "project_id": project_id,
@@ -1475,10 +1441,7 @@ impl RelayCore {
         }))
     }
 
-    fn project_index_apply_hints(
-        &self,
-        arguments: &Value,
-    ) -> Result<Value, CoreCommandError> {
+    fn project_index_apply_hints(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
         let project_id = arguments["project_id"]
             .as_str()
             .expect("registry validation requires project_id");
@@ -1503,12 +1466,14 @@ impl RelayCore {
         let hints = indexing::validate_hints(&raw_hints)
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
         let (project, index_state, previous) = self.with_storage(|storage| {
-            let project = storage.get_project(project_id)?.ok_or_else(|| {
-                StorageError::new("PROJECT_NOT_FOUND", "project not found")
-            })?;
-            let state = storage.get_project_index_state(project_id)?.ok_or_else(|| {
-                StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing")
-            })?;
+            let project = storage
+                .get_project(project_id)?
+                .ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
+            let state = storage
+                .get_project_index_state(project_id)?
+                .ok_or_else(|| {
+                    StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing")
+                })?;
             let files = storage.project_files_for_paths(project_id, &hints)?;
             Ok((project, state, files))
         })?;
@@ -1521,9 +1486,12 @@ impl RelayCore {
             index_state.file_count,
             index_state.total_bytes,
         )
-            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        .map_err(|error| CoreCommandError::new(error.code, error.message))?;
         let file_count = usize::try_from(plan.file_count).map_err(|_| {
-            CoreCommandError::new("INDEX_METADATA_OVERFLOW", "file count exceeds platform limits")
+            CoreCommandError::new(
+                "INDEX_METADATA_OVERFLOW",
+                "file count exceeds platform limits",
+            )
         })?;
         let state = self.with_storage(|storage| {
             storage.apply_project_reconciliation(ProjectIndexCommit {
@@ -1549,10 +1517,7 @@ impl RelayCore {
         }))
     }
 
-    fn project_index_reconcile(
-        &self,
-        arguments: &Value,
-    ) -> Result<Value, CoreCommandError> {
+    fn project_index_reconcile(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
         self.project_index_reconcile_with_guard(arguments, &|| true)
     }
 
@@ -1583,19 +1548,11 @@ impl RelayCore {
         let (project, index_state, previous) = self.with_storage(|storage| {
             let project = storage
                 .get_project(project_id)?
-                .ok_or_else(|| {
-                    StorageError::new(
-                        "PROJECT_NOT_FOUND",
-                        "project not found",
-                    )
-                })?;
+                .ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
             let state = storage
                 .get_project_index_state(project_id)?
                 .ok_or_else(|| {
-                    StorageError::new(
-                        "INDEX_BASELINE_MISSING",
-                        "project baseline is missing",
-                    )
+                    StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing")
                 })?;
             let files = storage.list_project_files(project_id)?;
             Ok((project, state, files))
@@ -1610,8 +1567,14 @@ impl RelayCore {
 
         let root = indexing::canonical_project_root(&project.root_uri)
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
-        let plan = indexing::reconcile_with_guard(&root, &previous, &hints, verify_content, should_continue)
-            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        let plan = indexing::reconcile_with_guard(
+            &root,
+            &previous,
+            &hints,
+            verify_content,
+            should_continue,
+        )
+        .map_err(|error| CoreCommandError::new(error.code, error.message))?;
         if !should_continue() {
             return Err(CoreCommandError::new(
                 "INDEX_RECOVERY_DEFERRED",
@@ -1647,28 +1610,19 @@ impl RelayCore {
         }))
     }
 
-    fn project_capabilities(
-        &self,
-        arguments: &Value,
-    ) -> Result<Value, CoreCommandError> {
+    fn project_capabilities(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
         let project_id = arguments["project_id"]
             .as_str()
             .expect("registry validation requires project_id");
         let (project, state) = self.with_storage(|storage| {
             let project = storage
                 .get_project(project_id)?
-                .ok_or_else(|| {
-                    StorageError::new(
-                        "PROJECT_NOT_FOUND",
-                        "project not found",
-                    )
-                })?;
+                .ok_or_else(|| StorageError::new("PROJECT_NOT_FOUND", "project not found"))?;
             let state = storage.get_project_index_state(project_id)?;
             Ok((project, state))
         })?;
 
-        let root_available =
-            indexing::canonical_project_root(&project.root_uri).is_ok();
+        let root_available = indexing::canonical_project_root(&project.root_uri).is_ok();
         let baseline_ready = state
             .as_ref()
             .map(|state| state.status == "ready")
@@ -1676,7 +1630,10 @@ impl RelayCore {
         let index_status = if !root_available {
             "unavailable"
         } else {
-            state.as_ref().map(|state| state.status.as_str()).unwrap_or("missing")
+            state
+                .as_ref()
+                .map(|state| state.status.as_str())
+                .unwrap_or("missing")
         };
         let baseline_state = if !root_available {
             "unavailable"
@@ -1762,21 +1719,23 @@ impl RelayCore {
         }))
     }
 
-    fn project_changes(
-        &self,
-        arguments: &Value,
-    ) -> Result<Value, CoreCommandError> {
+    fn project_changes(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
         let project_id = arguments["project_id"]
             .as_str()
             .expect("registry validation requires project_id");
-        let limit = arguments.get("limit").and_then(Value::as_u64).unwrap_or(100) as usize;
+        let limit = arguments
+            .get("limit")
+            .and_then(Value::as_u64)
+            .unwrap_or(100) as usize;
         let (state, changes) = self.with_storage(|storage| {
             if storage.get_project(project_id)?.is_none() {
                 return Err(StorageError::new("PROJECT_NOT_FOUND", "project not found"));
             }
-            let state = storage.get_project_index_state(project_id)?.ok_or_else(|| {
-                StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing")
-            })?;
+            let state = storage
+                .get_project_index_state(project_id)?
+                .ok_or_else(|| {
+                    StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing")
+                })?;
             if state.status != "ready" {
                 return Err(StorageError::new(
                     "INDEX_RECONCILIATION_REQUIRED",
@@ -1799,9 +1758,8 @@ impl RelayCore {
                     "requested generation is newer than the current index",
                 ));
             }
-            let changes = storage.list_project_changes_since(
-                project_id, after_generation, limit + 1,
-            )?;
+            let changes =
+                storage.list_project_changes_since(project_id, after_generation, limit + 1)?;
             Ok((state, changes))
         })?;
         if changes.len() > limit {
@@ -1818,10 +1776,7 @@ impl RelayCore {
         }))
     }
 
-    fn project_dependencies_replace(
-        &self,
-        arguments: &Value,
-    ) -> Result<Value, CoreCommandError> {
+    fn project_dependencies_replace(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
         let project_id = arguments["project_id"]
             .as_str()
             .expect("registry validation requires project_id");
@@ -1842,16 +1797,22 @@ impl RelayCore {
         let producer_version = arguments["producer_version"]
             .as_str()
             .expect("registry validation requires producer_version");
-        let configuration_revision = arguments.get("expected_configuration_revision").and_then(Value::as_i64);
+        let configuration_revision = arguments
+            .get("expected_configuration_revision")
+            .and_then(Value::as_i64);
         let adapter_id = arguments.get("expected_adapter_id").and_then(Value::as_str);
-        let adapter_version = arguments.get("expected_adapter_version").and_then(Value::as_str);
+        let adapter_version = arguments
+            .get("expected_adapter_version")
+            .and_then(Value::as_str);
         let configuration_guard = match (configuration_revision, adapter_id, adapter_version) {
             (None, None, None) => None,
             (Some(revision), Some(id), Some(version)) => Some((revision, id, version)),
-            _ => return Err(CoreCommandError::new(
-                "VALIDATION_FAILED",
-                "parser selection guard requires revision, adapter ID, and version together",
-            )),
+            _ => {
+                return Err(CoreCommandError::new(
+                    "VALIDATION_FAILED",
+                    "parser selection guard requires revision, adapter ID, and version together",
+                ));
+            }
         };
         let raw_targets = arguments["targets"]
             .as_array()
@@ -1872,7 +1833,8 @@ impl RelayCore {
         for raw_target in raw_targets {
             let target = indexing::normalize_project_relative_path(
                 raw_target.as_str().expect("registry validates targets"),
-            ).map_err(|error| CoreCommandError::new(error.code, error.message))?;
+            )
+            .map_err(|error| CoreCommandError::new(error.code, error.message))?;
             if target.len() > 4096 || target == source_path || !targets.insert(target) {
                 return Err(CoreCommandError::new(
                     "VALIDATION_FAILED",
@@ -1902,10 +1864,7 @@ impl RelayCore {
         }))
     }
 
-    fn project_dependencies_list(
-        &self,
-        arguments: &Value,
-    ) -> Result<Value, CoreCommandError> {
+    fn project_dependencies_list(&self, arguments: &Value) -> Result<Value, CoreCommandError> {
         let project_id = arguments["project_id"]
             .as_str()
             .expect("registry validation requires project_id");
@@ -1915,14 +1874,19 @@ impl RelayCore {
             .map(indexing::normalize_project_relative_path)
             .transpose()
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
-        let limit = arguments.get("limit").and_then(Value::as_u64).unwrap_or(100) as usize;
+        let limit = arguments
+            .get("limit")
+            .and_then(Value::as_u64)
+            .unwrap_or(100) as usize;
         let (state, edges) = self.with_storage(|storage| {
             if storage.get_project(project_id)?.is_none() {
                 return Err(StorageError::new("PROJECT_NOT_FOUND", "project not found"));
             }
-            let state = storage.get_project_index_state(project_id)?.ok_or_else(|| {
-                StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing")
-            })?;
+            let state = storage
+                .get_project_index_state(project_id)?
+                .ok_or_else(|| {
+                    StorageError::new("INDEX_BASELINE_MISSING", "project baseline is missing")
+                })?;
             if state.status != "ready" {
                 return Err(StorageError::new(
                     "INDEX_RECONCILIATION_REQUIRED",
@@ -1930,7 +1894,9 @@ impl RelayCore {
                 ));
             }
             let edges = storage.list_project_dependency_edges(
-                project_id, source_path.as_deref(), limit + 1,
+                project_id,
+                source_path.as_deref(),
+                limit + 1,
             )?;
             Ok((state, edges))
         })?;
@@ -1947,12 +1913,8 @@ impl RelayCore {
         }))
     }
 
-    fn result_put(
-        &self,
-        request: &CommandRequest,
-    ) -> Result<Value, CoreCommandError> {
-        let project_id =
-            request.arguments.get("project_id").and_then(Value::as_str);
+    fn result_put(&self, request: &CommandRequest) -> Result<Value, CoreCommandError> {
+        let project_id = request.arguments.get("project_id").and_then(Value::as_str);
         let kind = request
             .arguments
             .get("kind")
@@ -1975,10 +1937,7 @@ impl RelayCore {
             )
         })?;
         serde_json::to_value(result).map_err(|error| {
-            CoreCommandError::new(
-                "STORAGE_ERROR",
-                format!("serialize result: {error}"),
-            )
+            CoreCommandError::new("STORAGE_ERROR", format!("serialize result: {error}"))
         })
     }
 
@@ -1990,21 +1949,14 @@ impl RelayCore {
         let id = arguments["result_id"]
             .as_str()
             .expect("registry validation requires result_id");
-        let result = self.with_storage(|storage| {
-            storage.get_result(id)
-        })?;
+        let result = self.with_storage(|storage| storage.get_result(id))?;
         match result {
             Some(result) => {
                 authority
                     .require_project(result.project_id.as_deref())
-                    .map_err(|error| {
-                        CoreCommandError::new(error.code, error.message)
-                    })?;
+                    .map_err(|error| CoreCommandError::new(error.code, error.message))?;
                 serde_json::to_value(result).map_err(|error| {
-                    CoreCommandError::new(
-                        "STORAGE_ERROR",
-                        format!("serialize result: {error}"),
-                    )
+                    CoreCommandError::new("STORAGE_ERROR", format!("serialize result: {error}"))
                 })
             }
             None => Err(CoreCommandError::new(
@@ -2012,6 +1964,32 @@ impl RelayCore {
                 "result not found",
             )),
         }
+    }
+
+    fn result_list(
+        &self,
+        arguments: &Value,
+        authority: &ExecutionAuthority,
+    ) -> Result<Value, CoreCommandError> {
+        let project_id = arguments.get("project_id").and_then(Value::as_str);
+        if let Some(project_id) = project_id {
+            authority
+                .require_project(Some(project_id))
+                .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+        } else if authority.project_ids.is_some() {
+            return Err(CoreCommandError::new(
+                "PROJECT_SCOPE_REQUIRED",
+                "a project ID is required for scoped result listing",
+            ));
+        }
+        let limit = arguments
+            .get("limit")
+            .and_then(Value::as_u64)
+            .unwrap_or(20)
+            .clamp(1, 100) as usize;
+        let results =
+            self.with_storage(|storage| storage.list_result_descriptions(project_id, limit))?;
+        Ok(json!({ "results": results }))
     }
 
     fn result_describe(
@@ -2022,16 +2000,12 @@ impl RelayCore {
         let id = arguments["result_id"]
             .as_str()
             .expect("registry validation requires result_id");
-        let description = self.with_storage(|storage| {
-            storage.describe_result(id)
-        })?;
+        let description = self.with_storage(|storage| storage.describe_result(id))?;
         match description {
             Some(description) => {
                 authority
                     .require_project(description.project_id.as_deref())
-                    .map_err(|error| {
-                        CoreCommandError::new(error.code, error.message)
-                    })?;
+                    .map_err(|error| CoreCommandError::new(error.code, error.message))?;
                 serde_json::to_value(description).map_err(|error| {
                     CoreCommandError::new(
                         "STORAGE_ERROR",
@@ -2060,13 +2034,40 @@ impl RelayCore {
         let required_pointers: Vec<&str> = arguments
             .get("required_pointers")
             .map(|value| {
-                value.as_array()
+                value
+                    .as_array()
                     .expect("registry validation requires an array")
                     .iter()
-                    .map(|pointer| pointer.as_str().expect("registry validation requires strings"))
+                    .map(|pointer| {
+                        pointer
+                            .as_str()
+                            .expect("registry validation requires strings")
+                    })
                     .collect()
             })
             .unwrap_or_default();
+        let focus_terms: Vec<&str> = arguments
+            .get("focus_terms")
+            .map(|value| {
+                value
+                    .as_array()
+                    .expect("registry validation requires an array")
+                    .iter()
+                    .map(|term| term.as_str().expect("registry validation requires strings"))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if focus_terms.len() > 8
+            || focus_terms.iter().collect::<BTreeSet<_>>().len() != focus_terms.len()
+            || focus_terms
+                .iter()
+                .any(|term| !context::valid_focus_term(term))
+        {
+            return Err(CoreCommandError::new(
+                "VALIDATION_FAILED",
+                "focus_terms must contain at most 8 unique bounded search terms",
+            ));
+        }
         if arguments.get("required_pointers").is_some()
             && (required_pointers.is_empty()
                 || required_pointers.len() > 8
@@ -2082,13 +2083,13 @@ impl RelayCore {
             ));
         }
         let result = self.with_storage(|storage| storage.get_result(id))?;
-        let result = result.ok_or_else(|| {
-            CoreCommandError::new("RESULT_NOT_FOUND", "result not found")
-        })?;
+        let result =
+            result.ok_or_else(|| CoreCommandError::new("RESULT_NOT_FOUND", "result not found"))?;
         authority
             .require_project(result.project_id.as_deref())
             .map_err(|error| CoreCommandError::new(error.code, error.message))?;
-        match context::compile_result_required(&result, max_bytes, &required_pointers) {
+        match context::compile_result_focused(&result, max_bytes, &required_pointers, &focus_terms)
+        {
             Ok(view) => Ok(view),
             Err(context::CompileError::BudgetTooSmall) => Err(CoreCommandError::new(
                 "CONTEXT_BUDGET_TOO_SMALL",
@@ -2104,14 +2105,10 @@ impl RelayCore {
             )),
         }
     }
-    fn job_checkpoint(
-        &self,
-        request: &CommandRequest,
-    ) -> Result<Value, CoreCommandError> {
+    fn job_checkpoint(&self, request: &CommandRequest) -> Result<Value, CoreCommandError> {
         let arguments = &request.arguments;
         let id = arguments.get("id").and_then(Value::as_str);
-        let project_id =
-            arguments.get("project_id").and_then(Value::as_str);
+        let project_id = arguments.get("project_id").and_then(Value::as_str);
         let command = arguments["command"]
             .as_str()
             .expect("registry validation requires command");
@@ -2122,8 +2119,7 @@ impl RelayCore {
             .get("checkpoint")
             .cloned()
             .unwrap_or_else(|| json!({}));
-        let result_id =
-            arguments.get("result_id").and_then(Value::as_str);
+        let result_id = arguments.get("result_id").and_then(Value::as_str);
         let provenance = self.provenance(request);
         let trust = self.trust_label(request);
 
@@ -2140,10 +2136,7 @@ impl RelayCore {
             )
         })?;
         serde_json::to_value(job).map_err(|error| {
-            CoreCommandError::new(
-                "STORAGE_ERROR",
-                format!("serialize job: {error}"),
-            )
+            CoreCommandError::new("STORAGE_ERROR", format!("serialize job: {error}"))
         })
     }
     fn job_get(
@@ -2159,20 +2152,12 @@ impl RelayCore {
             Some(job) => {
                 authority
                     .require_project(job.project_id.as_deref())
-                    .map_err(|error| {
-                        CoreCommandError::new(error.code, error.message)
-                    })?;
+                    .map_err(|error| CoreCommandError::new(error.code, error.message))?;
                 serde_json::to_value(job).map_err(|error| {
-                    CoreCommandError::new(
-                        "STORAGE_ERROR",
-                        format!("serialize job: {error}"),
-                    )
+                    CoreCommandError::new("STORAGE_ERROR", format!("serialize job: {error}"))
                 })
             }
-            None => Err(CoreCommandError::new(
-                "JOB_NOT_FOUND",
-                "job not found",
-            )),
+            None => Err(CoreCommandError::new("JOB_NOT_FOUND", "job not found")),
         }
     }
 
@@ -2181,8 +2166,7 @@ impl RelayCore {
         arguments: &Value,
         authority: &ExecutionAuthority,
     ) -> Result<Value, CoreCommandError> {
-        let requested_project =
-            arguments.get("project_id").and_then(Value::as_str);
+        let requested_project = arguments.get("project_id").and_then(Value::as_str);
         let limit = arguments
             .get("limit")
             .and_then(Value::as_u64)
@@ -2190,14 +2174,13 @@ impl RelayCore {
             .clamp(1, 200) as usize;
 
         if let Some(project_id) = requested_project {
-            authority.require_project(Some(project_id)).map_err(|error| {
-                CoreCommandError::new(error.code, error.message)
-            })?;
+            authority
+                .require_project(Some(project_id))
+                .map_err(|error| CoreCommandError::new(error.code, error.message))?;
         }
 
-        let mut transactions = self.with_storage(|storage| {
-            storage.list_transactions(requested_project, limit)
-        })?;
+        let mut transactions =
+            self.with_storage(|storage| storage.list_transactions(requested_project, limit))?;
 
         if requested_project.is_none() {
             if let Some(allowed) = &authority.project_ids {
@@ -2216,14 +2199,9 @@ impl RelayCore {
     }
 
     fn usage_summary(&self) -> Result<Value, CoreCommandError> {
-        let summary = self.with_storage(|storage| {
-            storage.usage_summary()
-        })?;
+        let summary = self.with_storage(|storage| storage.usage_summary())?;
         serde_json::to_value(summary).map_err(|error| {
-            CoreCommandError::new(
-                "STORAGE_ERROR",
-                format!("serialize usage summary: {error}"),
-            )
+            CoreCommandError::new("STORAGE_ERROR", format!("serialize usage summary: {error}"))
         })
     }
 
@@ -2258,12 +2236,11 @@ impl RelayCore {
         let destination = arguments["destination"]
             .as_str()
             .expect("registry validation requires destination");
-        let project_id =
-            arguments.get("project_id").and_then(Value::as_str);
+        let project_id = arguments.get("project_id").and_then(Value::as_str);
         if project_id.is_some() {
-            authority.require_project(project_id).map_err(|error| {
-                CoreCommandError::new(error.code, error.message)
-            })?;
+            authority
+                .require_project(project_id)
+                .map_err(|error| CoreCommandError::new(error.code, error.message))?;
         }
 
         let data_classes: Vec<DataClass> = arguments["data_classes"]
@@ -2304,17 +2281,12 @@ impl RelayCore {
             .get("approx_tokens")
             .and_then(Value::as_u64)
             .unwrap_or(0);
-        let credential_handle =
-            arguments.get("credential_handle").and_then(Value::as_str);
+        let credential_handle = arguments.get("credential_handle").and_then(Value::as_str);
         if let Some(handle_id) = credential_handle {
             authority
                 .require_credential_handle(handle_id, Some("egress"))
-                .map_err(|error| {
-                    CoreCommandError::new(error.code, error.message)
-                })?;
-            let durable = self.with_storage(|storage| {
-                storage.get_credential_handle(handle_id)
-            })?;
+                .map_err(|error| CoreCommandError::new(error.code, error.message))?;
+            let durable = self.with_storage(|storage| storage.get_credential_handle(handle_id))?;
             match durable {
                 Some(handle) if handle.status == "active" => {}
                 Some(_) => {
@@ -2345,8 +2317,7 @@ impl RelayCore {
             purpose: purpose.to_string(),
             credential_handle: credential_handle.map(str::to_string),
         };
-        let decision: EgressDecision =
-            authority.evaluate_egress(&egress_request);
+        let decision: EgressDecision = authority.evaluate_egress(&egress_request);
         let class_names: Vec<String> = data_classes
             .iter()
             .copied()
@@ -2397,24 +2368,15 @@ impl RelayCore {
         let key = request.idempotency_key.as_deref()?;
         let fingerprint = request_fingerprint(request, command_version);
 
-        let record = match self.with_storage(|storage| {
-            storage.get_idempotency(key)
-        }) {
+        let record = match self.with_storage(|storage| storage.get_idempotency(key)) {
             Ok(Some(record)) => record,
             Ok(None) => return None,
             Err(error) => {
-                return Some(self.failure(
-                    request,
-                    command_version,
-                    error.code,
-                    error.message,
-                ));
+                return Some(self.failure(request, command_version, error.code, error.message));
             }
         };
 
-        if record.command != request.command
-            || record.request_sha256 != fingerprint
-        {
+        if record.command != request.command || record.request_sha256 != fingerprint {
             return Some(self.failure(
                 request,
                 command_version,
@@ -2423,9 +2385,7 @@ impl RelayCore {
             ));
         }
 
-        match serde_json::from_str::<CommandResponse>(
-            &record.response_json,
-        ) {
+        match serde_json::from_str::<CommandResponse>(&record.response_json) {
             Ok(mut response) => {
                 response.request_id = request.request_id.clone();
                 response.producer = self.producer.clone();
@@ -2436,9 +2396,7 @@ impl RelayCore {
                 request,
                 command_version,
                 "STORAGE_ERROR",
-                format!(
-                    "stored idempotency response is invalid: {error}"
-                ),
+                format!("stored idempotency response is invalid: {error}"),
             )),
         }
     }
@@ -2459,33 +2417,25 @@ impl RelayCore {
                     request,
                     command_version,
                     "IDEMPOTENCY_PERSIST_FAILED",
-                    format!(
-                        "serialize idempotent response: {error}"
-                    ),
+                    format!("serialize idempotent response: {error}"),
                 );
             }
         };
 
         match self.with_storage(|storage| {
-            storage.put_idempotency(
-                key,
-                &request.command,
-                &fingerprint,
-                &response_json,
-            )
+            storage.put_idempotency(key, &request.command, &fingerprint, &response_json)
         }) {
             Ok(()) => response,
-            Err(error) if error.code == "IDEMPOTENCY_CONFLICT" => {
-                self.try_replay(request, command_version)
-                    .unwrap_or_else(|| {
-                        self.failure(
-                            request,
-                            command_version,
-                            "IDEMPOTENCY_CONFLICT",
-                            "idempotency race could not be resolved",
-                        )
-                    })
-            }
+            Err(error) if error.code == "IDEMPOTENCY_CONFLICT" => self
+                .try_replay(request, command_version)
+                .unwrap_or_else(|| {
+                    self.failure(
+                        request,
+                        command_version,
+                        "IDEMPOTENCY_CONFLICT",
+                        "idempotency race could not be resolved",
+                    )
+                }),
             Err(error) => self.failure(
                 request,
                 command_version,
@@ -2497,11 +2447,7 @@ impl RelayCore {
             ),
         }
     }
-    fn finish(
-        &self,
-        request: &CommandRequest,
-        response: CommandResponse,
-    ) -> CommandResponse {
+    fn finish(&self, request: &CommandRequest, response: CommandResponse) -> CommandResponse {
         if let Some(logger) = &self.diagnostics {
             if let Ok(mut logger) = logger.lock() {
                 let mut event = DiagnosticEvent::new(
@@ -2515,27 +2461,23 @@ impl RelayCore {
                     "RELAY command completed",
                 );
                 event.correlation_id = Some(request.request_id.clone());
-                event.attributes.insert(
-                    "command".to_string(),
-                    json!(request.command),
-                );
+                event
+                    .attributes
+                    .insert("command".to_string(), json!(request.command));
                 event.attributes.insert(
                     "command_version".to_string(),
                     json!(response.command_version),
                 );
-                event.attributes.insert(
-                    "ok".to_string(),
-                    json!(response.ok),
-                );
-                event.attributes.insert(
-                    "replayed".to_string(),
-                    json!(response.replayed),
-                );
+                event
+                    .attributes
+                    .insert("ok".to_string(), json!(response.ok));
+                event
+                    .attributes
+                    .insert("replayed".to_string(), json!(response.replayed));
                 if let Some(error) = &response.error {
-                    event.attributes.insert(
-                        "error_code".to_string(),
-                        json!(error.code),
-                    );
+                    event
+                        .attributes
+                        .insert("error_code".to_string(), json!(error.code));
                 }
                 let _ = logger.append(event);
             }
@@ -2551,24 +2493,19 @@ impl RelayCore {
         }
     }
 }
-fn request_fingerprint(
-    request: &CommandRequest,
-    command_version: u32,
-) -> String {
+fn request_fingerprint(request: &CommandRequest, command_version: u32) -> String {
     let canonical = canonical_json(&json!({
         "command": request.command,
         "command_version": command_version,
         "arguments": request.arguments,
         "context": request.context
     }));
-    let encoded = serde_json::to_vec(&canonical)
-        .expect("canonical JSON must serialize");
+    let encoded = serde_json::to_vec(&canonical).expect("canonical JSON must serialize");
     let digest = Sha256::digest(encoded);
     let mut output = String::with_capacity(64);
     for byte in digest {
         use std::fmt::Write as _;
-        write!(&mut output, "{byte:02x}")
-            .expect("writing to String cannot fail");
+        write!(&mut output, "{byte:02x}").expect("writing to String cannot fail");
     }
     output
 }
@@ -2580,20 +2517,14 @@ fn canonical_json(value: &Value) -> Value {
             keys.sort();
             let mut output = Map::new();
             for key in keys {
-                output.insert(
-                    key.clone(),
-                    canonical_json(&object[key]),
-                );
+                output.insert(key.clone(), canonical_json(&object[key]));
             }
             Value::Object(output)
         }
-        Value::Array(items) => Value::Array(
-            items.iter().map(canonical_json).collect(),
-        ),
+        Value::Array(items) => Value::Array(items.iter().map(canonical_json).collect()),
         other => other.clone(),
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -2613,11 +2544,7 @@ mod tests {
         ))
     }
 
-    fn request(
-        id: &str,
-        command: &str,
-        arguments: Value,
-    ) -> CommandRequest {
+    fn request(id: &str, command: &str, arguments: Value) -> CommandRequest {
         CommandRequest {
             request_id: id.to_string(),
             command: command.to_string(),
@@ -2651,56 +2578,103 @@ mod tests {
             register.idempotency_key = Some(format!("key-register-{project_id}"));
             assert!(core.execute(register, &runtime).ok);
         }
-        let missing = core.execute(request("config-missing", "project.configuration.get", json!({
-            "project_id": "PRJ-config-a"
-        })), &runtime);
+        let missing = core.execute(
+            request(
+                "config-missing",
+                "project.configuration.get",
+                json!({
+                    "project_id": "PRJ-config-a"
+                }),
+            ),
+            &runtime,
+        );
         assert!(missing.ok);
         assert_eq!(missing.result.unwrap()["revision"], 0);
 
-        let mut put = request("config-put", "project.configuration.put", json!({
-            "project_id": "PRJ-config-a", "expected_revision": 0,
-            "format_version": 1, "project_type": "synthetic.project",
-            "adapter_id": "fixture.parser", "adapter_version": "1.2.0+fixture"
-        }));
+        let mut put = request(
+            "config-put",
+            "project.configuration.put",
+            json!({
+                "project_id": "PRJ-config-a", "expected_revision": 0,
+                "format_version": 1, "project_type": "synthetic.project",
+                "adapter_id": "fixture.parser", "adapter_version": "1.2.0+fixture"
+            }),
+        );
         put.idempotency_key = Some("key-config-put".to_string());
         let saved = core.execute(put, &runtime);
         assert!(saved.ok, "{:?}", saved.error);
         assert_eq!(saved.result.unwrap()["revision"], 1);
 
-        let mut stale_put = request("config-stale", "project.configuration.put", json!({
-            "project_id": "PRJ-config-a", "expected_revision": 0,
-            "format_version": 1, "project_type": "synthetic.other"
-        }));
+        let mut stale_put = request(
+            "config-stale",
+            "project.configuration.put",
+            json!({
+                "project_id": "PRJ-config-a", "expected_revision": 0,
+                "format_version": 1, "project_type": "synthetic.other"
+            }),
+        );
         stale_put.idempotency_key = Some("key-config-stale".to_string());
-        assert_eq!(core.execute(stale_put, &runtime).error.unwrap().code, "PROJECT_CONFIG_CONFLICT");
-        let mut invalid = request("config-invalid", "project.configuration.put", json!({
-            "project_id": "PRJ-config-a", "expected_revision": 1,
-            "format_version": 1, "project_type": "synthetic.project",
-            "adapter_id": "fixture.parser"
-        }));
+        assert_eq!(
+            core.execute(stale_put, &runtime).error.unwrap().code,
+            "PROJECT_CONFIG_CONFLICT"
+        );
+        let mut invalid = request(
+            "config-invalid",
+            "project.configuration.put",
+            json!({
+                "project_id": "PRJ-config-a", "expected_revision": 1,
+                "format_version": 1, "project_type": "synthetic.project",
+                "adapter_id": "fixture.parser"
+            }),
+        );
         invalid.idempotency_key = Some("key-config-invalid".to_string());
-        assert_eq!(core.execute(invalid, &runtime).error.unwrap().code, "VALIDATION_FAILED");
+        assert_eq!(
+            core.execute(invalid, &runtime).error.unwrap().code,
+            "VALIDATION_FAILED"
+        );
 
         let mut scoped = ExecutionAuthority::local_user("scoped-config-reader");
         scoped.project_ids = Some(["PRJ-config-b".to_string()].into_iter().collect());
-        let denied = core.execute_authorized(request("config-cross-project", "project.configuration.get", json!({
-            "project_id": "PRJ-config-a"
-        })), &runtime, &scoped);
+        let denied = core.execute_authorized(
+            request(
+                "config-cross-project",
+                "project.configuration.get",
+                json!({
+                    "project_id": "PRJ-config-a"
+                }),
+            ),
+            &runtime,
+            &scoped,
+        );
         assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
         drop(core);
 
         let reopened = RelayCore::open(CoreConfig::new(&dir));
-        let read = reopened.execute(request("config-restart", "project.configuration.get", json!({
-            "project_id": "PRJ-config-a"
-        })), &runtime);
+        let read = reopened.execute(
+            request(
+                "config-restart",
+                "project.configuration.get",
+                json!({
+                    "project_id": "PRJ-config-a"
+                }),
+            ),
+            &runtime,
+        );
         assert!(read.ok, "{:?}", read.error);
         let config = read.result.unwrap();
         assert_eq!(config["revision"], 1);
         assert_eq!(config["adapter_id"], "fixture.parser");
         assert_eq!(config["adapter_version"], "1.2.0+fixture");
-        let other = reopened.execute(request("config-other", "project.configuration.get", json!({
-            "project_id": "PRJ-config-b"
-        })), &runtime);
+        let other = reopened.execute(
+            request(
+                "config-other",
+                "project.configuration.get",
+                json!({
+                    "project_id": "PRJ-config-b"
+                }),
+            ),
+            &runtime,
+        );
         assert_eq!(other.result.unwrap()["configured"], false);
         drop(reopened);
         fs::remove_dir_all(dir).unwrap();
@@ -2718,10 +2692,7 @@ mod tests {
         req.idempotency_key = Some("IDEMP-project".to_string());
         let response = core.execute(req, &runtime());
         assert!(response.ok, "{response:?}");
-        response.result.unwrap()["id"]
-            .as_str()
-            .unwrap()
-            .to_string()
+        response.result.unwrap()["id"].as_str().unwrap().to_string()
     }
 
     #[test]
@@ -2737,15 +2708,9 @@ mod tests {
             &runtime(),
         );
         assert!(!response.ok);
-        assert_eq!(
-            response.error.as_ref().unwrap().code,
-            "VALIDATION_FAILED"
-        );
+        assert_eq!(response.error.as_ref().unwrap().code, "VALIDATION_FAILED");
 
-        let list = core.execute(
-            request("REQ-list", "project.list", json!({})),
-            &runtime(),
-        );
+        let list = core.execute(request("REQ-list", "project.list", json!({})), &runtime());
         assert_eq!(
             list.result.unwrap()["projects"].as_array().unwrap().len(),
             0
@@ -2772,10 +2737,7 @@ mod tests {
         let result_response = core.execute(put, &runtime());
         assert!(result_response.ok);
         let result = result_response.result.unwrap();
-        assert_eq!(
-            result["provenance"]["actor_id"],
-            "ACTOR-fixture"
-        );
+        assert_eq!(result["provenance"]["actor_id"], "ACTOR-fixture");
         assert_eq!(result["trust"], "local-attributed");
         let result_id = result["id"].as_str().unwrap().to_string();
 
@@ -2790,15 +2752,11 @@ mod tests {
                 "result_id": result_id
             }),
         );
-        checkpoint.idempotency_key =
-            Some("IDEMP-job".to_string());
+        checkpoint.idempotency_key = Some("IDEMP-job".to_string());
         let job_response = core.execute(checkpoint, &runtime());
         assert!(job_response.ok);
         let job = job_response.result.unwrap();
-        assert_eq!(
-            job["provenance"]["client_id"],
-            "CLIENT-test"
-        );
+        assert_eq!(job["provenance"]["client_id"], "CLIENT-test");
         assert_eq!(job["trust"], "local-attributed");
 
         drop(core);
@@ -2811,23 +2769,13 @@ mod tests {
             ),
             &runtime(),
         );
-        assert_eq!(
-            result_get.result.unwrap()["payload"]["value"],
-            42
-        );
+        assert_eq!(result_get.result.unwrap()["payload"]["value"], 42);
         let job_id = job["id"].as_str().unwrap();
         let job_get = reopened.execute(
-            request(
-                "REQ-get-job",
-                "job.get",
-                json!({ "job_id": job_id }),
-            ),
+            request("REQ-get-job", "job.get", json!({ "job_id": job_id })),
             &runtime(),
         );
-        assert_eq!(
-            job_get.result.unwrap()["checkpoint"]["stage"],
-            2
-        );
+        assert_eq!(job_get.result.unwrap()["checkpoint"]["stage"], 2);
         drop(reopened);
         fs::remove_dir_all(dir).unwrap();
     }
@@ -2872,8 +2820,7 @@ mod tests {
         assert!(serde_json::to_vec(&described).unwrap().len() < 1_024);
 
         let mut scoped = ExecutionAuthority::local_user("CLIENT-scoped");
-        scoped.project_ids =
-            Some(["PRJ-other".to_string()].into_iter().collect());
+        scoped.project_ids = Some(["PRJ-other".to_string()].into_iter().collect());
         let denied = core.execute_authorized(
             request(
                 "REQ-describe-denied",
@@ -2926,11 +2873,13 @@ mod tests {
         assert!(stored.ok, "{:?}", stored.error);
         let result_id = stored.result.unwrap()["id"].as_str().unwrap().to_string();
 
-        let context_request = || request(
-            "REQ-context-read",
-            "result.context",
-            json!({ "result_id": result_id, "max_bytes": 512 }),
-        );
+        let context_request = || {
+            request(
+                "REQ-context-read",
+                "result.context",
+                json!({ "result_id": result_id, "max_bytes": 512 }),
+            )
+        };
         let compact = core.execute(context_request(), &runtime());
         assert!(compact.ok, "{:?}", compact.error);
         let compact = compact.result.unwrap();
@@ -2952,11 +2901,8 @@ mod tests {
         assert_eq!(full.result.unwrap()["payload"]["failure_count"], 7);
 
         let mut scoped = ExecutionAuthority::local_user("CLIENT-scoped");
-        scoped.project_ids =
-            Some(["PRJ-other".to_string()].into_iter().collect());
-        let denied = core.execute_authorized(
-            context_request(), &runtime(), &scoped,
-        );
+        scoped.project_ids = Some(["PRJ-other".to_string()].into_iter().collect());
+        let denied = core.execute_authorized(context_request(), &runtime(), &scoped);
         assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
 
         drop(core);
@@ -2972,36 +2918,48 @@ mod tests {
             .map(|index| json!({ "event_code": format!("EVENT-{index:03}") }))
             .collect();
         entries[200] = json!({ "target_code": "TARGET-EXACT-42" });
-        let mut put = request("REQ-required-put", "result.put", json!({
-            "project_id": project_id,
-            "payload": {
-                "entries": entries,
-                "api_token": "PRIVATE-TOKEN",
-                "coordinate": { "x": 12.125 }
-            }
-        }));
+        let mut put = request(
+            "REQ-required-put",
+            "result.put",
+            json!({
+                "project_id": project_id,
+                "payload": {
+                    "entries": entries,
+                    "api_token": "PRIVATE-TOKEN",
+                    "coordinate": { "x": 12.125 }
+                }
+            }),
+        );
         put.idempotency_key = Some("IDEMP-required-put".to_string());
         let stored = core.execute(put, &runtime());
         assert!(stored.ok, "{:?}", stored.error);
         let result_id = stored.result.unwrap()["id"].as_str().unwrap().to_string();
-        let read = |pointers: Value, max_bytes: usize| core.execute(
-            request("REQ-required-read", "result.context", json!({
-                "result_id": result_id,
-                "max_bytes": max_bytes,
-                "required_pointers": pointers
-            })), &runtime());
+        let read = |pointers: Value, max_bytes: usize| {
+            core.execute(
+                request(
+                    "REQ-required-read",
+                    "result.context",
+                    json!({
+                        "result_id": result_id,
+                        "max_bytes": max_bytes,
+                        "required_pointers": pointers
+                    }),
+                ),
+                &runtime(),
+            )
+        };
 
         let focused = read(json!(["/entries/200/target_code"]), 1024);
         assert!(focused.ok, "{:?}", focused.error);
         let focused = focused.result.unwrap();
         assert!(serde_json::to_vec(&focused).unwrap().len() <= 1024);
         assert!(focused["facts"].as_array().unwrap().iter().any(|fact| {
-            fact["pointer"] == "/entries/200/target_code"
-                && fact["value"] == "TARGET-EXACT-42"
+            fact["pointer"] == "/entries/200/target_code" && fact["value"] == "TARGET-EXACT-42"
         }));
-        let pair = read(json!([
-            "/entries/200/target_code", "/entries/0/event_code"
-        ]), 1024);
+        let pair = read(
+            json!(["/entries/200/target_code", "/entries/0/event_code"]),
+            1024,
+        );
         assert!(pair.ok, "{:?}", pair.error);
         let pair = pair.result.unwrap();
         let pair_facts = pair["facts"].as_array().unwrap();
@@ -3012,7 +2970,10 @@ mod tests {
 
         for pointer in ["/api_token", "/coordinate/x", "/missing"] {
             let failed = read(json!([pointer]), 1024);
-            assert_eq!(failed.error.as_ref().unwrap().code, "CONTEXT_FACT_UNAVAILABLE");
+            assert_eq!(
+                failed.error.as_ref().unwrap().code,
+                "CONTEXT_FACT_UNAVAILABLE"
+            );
             let serialized = serde_json::to_string(&failed).unwrap();
             assert!(!serialized.contains("PRIVATE-TOKEN"));
             assert!(!serialized.contains("12.125"));
@@ -3022,31 +2983,54 @@ mod tests {
             let failed = read(json!([pointer]), 1024);
             assert_eq!(failed.error.unwrap().code, "VALIDATION_FAILED");
         }
-        assert_eq!(read(json!(vec!["/entries/200/target_code"; 2]), 1024)
-            .error.unwrap().code, "VALIDATION_FAILED");
+        assert_eq!(
+            read(json!(vec!["/entries/200/target_code"; 2]), 1024)
+                .error
+                .unwrap()
+                .code,
+            "VALIDATION_FAILED"
+        );
 
         let mut scoped = ExecutionAuthority::local_user("CLIENT-scoped");
         scoped.project_ids = Some(["PRJ-other".to_string()].into_iter().collect());
         let denied = core.execute_authorized(
-            request("REQ-required-denied", "result.context", json!({
-                "result_id": result_id,
-                "max_bytes": 1024,
-                "required_pointers": ["/entries/200/target_code"]
-            })), &runtime(), &scoped);
+            request(
+                "REQ-required-denied",
+                "result.context",
+                json!({
+                    "result_id": result_id,
+                    "max_bytes": 1024,
+                    "required_pointers": ["/entries/200/target_code"]
+                }),
+            ),
+            &runtime(),
+            &scoped,
+        );
         assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
 
-        let mut large = request("REQ-required-large-put", "result.put", json!({
-            "project_id": project_id,
-            "payload": { "items": vec![json!({ "code": "X".repeat(128) }); 8] }
-        }));
+        let mut large = request(
+            "REQ-required-large-put",
+            "result.put",
+            json!({
+                "project_id": project_id,
+                "payload": { "items": vec![json!({ "code": "X".repeat(128) }); 8] }
+            }),
+        );
         large.idempotency_key = Some("IDEMP-required-large-put".to_string());
         let stored = core.execute(large, &runtime());
         assert!(stored.ok, "{:?}", stored.error);
         let large_id = stored.result.unwrap()["id"].as_str().unwrap().to_string();
         let pointers: Vec<String> = (0..8).map(|index| format!("/items/{index}/code")).collect();
-        let failed = core.execute(request("REQ-required-too-large", "result.context", json!({
-            "result_id": large_id, "max_bytes": 512, "required_pointers": pointers
-        })), &runtime());
+        let failed = core.execute(
+            request(
+                "REQ-required-too-large",
+                "result.context",
+                json!({
+                    "result_id": large_id, "max_bytes": 512, "required_pointers": pointers
+                }),
+            ),
+            &runtime(),
+        );
         assert_eq!(failed.error.unwrap().code, "CONTEXT_BUDGET_TOO_SMALL");
 
         drop(core);
@@ -3068,8 +3052,7 @@ mod tests {
                     "payload": { "value": value }
                 }),
             );
-            req.idempotency_key =
-                Some("IDEMP-replay".to_string());
+            req.idempotency_key = Some("IDEMP-replay".to_string());
             req
         };
 
@@ -3085,32 +3068,131 @@ mod tests {
         assert!(replay.ok);
         assert!(replay.replayed);
         assert_eq!(replay.request_id, "REQ-second");
-        assert_eq!(
-            replay.result.unwrap()["id"].as_str().unwrap(),
-            first_id
-        );
+        assert_eq!(replay.result.unwrap()["id"].as_str().unwrap(), first_id);
 
-        let conflict = core.execute(
-            make("REQ-conflict", 8),
-            &runtime(),
-        );
+        let conflict = core.execute(make("REQ-conflict", 8), &runtime());
         assert!(!conflict.ok);
-        assert_eq!(
-            conflict.error.unwrap().code,
-            "IDEMPOTENCY_CONFLICT"
-        );
+        assert_eq!(conflict.error.unwrap().code, "IDEMPOTENCY_CONFLICT");
         drop(core);
         fs::remove_dir_all(dir).unwrap();
     }
     #[test]
+    fn host_extension_is_not_called_for_denied_project_scope() {
+        let dir = temp_dir("extension-authority");
+        let core = RelayCore::open(CoreConfig::new(&dir));
+        let mut authority = ExecutionAuthority::local_user("CLIENT-scoped");
+        authority.project_ids = Some(["PRJ-other".to_string()].into_iter().collect());
+        let called = std::cell::Cell::new(false);
+        let response = core.execute_authorized_with_extension(
+            request(
+                "REQ-denied-uefn",
+                "uefn.static.inspect",
+                json!({
+                    "project_id": "PRJ-denied"
+                }),
+            ),
+            &runtime(),
+            &authority,
+            |_| {
+                called.set(true);
+                None
+            },
+        );
+        assert_eq!(response.error.unwrap().code, "PROJECT_SCOPE_DENIED");
+        assert!(!called.get());
+        drop(core);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn result_list_exposes_metadata_only_and_requires_scope() {
+        let dir = temp_dir("result-list-scope");
+        let core = RelayCore::open(CoreConfig::new(&dir));
+        let project_id = register_project(&core);
+        let mut put = request(
+            "REQ-list-put",
+            "result.put",
+            json!({
+                "project_id": project_id, "kind": "TEST", "payload": { "secret": "PRIVATE-LIST-PAYLOAD" }
+            }),
+        );
+        put.idempotency_key = Some("IDEMP-list-put".to_string());
+        assert!(core.execute(put, &runtime()).ok);
+
+        let listed = core.execute(
+            request(
+                "REQ-list-results",
+                "result.list",
+                json!({
+                    "project_id": project_id, "limit": 10
+                }),
+            ),
+            &runtime(),
+        );
+        assert!(listed.ok, "{listed:?}");
+        let body = listed.result.unwrap();
+        assert_eq!(body["results"].as_array().unwrap().len(), 1);
+        let serialized = body.to_string();
+        assert!(!serialized.contains("PRIVATE-LIST-PAYLOAD"));
+        assert!(!serialized.contains("provenance"));
+
+        let mut scoped = ExecutionAuthority::local_user("CLIENT-scoped");
+        scoped.project_ids = Some(["PRJ-other".to_string()].into_iter().collect());
+        let denied = core.execute_authorized(
+            request(
+                "REQ-list-denied",
+                "result.list",
+                json!({
+                    "project_id": project_id
+                }),
+            ),
+            &runtime(),
+            &scoped,
+        );
+        assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
+        let required = core.execute_authorized(
+            request("REQ-list-required", "result.list", json!({})),
+            &runtime(),
+            &scoped,
+        );
+        assert_eq!(required.error.unwrap().code, "PROJECT_SCOPE_REQUIRED");
+        drop(core);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn diagnostic_summary_excludes_command_arguments_and_raw_history() {
+        let dir = temp_dir("diagnostic-summary");
+        let core = RelayCore::open(CoreConfig::new(&dir));
+        let secret = "PRIVATE-DIAGNOSTIC-INPUT";
+        let echoed = core.execute(
+            request(
+                "REQ-private-echo",
+                "system.echo",
+                json!({ "secret": secret }),
+            ),
+            &runtime(),
+        );
+        assert!(echoed.ok);
+        let summary = core.execute(
+            request("REQ-diagnostic-summary", "diagnostics.summary", json!({})),
+            &runtime(),
+        );
+        assert!(summary.ok, "{:?}", summary.error);
+        let body = serde_json::to_string(&summary.result.unwrap()).unwrap();
+        assert!(body.contains("relay_version"));
+        assert!(body.contains("by_severity"));
+        assert!(!body.contains(secret));
+        assert!(!body.contains("raw_history"));
+        drop(core);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn storage_and_diagnostics_health_degrade_independently() {
         let bad_storage_dir = temp_dir("bad-storage");
         fs::create_dir_all(&bad_storage_dir).unwrap();
-        fs::write(
-            bad_storage_dir.join("relay.sqlite3"),
-            b"not sqlite",
-        )
-        .unwrap();
+        fs::write(bad_storage_dir.join("relay.sqlite3"), b"not sqlite").unwrap();
         let core = RelayCore::open(CoreConfig::new(&bad_storage_dir));
         let status = core.execute(
             request("REQ-status", "system.status", json!({})),
@@ -3131,20 +3213,13 @@ mod tests {
             ),
             &runtime(),
         );
-        assert_eq!(
-            blocked.error.unwrap().code,
-            "STORAGE_UNAVAILABLE"
-        );
+        assert_eq!(blocked.error.unwrap().code, "STORAGE_UNAVAILABLE");
         drop(core);
         fs::remove_dir_all(bad_storage_dir).unwrap();
 
         let bad_diag_dir = temp_dir("bad-diagnostics");
         fs::create_dir_all(&bad_diag_dir).unwrap();
-        fs::write(
-            bad_diag_dir.join("diagnostics"),
-            b"blocks directory",
-        )
-        .unwrap();
+        fs::write(bad_diag_dir.join("diagnostics"), b"blocks directory").unwrap();
         let core = RelayCore::open(CoreConfig::new(&bad_diag_dir));
         let status = core.execute(
             request("REQ-status-2", "system.status", json!({})),
@@ -3199,8 +3274,7 @@ mod tests {
         assert!(!denied.ok);
         assert_eq!(denied.error.unwrap().code, "PERMISSION_DENIED");
 
-        let mut effect_denied =
-            ExecutionAuthority::local_user("CLIENT-effect");
+        let mut effect_denied = ExecutionAuthority::local_user("CLIENT-effect");
         effect_denied.effect_classes.remove("relay_state_write");
         let denied = core.execute_authorized(
             request(
@@ -3236,11 +3310,7 @@ mod tests {
         spoofed.context.delegator_id = Some("ATTACKER-owner".to_string());
         spoofed.idempotency_key = Some("IDEMP-trusted".to_string());
 
-        let response = core.execute_authorized(
-            spoofed,
-            &runtime,
-            &authority,
-        );
+        let response = core.execute_authorized(spoofed, &runtime, &authority);
         assert!(response.ok);
 
         let tx = core.execute_authorized(
@@ -3300,15 +3370,10 @@ mod tests {
         put.idempotency_key = Some("IDEMP-b-result".to_string());
         let result = core.execute(put, &runtime);
         assert!(result.ok);
-        let result_id = result.result.unwrap()["id"]
-            .as_str()
-            .unwrap()
-            .to_string();
+        let result_id = result.result.unwrap()["id"].as_str().unwrap().to_string();
 
-        let mut authority =
-            ExecutionAuthority::local_user("CLIENT-scoped");
-        authority.project_ids =
-            Some(["PRJ-a".to_string()].into_iter().collect());
+        let mut authority = ExecutionAuthority::local_user("CLIENT-scoped");
+        authority.project_ids = Some(["PRJ-a".to_string()].into_iter().collect());
 
         let projects = core.execute_authorized(
             request("REQ-list-scoped", "project.list", json!({})),
@@ -3332,10 +3397,7 @@ mod tests {
             &authority,
         );
         assert!(!denied.ok);
-        assert_eq!(
-            denied.error.unwrap().code,
-            "PROJECT_SCOPE_DENIED"
-        );
+        assert_eq!(denied.error.unwrap().code, "PROJECT_SCOPE_DENIED");
 
         let mut cross_write = request(
             "REQ-cross-write",
@@ -3346,18 +3408,10 @@ mod tests {
                 "payload": { "blocked": true }
             }),
         );
-        cross_write.idempotency_key =
-            Some("IDEMP-cross-write".to_string());
-        let denied_write = core.execute_authorized(
-            cross_write,
-            &runtime,
-            &authority,
-        );
+        cross_write.idempotency_key = Some("IDEMP-cross-write".to_string());
+        let denied_write = core.execute_authorized(cross_write, &runtime, &authority);
         assert!(!denied_write.ok);
-        assert_eq!(
-            denied_write.error.unwrap().code,
-            "PROJECT_SCOPE_DENIED"
-        );
+        assert_eq!(denied_write.error.unwrap().code, "PROJECT_SCOPE_DENIED");
 
         drop(core);
         fs::remove_dir_all(dir).unwrap();
@@ -3481,7 +3535,8 @@ mod tests {
 
         let storage = RelayStorage::open(state_dir.join("relay.sqlite3")).unwrap();
         let files = storage.list_project_files("PRJ-dependencies").unwrap();
-        let source_sha = files.iter()
+        let source_sha = files
+            .iter()
             .find(|file| file.relative_path == "src/a.txt")
             .unwrap()
             .content_sha256
@@ -3507,12 +3562,22 @@ mod tests {
         };
 
         let wrong_hash = core.execute(
-            make_replace("REQ-dep-wrong-hash", 1, &"0".repeat(64), json!(["src/b.txt"])),
+            make_replace(
+                "REQ-dep-wrong-hash",
+                1,
+                &"0".repeat(64),
+                json!(["src/b.txt"]),
+            ),
             &runtime,
         );
         assert_eq!(wrong_hash.error.unwrap().code, "INDEX_SOURCE_CHANGED");
         let missing_target = core.execute(
-            make_replace("REQ-dep-missing", 1, &source_sha, json!(["src/missing.txt"])),
+            make_replace(
+                "REQ-dep-missing",
+                1,
+                &source_sha,
+                json!(["src/missing.txt"]),
+            ),
             &runtime,
         );
         assert_eq!(missing_target.error.unwrap().code, "INDEX_FILE_NOT_FOUND");
@@ -3537,7 +3602,10 @@ mod tests {
             &runtime,
         );
         assert!(listed.ok);
-        assert_eq!(listed.result.unwrap()["edges"][0]["target_path"], "src/b.txt");
+        assert_eq!(
+            listed.result.unwrap()["edges"][0]["target_path"],
+            "src/b.txt"
+        );
 
         let stale_generation = core.execute(
             make_replace("REQ-dep-stale", 0, &source_sha, json!([])),
@@ -3564,7 +3632,12 @@ mod tests {
             ),
             &runtime,
         );
-        assert!(listed.result.unwrap()["edges"].as_array().unwrap().is_empty());
+        assert!(
+            listed.result.unwrap()["edges"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
         let delta = core.execute(
             request(
                 "REQ-dep-delta",
@@ -3592,7 +3665,12 @@ mod tests {
         assert_eq!(bounded.error.unwrap().code, "INDEX_DELTA_TOO_LARGE");
 
         let stale = core.execute(
-            make_replace("REQ-dep-stale-after-change", 1, &source_sha, json!(["src/b.txt"])),
+            make_replace(
+                "REQ-dep-stale-after-change",
+                1,
+                &source_sha,
+                json!(["src/b.txt"]),
+            ),
             &runtime,
         );
         assert_eq!(stale.error.unwrap().code, "INDEX_GENERATION_CONFLICT");
@@ -3647,8 +3725,7 @@ mod tests {
                     "payload": { "value": 77 }
                 }),
             );
-            req.idempotency_key =
-                Some("IDEMP-transaction-replay".to_string());
+            req.idempotency_key = Some("IDEMP-transaction-replay".to_string());
             req
         };
 
@@ -3677,10 +3754,7 @@ mod tests {
             .count();
         assert_eq!(result_put_count, 1);
 
-        let usage = core.execute(
-            request("REQ-usage", "usage.summary", json!({})),
-            &runtime,
-        );
+        let usage = core.execute(request("REQ-usage", "usage.summary", json!({})), &runtime);
         assert!(usage.ok);
         let summary = usage.result.unwrap();
         assert!(summary["command_count"].as_u64().unwrap() >= 4);
@@ -3701,22 +3775,17 @@ mod tests {
         let core = RelayCore::open(CoreConfig::new(&dir));
         let runtime = runtime();
 
-        let mut authority =
-            ExecutionAuthority::local_user("CLIENT-egress");
+        let mut authority = ExecutionAuthority::local_user("CLIENT-egress");
         authority.actor_id = "AGENT-egress".to_string();
         authority.delegator_id = Some("USER-owner".to_string());
-        authority.project_ids =
-            Some(["PRJ-egress".to_string()].into_iter().collect());
+        authority.project_ids = Some(["PRJ-egress".to_string()].into_iter().collect());
         authority.egress.destinations.insert(
             "remote-ai".to_string(),
             DestinationPolicy {
                 remote: true,
-                allowed_classes:
-                    [DataClass::Project].into_iter().collect(),
-                allowed_modalities:
-                    ["text".to_string()].into_iter().collect(),
-                allowed_projects:
-                    Some(["PRJ-egress".to_string()].into_iter().collect()),
+                allowed_classes: [DataClass::Project].into_iter().collect(),
+                allowed_modalities: ["text".to_string()].into_iter().collect(),
+                allowed_projects: Some(["PRJ-egress".to_string()].into_iter().collect()),
                 max_bytes: Some(1024),
             },
         );
@@ -3741,10 +3810,12 @@ mod tests {
         );
         assert!(blocked.ok);
         assert_eq!(blocked.result.as_ref().unwrap()["allowed"], false);
-        assert!(blocked.result.as_ref().unwrap()["reason"]
-            .as_str()
-            .unwrap()
-            .contains("local-only"));
+        assert!(
+            blocked.result.as_ref().unwrap()["reason"]
+                .as_str()
+                .unwrap()
+                .contains("local-only")
+        );
 
         authority.egress.local_only = false;
         let handle = CredentialHandle::active(
@@ -3752,8 +3823,7 @@ mod tests {
             "github",
             ["egress".to_string()],
         );
-        core.register_credential_handle_metadata(&handle)
-            .unwrap();
+        core.register_credential_handle_metadata(&handle).unwrap();
         authority
             .credential_handles
             .insert(handle.id.clone(), handle.clone());
@@ -3779,15 +3849,15 @@ mod tests {
         );
         assert!(allowed.ok);
         assert_eq!(allowed.result.as_ref().unwrap()["allowed"], true);
-        assert!(allowed.result.as_ref().unwrap()["ledger_id"]
-            .as_str()
-            .unwrap()
-            .starts_with("EGR-"));
+        assert!(
+            allowed.result.as_ref().unwrap()["ledger_id"]
+                .as_str()
+                .unwrap()
+                .starts_with("EGR-")
+        );
 
-        core.revoke_credential_handle_metadata(
-            "github.connection.fixture",
-        )
-        .unwrap();
+        core.revoke_credential_handle_metadata("github.connection.fixture")
+            .unwrap();
 
         let revoked = core.execute_authorized(
             request(
@@ -3805,10 +3875,7 @@ mod tests {
             &authority,
         );
         assert!(!revoked.ok);
-        assert_eq!(
-            revoked.error.unwrap().code,
-            "CREDENTIAL_HANDLE_REVOKED"
-        );
+        assert_eq!(revoked.error.unwrap().code, "CREDENTIAL_HANDLE_REVOKED");
 
         let metadata = core
             .credential_handle_metadata("github.connection.fixture")
@@ -3827,15 +3894,11 @@ mod tests {
     fn incompatible_command_version_is_explicit() {
         let dir = temp_dir("version");
         let core = RelayCore::open(CoreConfig::new(&dir));
-        let mut req =
-            request("REQ-version", "system.status", json!({}));
+        let mut req = request("REQ-version", "system.status", json!({}));
         req.command_version = Some(999);
         let response = core.execute(req, &runtime());
         assert!(!response.ok);
-        assert_eq!(
-            response.error.unwrap().code,
-            "COMMAND_VERSION_INCOMPATIBLE"
-        );
+        assert_eq!(response.error.unwrap().code, "COMMAND_VERSION_INCOMPATIBLE");
         drop(core);
         fs::remove_dir_all(dir).unwrap();
     }
@@ -3846,11 +3909,7 @@ mod tests {
         let core = RelayCore::open(CoreConfig::new(&dir));
         let secret = "SHOULD-NOT-BE-IN-DIAGNOSTICS";
         let response = core.execute(
-            request(
-                "REQ-echo",
-                "system.echo",
-                json!({ "value": secret }),
-            ),
+            request("REQ-echo", "system.echo", json!({ "value": secret })),
             &runtime(),
         );
         assert!(response.ok);
@@ -3861,14 +3920,8 @@ mod tests {
         let mut raw = String::new();
         for entry in fs::read_dir(&diagnostics_dir).unwrap() {
             let entry = entry.unwrap();
-            if entry
-                .file_name()
-                .to_string_lossy()
-                .ends_with(".jsonl")
-            {
-                raw.push_str(
-                    &fs::read_to_string(entry.path()).unwrap()
-                );
+            if entry.file_name().to_string_lossy().ends_with(".jsonl") {
+                raw.push_str(&fs::read_to_string(entry.path()).unwrap());
             }
         }
         assert!(raw.contains("relay.command.completed"));

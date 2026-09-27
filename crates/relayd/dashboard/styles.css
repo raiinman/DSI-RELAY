@@ -16,15 +16,31 @@ main:focus-visible { outline: 3px solid #146b53; outline-offset: 3px; }
 #status-message[data-state="Degraded"] { color: #a74428; }
 #status-message[data-state="Checking"] { color: #374b45; }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.secondary { margin-top: 1rem; }
+.diagnostics { margin-top: 1rem; }
+.section-intro { color: #53645e; }
+.diagnostic-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 1.5rem 0 0; }
+.diagnostic-grid div { border-top: 1px solid #e3ece7; padding-top: .8rem; min-width: 0; }
+.diagnostic-grid dt { font-size: .85rem; color: #53645e; }
+.diagnostic-grid dd { margin: .35rem 0 0; font-weight: 700; overflow-wrap: anywhere; }
+.diagnostic-guidance { margin: 1.5rem 0 0; }
 ul { list-style: none; padding: 0; margin-bottom: 0; }
 li { border-top: 1px solid #e3ece7; padding: .7rem 0; }
+#projects li { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
+#projects li strong { margin-right: auto; }
+#projects button { flex: none; font-size: .8rem; }
 button { background: #d7f3e5; color: #143d39; border: 0; border-radius: .5rem; padding: .65rem 1rem; font-weight: 700; cursor: pointer; }
 button:focus-visible, summary:focus-visible { outline: 3px solid #efb03c; outline-offset: 3px; }
 a:focus-visible { outline: 3px solid #efb03c; outline-offset: 3px; }
 button[aria-disabled="true"] { opacity: .55; cursor: wait; }
+button:disabled { opacity: .55; cursor: wait; }
+#uefn-inspection { margin: 1rem 0 0; color: #53645e; }
+#asset-inspection { margin: .5rem 0 0; color: #53645e; }
+#uefn-connect { margin-top: 1rem; font-size: .8rem; }
+#uefn-connection { margin: .5rem 0 0; color: #53645e; }
 #next-action { margin: 1rem 0 0; font-weight: 600; }
 details { margin-top: 1rem; }
 summary { cursor: pointer; font-weight: 700; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; }
 footer { padding: 1.5rem; text-align: center; color: #53645e; font-size: .85rem; }
-@media (max-width: 650px) { .grid { grid-template-columns: 1fr; } header { padding: 1rem 1.25rem; } }
+@media (max-width: 650px) { .grid, .diagnostic-grid { grid-template-columns: 1fr; } header { padding: 1rem 1.25rem; } }

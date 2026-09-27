@@ -23,7 +23,12 @@ function element() {
 async function loadDashboard(results, hash = "#local-test-token") {
   const selectors = [
     "#details", "#refresh", "#status-message", "#health-summary", "#health-checks",
-    "#next-action", "#project-count", "#projects"
+    "#next-action", "#project-count", "#projects", "#uefn-connect", "#uefn-connection",
+    "#uefn-inspection", "#asset-inspection", "#krita-inspection",
+    "#activity-summary", "#activity-list", "#results-summary", "#results-list", "#usage-summary", "#usage-detail", "#diagnostic-capture",
+    "#diagnostic-detail", "#diagnostic-storage", "#diagnostic-dropped",
+    "#diagnostic-events", "#diagnostic-incomplete", "#relay-version",
+    "#relay-uptime", "#diagnostic-guidance"
   ];
   const nodes = Object.fromEntries(selectors.map((selector) => [selector, element()]));
   const calls = [];
@@ -49,7 +54,10 @@ async function loadDashboard(results, hash = "#local-test-token") {
 
 function success(command) {
   const results = {
-    "system.status": { recovery_state: "Degraded" },
+    "system.status": {
+      recovery_state: "Degraded", version: "0.1.0", uptime_ms: 125000,
+      diagnostics: { ok: true, detail_active: false, current_bytes: 80, rotated_files: 1, evicted_events: 2 }
+    },
     "system.doctor": {
       summary: "A local component needs attention.",
       checks: [
@@ -58,7 +66,13 @@ function success(command) {
       ],
       next_action: "Inspect operational storage."
     },
-    "project.list": { projects: [{ name: "<script>unsafe</script>", id: "private-id" }] }
+    "project.list": { projects: [{ name: "<script>unsafe</script>", id: "private-id" }] },
+    "diagnostics.summary": {
+      available: true, events: { total: 12, incomplete: 1 }, error_code: null
+    },
+    "usage.summary": { command_count: 8, failure_count: 1, remote_calls: 0, model_tokens_in: 0, model_tokens_out: 0 },
+    "transaction.list": { transactions: [{ command: "project.register", state: "verified" }] },
+    "result.list": { results: [{ kind: "UEFN_STATIC", payload_bytes: 2048, producer_version: "0.1.0" }] }
   };
   return { ok: true, json: async () => ({ ok: true, result: results[command] }) };
 }
@@ -74,14 +88,21 @@ test("refresh uses read-only commands and renders named failures as text", async
   const page = await loadDashboard(success);
   assert.equal(page.location.hash, "");
   assert.deepEqual(page.calls.map((call) => JSON.parse(call.body).command), [
-    "system.status", "system.doctor", "project.list"
+    "system.status", "system.doctor", "project.list", "diagnostics.summary",
+    "usage.summary", "transaction.list", "result.list"
   ]);
   assert.ok(page.calls.every((call) => call.headers["X-Relay-Dashboard-Token"] === "local-test-token"));
   assert.equal(page.nodes["#status-message"].textContent, "RELAY needs attention. See Health below.");
   assert.equal(page.nodes["#health-checks"].children[1].textContent,
-    "Project records need attention. See Advanced details for the exact result.");
+    "Project records need attention. See Advanced details for the component code.");
   assert.equal(page.nodes["#projects"].children[0].children[0].textContent, "<script>unsafe</script>");
   assert.equal(page.nodes["#next-action"].hidden, false);
+  assert.equal(page.nodes["#diagnostic-events"].textContent, "12");
+  assert.equal(page.nodes["#diagnostic-incomplete"].textContent, "1");
+  assert.equal(page.nodes["#activity-list"].children[0].textContent, "project.register: verified");
+  assert.equal(page.nodes["#results-list"].children[0].textContent, "UEFN_STATIC · 2,048 bytes · RELAY 0.1.0");
+  assert.equal(page.nodes["#usage-summary"].textContent, "8 commands run · 1 failed");
+  assert.doesNotMatch(page.nodes["#details"].textContent, /private-id|raw diagnostic|<script>/);
   assert.equal(page.nodes["#refresh"].attributes["aria-disabled"], "false");
 });
 
@@ -94,6 +115,9 @@ test("a failed refresh clears stale health, projects, and advanced output", asyn
   assert.equal(page.nodes["#health-checks"].children.length, 0);
   assert.equal(page.nodes["#projects"].children.length, 0);
   assert.equal(page.nodes["#next-action"].hidden, true);
+  assert.equal(page.nodes["#diagnostic-events"].textContent, "Unavailable");
+  assert.equal(page.nodes["#activity-summary"].textContent, "Recent activity is unavailable.");
+  assert.equal(page.nodes["#usage-summary"].textContent, "Usage information is unavailable.");
   assert.equal(page.nodes["#details"].textContent, "No current details available.");
   assert.equal(page.nodes["#refresh"].attributes["aria-disabled"], "false");
 });

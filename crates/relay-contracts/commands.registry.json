@@ -127,6 +127,235 @@
       "errors": []
     },
     {
+      "id": "diagnostics.summary",
+      "version": 1,
+      "stability": "phase5",
+      "summary": "Return bounded diagnostic health and event counts without raw log history.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "result_schema": {
+        "type": "object",
+        "required": ["schema_version", "relay_version", "generated_unix_ms", "available", "health", "events", "error_code"],
+        "properties": {
+          "schema_version": { "type": "integer", "const": 1 },
+          "relay_version": { "type": "string", "minLength": 1 },
+          "generated_unix_ms": { "type": "integer", "minimum": 0 },
+          "available": { "type": "boolean" },
+          "health": {
+            "type": "object",
+            "required": ["ok", "retention_evicted_events", "retention_evicted_files"],
+            "properties": {
+              "ok": { "type": "boolean" },
+              "retention_evicted_events": { "type": "integer", "minimum": 0 },
+              "retention_evicted_files": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          },
+          "events": {
+            "type": ["object", "null"],
+            "properties": {
+              "total": { "type": "integer", "minimum": 0 },
+              "incomplete": { "type": "integer", "minimum": 0 },
+              "sampled": { "type": "integer", "minimum": 0 },
+              "invalid_lines": { "type": "integer", "minimum": 0 },
+              "by_severity": { "type": "object" }
+            },
+            "additionalProperties": false
+          },
+          "error_code": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      },
+      "errors": []
+    },
+    {
+      "id": "uefn.static.inspect",
+      "version": 1,
+      "stability": "phase6",
+      "summary": "Classify UEFN project markers, Verse sources, and Unreal assets in a ready project index without opening editor files.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": { "project_id": { "type": "string", "minLength": 1 } },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["schema_version", "project_id", "index_generation", "rejected_index_path_count", "marker_state", "project_markers", "project_marker_count", "verse_source_count", "verse_sources", "verse_sources_omitted", "generated_verse_count", "unreal_asset_count", "unreal_map_count", "findings", "capabilities"],
+        "properties": {
+          "schema_version": { "type": "integer", "const": 1 },
+          "project_id": { "type": "string" },
+          "index_generation": { "type": "integer", "minimum": 1 },
+          "rejected_index_path_count": { "type": "integer", "minimum": 0 },
+          "marker_state": { "type": "string", "enum": ["missing", "present", "ambiguous"] },
+          "project_markers": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
+          "project_marker_count": { "type": "integer", "minimum": 0 },
+          "verse_source_count": { "type": "integer", "minimum": 0 },
+          "verse_sources": { "type": "array", "maxItems": 256, "items": { "type": "string" } },
+          "verse_sources_omitted": { "type": "integer", "minimum": 0 },
+          "generated_verse_count": { "type": "integer", "minimum": 0 },
+          "unreal_asset_count": { "type": "integer", "minimum": 0 },
+          "unreal_map_count": { "type": "integer", "minimum": 0 },
+          "findings": { "type": "array", "maxItems": 3, "items": { "type": "object" } },
+          "capabilities": { "type": "object" }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["PROJECT_NOT_FOUND", "INDEX_NOT_READY", "STORAGE_UNAVAILABLE", "UEFN_SERIALIZATION_FAILED", "INTEGRATION_UNAVAILABLE"]
+    },
+    {
+      "id": "uefn.mcp.discover",
+      "version": 1,
+      "stability": "phase6",
+      "summary": "Probe an explicit localhost UEFN MCP endpoint and report bounded capability counts without invoking editor tools.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "properties": { "port": { "type": "integer", "minimum": 1, "maximum": 65535 } },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["state", "reason_code", "protocol_version", "tool_count", "discovery_tools_advertised", "editor_identity_verified", "live_workflow_status"],
+        "properties": {
+          "state": { "type": "string", "enum": ["discovered", "unavailable"] },
+          "reason_code": { "type": ["string", "null"] },
+          "protocol_version": { "type": ["string", "null"] },
+          "tool_count": { "type": ["integer", "null"], "minimum": 0 },
+          "discovery_tools_advertised": { "type": "boolean" },
+          "editor_identity_verified": { "type": "boolean", "const": false },
+          "live_workflow_status": { "type": "string", "const": "untested" }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["UEFN_ENDPOINT_INVALID", "INTEGRATION_UNAVAILABLE"]
+    },
+    {
+      "id": "assets.manifest.validate",
+      "version": 1,
+      "stability": "phase8",
+      "summary": "Validate a bounded asset manifest and project-local source/export relationships without launching creator apps.",
+      "effect_class": "analyze",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id", "manifest_json"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "manifest_json": { "type": "string", "minLength": 2, "maxLength": 32768 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["schema_version", "asset_count", "local_checks_passed", "finding_count", "findings_truncated", "creator_app_execution", "findings"],
+        "properties": {
+          "schema_version": { "type": "integer", "const": 1 },
+          "asset_count": { "type": "integer", "minimum": 0 },
+          "local_checks_passed": { "type": "boolean" },
+          "finding_count": { "type": "integer", "minimum": 0 },
+          "findings_truncated": { "type": "boolean" },
+          "creator_app_execution": { "type": "string", "const": "not_checked" },
+          "findings": { "type": "array", "maxItems": 64, "items": { "type": "object" } }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["PROJECT_NOT_FOUND", "PROJECT_ROOT_UNAVAILABLE", "STORAGE_UNAVAILABLE", "ASSET_MANIFEST_INVALID", "ASSET_PROJECT_MISMATCH", "ASSET_VALIDATION_UNAVAILABLE", "ASSET_SERIALIZATION_FAILED", "INTEGRATION_UNAVAILABLE"]
+    },
+    {
+      "id": "assets.krita.inspect",
+      "version": 1,
+      "stability": "phase8",
+      "summary": "Inspect declared Krita source/export formats and project-local asset links without launching Krita.",
+      "effect_class": "analyze",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id", "manifest_json"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "manifest_json": { "type": "string", "minLength": 2, "maxLength": 32768 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["schema_version", "capabilities", "krita_asset_count", "assets", "assets_omitted", "generic_local_checks_passed", "generic_finding_count", "generic_findings_truncated", "krita_format_finding_count", "format_findings", "format_findings_truncated", "native_workflow"],
+        "properties": {
+          "schema_version": { "type": "integer", "const": 1 },
+          "capabilities": { "type": "object" },
+          "krita_asset_count": { "type": "integer", "minimum": 0 },
+          "assets": { "type": "array", "maxItems": 64, "items": { "type": "object" } },
+          "assets_omitted": { "type": "integer", "minimum": 0 },
+          "generic_local_checks_passed": { "type": "boolean" },
+          "generic_finding_count": { "type": "integer", "minimum": 0 },
+          "generic_findings_truncated": { "type": "boolean" },
+          "krita_format_finding_count": { "type": "integer", "minimum": 0 },
+          "format_findings": { "type": "array", "maxItems": 64, "items": { "type": "object" } },
+          "format_findings_truncated": { "type": "boolean" },
+          "native_workflow": { "type": "string", "const": "untested" }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["PROJECT_NOT_FOUND", "PROJECT_ROOT_UNAVAILABLE", "STORAGE_UNAVAILABLE", "ASSET_MANIFEST_INVALID", "ASSET_PROJECT_MISMATCH", "ASSET_VALIDATION_UNAVAILABLE", "ASSET_SERIALIZATION_FAILED", "INTEGRATION_UNAVAILABLE"]
+    },
+    {
+      "id": "runtime.capture.analyze",
+      "version": 1,
+      "stability": "phase7",
+      "summary": "Normalize a bounded structured Verse log fragment and evaluate local assertions without claiming live UEFN verification.",
+      "effect_class": "analyze",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["project_id", "session_id", "source_kind", "source_version", "capture_ref", "capture_text"],
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "session_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "source_kind": { "type": "string", "enum": ["uefn_log", "imported_log", "synthetic_fixture"] },
+          "source_version": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "capture_ref": { "type": "string", "minLength": 1, "maxLength": 96 },
+          "capture_text": { "type": "string", "maxLength": 32768 },
+          "assertions": { "type": "array", "maxItems": 32, "items": { "type": "object" } }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["schema_version", "session_id", "source_kind", "source_version", "capture_ref", "counts", "quality", "assertions", "omitted_assertions", "live_uefn_status"],
+        "properties": {
+          "schema_version": { "type": "integer", "const": 1 },
+          "session_id": { "type": "string" },
+          "source_kind": { "type": "string" },
+          "source_version": { "type": "string" },
+          "capture_ref": { "type": "string" },
+          "counts": { "type": "object" },
+          "quality": { "type": "object" },
+          "assertions": { "type": "array", "maxItems": 32, "items": { "type": "object" } },
+          "omitted_assertions": { "type": "integer", "minimum": 0 },
+          "live_uefn_status": { "type": "string", "const": "untested" }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["PROJECT_NOT_FOUND", "STORAGE_UNAVAILABLE", "CAPTURE_INVALID", "ASSERTION_SPEC_INVALID", "INTEGRATION_UNAVAILABLE"]
+    },
+    {
       "id": "system.shutdown",
       "version": 1,
       "stability": "phase1",
@@ -333,6 +562,52 @@
       "errors": ["STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
     },
     {
+      "id": "result.list",
+      "version": 1,
+      "stability": "phase5",
+      "summary": "List bounded stored-result metadata without loading payloads or provenance.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["results"],
+        "properties": {
+          "results": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "required": ["id", "kind", "schema_version", "producer_version", "payload_sha256", "payload_bytes", "trust", "created_at"],
+              "properties": {
+                "id": { "type": "string" },
+                "project_id": { "type": ["string", "null"] },
+                "kind": { "type": "string" },
+                "schema_version": { "type": "integer" },
+                "producer_version": { "type": "string" },
+                "payload_sha256": { "type": "string" },
+                "payload_bytes": { "type": "integer", "minimum": 0 },
+                "trust": { "type": "string" },
+                "created_at": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["PROJECT_SCOPE_REQUIRED", "PROJECT_SCOPE_DENIED", "STORAGE_UNAVAILABLE", "STORAGE_ERROR"]
+    },
+    {
       "id": "result.get",
       "version": 1,
       "stability": "phase1",
@@ -421,6 +696,11 @@
             "description": "Optional exact JSON Pointers to already eligible scalar facts; all must fit or the read fails.",
             "type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true,
             "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+          },
+          "focus_terms": {
+            "description": "Optional task terms used to prioritize eligible facts; terms are not returned.",
+            "type": "array", "maxItems": 8, "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "maxLength": 64 }
           }
         },
         "additionalProperties": false
@@ -433,6 +713,9 @@
           "payload_sha256": { "type": "string", "minLength": 64 },
           "payload_bytes": { "type": "integer", "minimum": 0 },
           "source_trust": { "type": "string" },
+          "source_created_at": { "type": "string" },
+          "producer_version": { "type": "string" },
+          "schema_version": { "type": "integer", "minimum": 1 },
           "full_result_command": { "type": "string", "const": "result.get" },
           "facts": {
             "type": "array",

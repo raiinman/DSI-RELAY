@@ -72,6 +72,14 @@ Important evidence should carry, where applicable:
 - raw evidence reference
 - instrumentation configuration/version
 
+## Integrated workflow diagnostics
+
+The final product acceptance run records each documented workflow as PASS, FAIL, BLOCKED, or UNTESTED. A PASS requires direct evidence from the actual integration and required environment. Missing UEFN, another creator application, or a hardware tier is UNTESTED with a fixed reason code; a synthetic fixture may support an internal check but cannot satisfy that workflow. BLOCKED means an available workflow could not proceed because another failed prerequisite prevented it.
+
+Each workflow record links its project and session scope, required capability, RELAY/integration versions, source revision where available, start/end and elapsed time, resource sample and units, result/transaction/job IDs, diagnostic correlation ID, fixed failure code, evidence source, freshness, and completeness. Missing measurements remain explicitly unavailable rather than being recorded as zero. The report preserves enough parameters and version context to reproduce a failure without copying project content or credentials into the shareable summary.
+
+The Diagnostics/Debug section and CLI must read the same Core-owned run and report records. Keep bounded detailed logs locally behind evidence IDs; build a separate allowlisted, redacted report for user preview and optional sharing. Include observability-pipeline health so missing logs cannot silently make a failed workflow appear healthy.
+
 ## Freshness and staleness
 
 Evidence can become stale even if it was once correct.

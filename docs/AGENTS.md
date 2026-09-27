@@ -87,6 +87,7 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - Prefer diagrams, contracts, invariants, and explicit boundaries over aspirational prose.
 - Mark unresolved items as open questions rather than silently choosing an implementation.
 - Keep examples generic unless they are explicitly labeled as fixtures or dogfood examples.
+- Keep the remaining phases as build order and preserve their acceptance criteria for one integrated end-to-end run after the documented workflows are constructed. Routine build checks do not close a phase or turn unavailable real integrations into passed evidence.
 
 # Verification
 

@@ -1,10 +1,12 @@
 use crate::storage::ResultRecord;
 use serde_json::{Value, json};
+use std::collections::HashSet;
 
 struct Fact {
     pointer: String,
     value: Value,
     priority: u8,
+    relevance: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,6 +121,52 @@ fn escaped_segment(segment: &str) -> String {
     segment.replace('~', "~0").replace('/', "~1")
 }
 
+/// Focus is deliberately a small set of literal terms, not a query language.
+/// It ranks already eligible facts and never expands the safety allowlist.
+pub(crate) fn valid_focus_term(term: &str) -> bool {
+    (1..=64).contains(&term.len())
+        && term
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
+}
+
+fn relevance(pointer: &str, value: &Value, focus_terms: &[&str]) -> u8 {
+    if focus_terms.is_empty() {
+        return 0;
+    }
+    let pointer = pointer.to_ascii_lowercase();
+    let value = value.as_str().map(str::to_ascii_lowercase);
+    focus_terms
+        .iter()
+        .filter(|term| {
+            let term = term.to_ascii_lowercase();
+            (pointer.split('/').any(|segment| segment == term)
+                || pointer
+                    .split(&['/', '_', '-', '.'][..])
+                    .any(|segment| segment == term))
+                || value.as_deref() == Some(term.as_str())
+        })
+        .count()
+        .min(u8::MAX as usize) as u8
+}
+
+fn duplicate_key(pointer: &str, value: &Value) -> String {
+    // Array indexes change across repeated observations; preserve the first
+    // representative and the exact pointer to every explicitly required fact.
+    let shape = pointer
+        .split('/')
+        .map(|segment| {
+            if !segment.is_empty() && segment.bytes().all(|byte| byte.is_ascii_digit()) {
+                "#"
+            } else {
+                segment
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/");
+    format!("{shape}:{}", value)
+}
+
 fn collect(
     value: &Value,
     pointer: &str,
@@ -126,6 +174,7 @@ fn collect(
     excluded: bool,
     total_scalars: &mut u64,
     facts: &mut Vec<Fact>,
+    focus_terms: &[&str],
 ) {
     match value {
         Value::Object(values) => {
@@ -138,6 +187,7 @@ fn collect(
                     excluded || forbidden_key(child_key) || !safe_key_segment(child_key),
                     total_scalars,
                     facts,
+                    focus_terms,
                 );
             }
         }
@@ -150,6 +200,7 @@ fn collect(
                     excluded,
                     total_scalars,
                     facts,
+                    focus_terms,
                 );
             }
         }
@@ -161,6 +212,7 @@ fn collect(
                         pointer: pointer.to_string(),
                         value: value.clone(),
                         priority,
+                        relevance: relevance(pointer, value, focus_terms),
                     });
                 }
             }
@@ -181,6 +233,17 @@ pub(crate) fn compile_result_required(
     max_bytes: usize,
     required_pointers: &[&str],
 ) -> Result<Value, CompileError> {
+    compile_result_focused(record, max_bytes, required_pointers, &[])
+}
+
+/// Select facts for a caller's task using literal key/value terms. Freshness
+/// is exposed as the stored source timestamp, never inferred from wall time.
+pub(crate) fn compile_result_focused(
+    record: &ResultRecord,
+    max_bytes: usize,
+    required_pointers: &[&str],
+    focus_terms: &[&str],
+) -> Result<Value, CompileError> {
     let mut total_scalars = 0;
     let mut facts = Vec::new();
     collect(
@@ -190,6 +253,7 @@ pub(crate) fn compile_result_required(
         false,
         &mut total_scalars,
         &mut facts,
+        focus_terms,
     );
     if required_pointers
         .iter()
@@ -197,26 +261,19 @@ pub(crate) fn compile_result_required(
     {
         return Err(CompileError::RequiredFactUnavailable);
     }
-    if required_pointers.is_empty() {
-        facts.sort_by(|left, right| {
-            left.priority
-                .cmp(&right.priority)
-                .then_with(|| left.pointer.cmp(&right.pointer))
-        });
-    } else {
-        facts.sort_by(|left, right| {
-            let rank = |fact: &Fact| {
-                required_pointers
-                    .iter()
-                    .position(|pointer| *pointer == fact.pointer)
-                    .unwrap_or(usize::MAX)
-            };
-            rank(left)
-                .cmp(&rank(right))
-                .then_with(|| left.priority.cmp(&right.priority))
-                .then_with(|| left.pointer.cmp(&right.pointer))
-        });
-    }
+    facts.sort_by(|left, right| {
+        let rank = |fact: &Fact| {
+            required_pointers
+                .iter()
+                .position(|pointer| *pointer == fact.pointer)
+                .unwrap_or(usize::MAX)
+        };
+        rank(left)
+            .cmp(&rank(right))
+            .then_with(|| right.relevance.cmp(&left.relevance))
+            .then_with(|| left.priority.cmp(&right.priority))
+            .then_with(|| left.pointer.cmp(&right.pointer))
+    });
 
     let payload_bytes = serde_json::to_vec(&record.payload)
         .map_err(|_| CompileError::BudgetTooSmall)?
@@ -226,6 +283,9 @@ pub(crate) fn compile_result_required(
         "payload_sha256": record.payload_sha256,
         "payload_bytes": payload_bytes,
         "source_trust": record.trust,
+        "source_created_at": record.created_at,
+        "producer_version": record.producer_version,
+        "schema_version": record.schema_version,
         "full_result_command": "result.get",
         "facts": [],
         "omitted_scalar_count": total_scalars,
@@ -235,8 +295,13 @@ pub(crate) fn compile_result_required(
         return Err(CompileError::BudgetTooSmall);
     }
 
+    let mut seen = HashSet::new();
     for fact in facts {
         let is_required = required_pointers.contains(&fact.pointer.as_str());
+        let duplicate = duplicate_key(&fact.pointer, &fact.value);
+        if !is_required && seen.contains(&duplicate) {
+            continue;
+        }
         output["facts"]
             .as_array_mut()
             .ok_or(CompileError::BudgetTooSmall)?
@@ -249,6 +314,8 @@ pub(crate) fn compile_result_required(
             if is_required {
                 return Err(CompileError::BudgetTooSmall);
             }
+        } else {
+            seen.insert(duplicate);
         }
     }
     loop {
@@ -388,5 +455,82 @@ mod tests {
             assert!(!valid_required_pointer(pointer));
         }
         assert!(!valid_required_pointer(&format!("/{}", "a".repeat(256))));
+    }
+
+    #[test]
+    fn focus_ranks_relevant_facts_and_deduplicates_repeated_observations() {
+        let record = record(json!({
+            "unrelated_id": "OTHER-1",
+            "events": (0..100).map(|_| json!({ "event_code": "REPEATED" })).collect::<Vec<_>>(),
+            "build": { "failure_count": 7, "status": "FAILED" },
+            "secret": { "failure_count": 999 },
+            "project_path": "C:/private"
+        }));
+        let view = compile_result_focused(&record, 620, &[], &["failure"]).unwrap();
+        let facts = view["facts"].as_array().unwrap();
+        assert_eq!(facts[0]["pointer"], "/build/failure_count");
+        assert_eq!(facts[0]["value"], 7);
+        assert_eq!(
+            facts
+                .iter()
+                .filter(|fact| fact["value"] == "REPEATED")
+                .count(),
+            1
+        );
+        assert!(!facts.iter().any(|fact| fact["value"] == 999));
+        assert_eq!(view["source_created_at"], "2026-09-26T00:00:00Z");
+        assert_eq!(view["source_trust"], "local-attributed");
+        assert_eq!(view["producer_version"], "0.1.0");
+        assert_eq!(view["schema_version"], 7);
+        assert!(view["omitted_scalar_count"].as_u64().unwrap() >= 100);
+        assert!(serde_json::to_vec(&view).unwrap().len() <= 620);
+        assert_eq!(
+            view,
+            compile_result_focused(&record, 620, &[], &["failure"]).unwrap()
+        );
+    }
+
+    #[test]
+    fn required_exact_fact_survives_dedup_and_focus_and_fails_on_budget() {
+        let record = record(json!({
+            "events": [
+                { "event_code": "REPEATED" },
+                { "event_code": "REPEATED" },
+                { "event_code": "REPEATED" }
+            ],
+            "build": { "failure_count": 7 }
+        }));
+        let required = ["/events/2/event_code"];
+        let view = compile_result_focused(&record, 512, &required, &["failure"]).unwrap();
+        let facts = view["facts"].as_array().unwrap();
+        assert_eq!(facts[0]["pointer"], required[0]);
+        assert_eq!(facts[0]["value"], "REPEATED");
+        assert_eq!(
+            facts
+                .iter()
+                .filter(|fact| fact["value"] == "REPEATED")
+                .count(),
+            1
+        );
+        assert_eq!(
+            compile_result_focused(&record, 16, &required, &["failure"]),
+            Err(CompileError::BudgetTooSmall)
+        );
+        assert_eq!(
+            compile_result_focused(&record, 512, &["/secret/token"], &["failure"]),
+            Err(CompileError::RequiredFactUnavailable)
+        );
+    }
+
+    #[test]
+    fn focus_terms_are_bounded_literal_tokens() {
+        for term in ["failure", "build_count", "E-42"] {
+            assert!(valid_focus_term(term));
+        }
+        assert!(valid_focus_term(&"A".repeat(64)));
+        for term in ["", "../secret", "prompt injection", "token:secret", "a/b"] {
+            assert!(!valid_focus_term(term));
+        }
+        assert!(!valid_focus_term(&"A".repeat(65)));
     }
 }

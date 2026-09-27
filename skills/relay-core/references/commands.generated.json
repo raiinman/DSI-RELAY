@@ -1,0 +1,281 @@
+{
+  "generation_version": 1,
+  "relay_version_family": "0.1",
+  "registry_format": 1,
+  "registry_id": "dsi.relay.commands",
+  "registry_sha256": "ce5c9e44eed7c43a9ca6d2a443d3c806dd8f09074c94befaa388163dbfce3e69",
+  "required_capabilities": [
+    "system.status@1",
+    "system.doctor@1",
+    "registry.list@1",
+    "registry.describe@1",
+    "result.describe@1",
+    "result.context@1"
+  ],
+  "commands": [
+    {
+      "id": "assets.krita.inspect",
+      "version": 1,
+      "summary": "Inspect declared Krita source/export formats and project-local asset links without launching Krita.",
+      "effect_class": "analyze",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "assets.manifest.validate",
+      "version": 1,
+      "summary": "Validate a bounded asset manifest and project-local source/export relationships without launching creator apps.",
+      "effect_class": "analyze",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "diagnostics.summary",
+      "version": 1,
+      "summary": "Return bounded diagnostic health and event counts without raw log history.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "job.checkpoint",
+      "version": 1,
+      "summary": "Create or update a durable job checkpoint.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed"
+    },
+    {
+      "id": "job.get",
+      "version": 1,
+      "summary": "Retrieve one durable job/checkpoint by opaque job ID.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "policy.egress.check",
+      "version": 1,
+      "summary": "Evaluate a proposed outbound data scope against trusted local egress policy and record the decision metadata.",
+      "effect_class": "analyze",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "project.capabilities",
+      "version": 1,
+      "summary": "Return deterministic generic project discovery/index capability states.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "project.changes",
+      "version": 1,
+      "summary": "Read a bounded, project-scoped change delta since an index generation.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "project.configuration.get",
+      "version": 1,
+      "summary": "Read project-scoped configuration and declared adapter version metadata.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "project.configuration.put",
+      "version": 1,
+      "summary": "Set a versioned project type and declared adapter binding with a revision guard.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed"
+    },
+    {
+      "id": "project.dependencies.list",
+      "version": 1,
+      "summary": "Read bounded project-scoped derived dependency edges.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "project.dependencies.replace",
+      "version": 1,
+      "summary": "Replace derived dependency edges for one indexed source and producer.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed"
+    },
+    {
+      "id": "project.import",
+      "version": 1,
+      "summary": "Import one local project root after deterministic canonicalization.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed"
+    },
+    {
+      "id": "project.index.apply_hints",
+      "version": 1,
+      "summary": "Apply bounded watcher-path hints without a full metadata walk; mark the index stale until reconciliation.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed"
+    },
+    {
+      "id": "project.index.build",
+      "version": 1,
+      "summary": "Build or rebuild the authoritative derived baseline for one project.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed"
+    },
+    {
+      "id": "project.index.reconcile",
+      "version": 1,
+      "summary": "Reconcile filesystem metadata or explicitly verify all file content after uncertain continuity.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed"
+    },
+    {
+      "id": "project.list",
+      "version": 1,
+      "summary": "List registered projects in deterministic order.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "project.register",
+      "version": 1,
+      "summary": "Add or update one project registry entry.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "keyed"
+    },
+    {
+      "id": "registry.describe",
+      "version": 1,
+      "summary": "Return the full contract for one command and contract version.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "registry.list",
+      "version": 1,
+      "summary": "Return compact command discovery metadata without loading full schemas.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "result.context",
+      "version": 1,
+      "summary": "Return allowlisted exact facts within a byte budget and a reference to the full stored result.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "result.describe",
+      "version": 1,
+      "summary": "Read result identity, provenance-free metadata, and stored payload size without retrieving the payload.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "result.get",
+      "version": 1,
+      "summary": "Retrieve one durable result by opaque result ID.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "result.list",
+      "version": 1,
+      "summary": "List bounded stored-result metadata without loading payloads or provenance.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "result.put",
+      "version": 1,
+      "summary": "Store one compact normalized result and return its durable ID.",
+      "effect_class": "relay_state_write",
+      "permission": "state_write",
+      "idempotency": "creates_id"
+    },
+    {
+      "id": "runtime.capture.analyze",
+      "version": 1,
+      "summary": "Normalize a bounded structured Verse log fragment and evaluate local assertions without claiming live UEFN verification.",
+      "effect_class": "analyze",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "storage.integrity",
+      "version": 1,
+      "summary": "Run SQLite quick_check and report the operational schema/version state.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "system.doctor",
+      "version": 1,
+      "summary": "Return compact diagnostics and the next repair action when needed.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "system.status",
+      "version": 1,
+      "summary": "Return host, recovery, protocol, capability, IPC, and storage health.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "transaction.list",
+      "version": 1,
+      "summary": "List recent durable transaction records within the granted project scope.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "uefn.mcp.discover",
+      "version": 1,
+      "summary": "Probe an explicit localhost UEFN MCP endpoint and report bounded capability counts without invoking editor tools.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "uefn.static.inspect",
+      "version": 1,
+      "summary": "Classify UEFN project markers, Verse sources, and Unreal assets in a ready project index without opening editor files.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    },
+    {
+      "id": "usage.summary",
+      "version": 1,
+      "summary": "Return aggregate local command, byte, replay, remote-call, and model-token counters.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe"
+    }
+  ]
+}

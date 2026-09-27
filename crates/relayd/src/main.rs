@@ -1,21 +1,23 @@
+mod assets;
 mod dashboard;
-mod pipe;
 mod parser;
+mod pipe;
 mod security;
 mod state;
+mod uefn;
+mod verse;
 mod watcher;
 
 use relay_contracts::registry;
 use relay_contracts::{
-    negotiate_protocol, CommandRequest, HelloRequest, HelloResponse,
-    IpcSecurityState, LocalHostState, Producer, ProtocolRange,
-    LOCAL_HOST_STATE_FORMAT, PROTOCOL_MAX, PROTOCOL_MIN,
+    CommandRequest, HelloRequest, HelloResponse, IpcSecurityState, LOCAL_HOST_STATE_FORMAT,
+    LocalHostState, PROTOCOL_MAX, PROTOCOL_MIN, Producer, ProtocolRange, negotiate_protocol,
 };
 use relay_core::policy::ExecutionAuthority;
 use relay_core::service::{CoreConfig, RelayCore, RuntimeContext};
 use serde_json::json;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 const DAEMON_NAME: &str = "relayd";
@@ -41,11 +43,7 @@ fn pipe_name(sid: &str) -> String {
         .map(|value| {
             value
                 .chars()
-                .filter(|ch| {
-                    ch.is_ascii_alphanumeric()
-                        || *ch == '-'
-                        || *ch == '_'
-                })
+                .filter(|ch| ch.is_ascii_alphanumeric() || *ch == '-' || *ch == '_')
                 .take(48)
                 .collect::<String>()
         })
@@ -104,11 +102,7 @@ fn runtime_context(
     }
 }
 
-fn hello_error(
-    handle: windows_sys::Win32::Foundation::HANDLE,
-    code: &str,
-    message: &str,
-) {
+fn hello_error(handle: windows_sys::Win32::Foundation::HANDLE, code: &str, message: &str) {
     let _ = pipe::write_json(
         handle,
         &json!({
@@ -120,8 +114,7 @@ fn hello_error(
 }
 
 fn run() -> Result<(), String> {
-    registry::validate_embedded_registry()
-        .map_err(|error| error.to_string())?;
+    registry::validate_embedded_registry().map_err(|error| error.to_string())?;
     let started = Instant::now();
     let started_at_unix_ms = unix_ms();
     let state_dir = state::state_dir();
@@ -130,8 +123,7 @@ fn run() -> Result<(), String> {
     let pipe_name = pipe_name(&security.sid);
     let auth_token = security::random_hex(32)?;
     let server = pipe::create_server(&pipe_name, &security)?;
-    let verified =
-        security::verify_pipe_security(server.raw(), &security.sid)?;
+    let verified = security::verify_pipe_security(server.raw(), &security.sid)?;
 
     if !verified.query_ok
         || !verified.protected_dacl
@@ -169,7 +161,9 @@ fn run() -> Result<(), String> {
     let parser_health = parser::ParserHealth::new(&parser_installations, parser_load_failed);
     if parser_load_failed {
         core.record_host_component_event(
-            "adapter.dependencies.parse", "PARSER_INSTALLATION_INVALID", false,
+            "adapter.dependencies.parse",
+            "PARSER_INSTALLATION_INVALID",
+            false,
         );
     }
     let watcher_enabled = std::env::var("RELAY_TEST_DISABLE_WATCHER").as_deref() != Ok("1");
@@ -198,9 +192,7 @@ fn run() -> Result<(), String> {
         .as_str()
         .unwrap_or("Degraded")
         .to_string();
-    let storage_schema_version = initial_result["storage"]
-        ["schema_version"]
-        .as_i64();
+    let storage_schema_version = initial_result["storage"]["schema_version"].as_i64();
 
     let state = LocalHostState {
         state_format: LOCAL_HOST_STATE_FORMAT,
@@ -278,19 +270,13 @@ fn run() -> Result<(), String> {
         let hello: HelloRequest = match pipe::read_json(server.raw()) {
             Ok(value) => value,
             Err(_) => {
-                hello_error(
-                    server.raw(),
-                    "BAD_HANDSHAKE",
-                    "hello request was invalid",
-                );
+                hello_error(server.raw(), "BAD_HANDSHAKE", "hello request was invalid");
                 pipe::disconnect(server.raw());
                 continue;
             }
         };
 
-        if hello.message_type != "hello"
-            || !secure_equal(&hello.auth_token, &auth_token)
-        {
+        if hello.message_type != "hello" || !secure_equal(&hello.auth_token, &auth_token) {
             hello_error(
                 server.raw(),
                 "UNAUTHORIZED",
@@ -300,10 +286,7 @@ fn run() -> Result<(), String> {
             continue;
         }
 
-        let Some(protocol) = negotiate_protocol(
-            hello.protocol_min,
-            hello.protocol_max,
-        ) else {
+        let Some(protocol) = negotiate_protocol(hello.protocol_min, hello.protocol_max) else {
             hello_error(
                 server.raw(),
                 "PROTOCOL_INCOMPATIBLE",
@@ -315,8 +298,7 @@ fn run() -> Result<(), String> {
         let greeting = HelloResponse {
             message_type: "hello_ok".to_string(),
             protocol,
-            schema_version:
-                relay_contracts::ENVELOPE_SCHEMA_VERSION,
+            schema_version: relay_contracts::ENVELOPE_SCHEMA_VERSION,
             server: Producer {
                 name: DAEMON_NAME.to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
@@ -328,25 +310,23 @@ fn run() -> Result<(), String> {
             continue;
         }
 
-        let request: CommandRequest =
-            match pipe::read_json(server.raw()) {
-                Ok(value) => value,
-                Err(_) => {
-                    let _ = pipe::write_json(
-                        server.raw(),
-                        &json!({
-                            "type": "transport_error",
-                            "code": "INVALID_REQUEST",
-                            "message": "command request was invalid"
-                        }),
-                    );
-                    pipe::disconnect(server.raw());
-                    continue;
-                }
-            };
+        let request: CommandRequest = match pipe::read_json(server.raw()) {
+            Ok(value) => value,
+            Err(_) => {
+                let _ = pipe::write_json(
+                    server.raw(),
+                    &json!({
+                        "type": "transport_error",
+                        "code": "INVALID_REQUEST",
+                        "message": "command request was invalid"
+                    }),
+                );
+                pipe::disconnect(server.raw());
+                continue;
+            }
+        };
 
-        let authority =
-            ExecutionAuthority::local_user(hello.client.name.clone());
+        let authority = ExecutionAuthority::local_user(hello.client.name.clone());
 
         let should_shutdown = request.command == "system.shutdown";
         let refresh_watches = matches!(
@@ -358,10 +338,8 @@ fn run() -> Result<(), String> {
             .iter()
             .find(|command| command.id == request.command)
             .is_none_or(|command| command.effect_class != "observe");
-        let include_host_health = matches!(
-            request.command.as_str(),
-            "system.status" | "system.doctor"
-        );
+        let include_host_health =
+            matches!(request.command.as_str(), "system.status" | "system.doctor");
         let runtime = runtime_context(
             started,
             &ipc_security,
@@ -373,14 +351,21 @@ fn run() -> Result<(), String> {
             foreground_active.store(true, Ordering::SeqCst);
         }
         let response =
-            core.execute_authorized(request, &runtime, &authority);
+            core.execute_authorized_with_extension(request, &runtime, &authority, |request| {
+                uefn::execute(&core, request)
+                    .or_else(|| assets::execute(&core, request))
+                    .or_else(|| verse::execute(&core, request))
+            });
         let accepted_shutdown = should_shutdown && response.ok;
         let _ = pipe::write_json(server.raw(), &response);
         pipe::disconnect(server.raw());
         if foreground_work {
             foreground_active.store(false, Ordering::SeqCst);
         }
-        if refresh_watches && response.ok && let Some(watcher) = &watcher {
+        if refresh_watches
+            && response.ok
+            && let Some(watcher) = &watcher
+        {
             watcher.refresh();
         }
 

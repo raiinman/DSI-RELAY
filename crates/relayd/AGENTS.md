@@ -21,6 +21,12 @@ Own the production per-user RELAY daemon and local transport boundary.
 - The daemon loads explicit digest-pinned per-project parser grants from local state at startup. Only the exact configured installed parser with a source-delivery grant receives bounded UTF-8 indexed source bytes through the sandbox. Parser dispatch waits for idle, ready project state and writes edges through Core's generation, source, and configuration guards.
 - Parser installation, quarantine, and recovery health is aggregated into live `system.status`/`system.doctor` output and fixed-code transition diagnostics without source text, paths, or project identifiers. Invalid grants fail closed for source delivery while daemon health remains inspectable. `host.json` recovery state is a startup snapshot; clients needing current health use the live commands.
 - The read-only dashboard binds to loopback with a per-start token, invokes only selected observe commands through Core, and stores its local URL in a current-user-DACL-protected `dashboard.json` while the daemon runs. CLI prints that URL through `relay dashboard-url`.
+- The dashboard may invoke the bounded `diagnostics.summary` observe command but cannot read raw diagnostic logs or local files.
+- Dashboard activity and usage views invoke read-only `transaction.list` and `usage.summary`, displaying only safe summaries.
+- The daemon runs read-only UEFN static inspection as a validated Core extension over an authorized ready-index snapshot; it does not open editor files or claim editor/runtime connectivity.
+- Local asset manifest validation runs as an authorized Core extension against a trusted project root, returns bounded finding summaries, and does not launch creator apps.
+- Krita manifest inspection uses that same validated project scope and reports declared formats and links without launching Krita.
+- The local UEFN MCP probe is explicit and discovery-only; it uses the bounded localhost client, does not invoke editor tools, and reports live workflows untested. Caller-supplied Verse capture analysis returns compact counts/quality/assertions without raw log lines.
 - The portable synthetic benchmark creates a new report path without overwriting an existing file, replaces later progress records atomically, bounds each CLI child process and kills it on deadline, records a fixed timeout code, and shuts down its daemon before removing only a validated temporary root without descendant reparse points.
 
 # Verification

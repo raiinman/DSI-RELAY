@@ -30,13 +30,51 @@
         <h2 id="projects-title">Projects</h2>
         <p id="project-count">Checking…</p>
         <ul id="projects"></ul>
+        <button id="uefn-connect" type="button">Check UEFN connection</button>
+        <p id="uefn-connection" role="status" aria-live="polite">UEFN editor connection has not been checked.</p>
+        <p id="uefn-inspection" role="status" aria-live="polite">Choose a project to inspect its indexed UEFN files. Editor and runtime checks are not available yet.</p>
+        <p id="asset-inspection" role="status" aria-live="polite">Choose an asset manifest to check source and export links. Creator apps remain untested.</p>
+        <p id="krita-inspection" role="status" aria-live="polite">Choose an asset manifest to inspect declared Krita source and export formats. Native Krita export remains untested.</p>
       </section>
     </div>
+    <div class="grid secondary">
+      <section class="card" aria-labelledby="results-title">
+        <h2 id="results-title">Stored results</h2>
+        <p id="results-summary">Checking…</p>
+        <ul id="results-list"></ul>
+      </section>
+      <section class="card" aria-labelledby="activity-title">
+        <h2 id="activity-title">Recent activity</h2>
+        <p id="activity-summary">Checking…</p>
+        <ul id="activity-list"></ul>
+      </section>
+      <section class="card" aria-labelledby="usage-title">
+        <h2 id="usage-title">Usage</h2>
+        <p id="usage-summary">Checking…</p>
+        <p id="usage-detail"></p>
+      </section>
+    </div>
+    <section class="card diagnostics" aria-labelledby="diagnostics-title">
+      <p class="eyebrow">DIAGNOSTICS &amp; DEBUG</p>
+      <h2 id="diagnostics-title">What can RELAY tell us?</h2>
+      <p class="section-intro">Live component health and bounded diagnostic capture. This does not replace an end-to-end workflow test.</p>
+      <dl class="diagnostic-grid">
+        <div><dt>Diagnostic capture</dt><dd id="diagnostic-capture">Checking…</dd></div>
+        <div><dt>Detail level</dt><dd id="diagnostic-detail">Checking…</dd></div>
+        <div><dt>Stored diagnostic data</dt><dd id="diagnostic-storage">Checking…</dd></div>
+        <div><dt>Events removed by retention</dt><dd id="diagnostic-dropped">Checking…</dd></div>
+        <div><dt>Retained events</dt><dd id="diagnostic-events">Checking…</dd></div>
+        <div><dt>Incomplete records</dt><dd id="diagnostic-incomplete">Checking…</dd></div>
+        <div><dt>RELAY version</dt><dd id="relay-version">Checking…</dd></div>
+        <div><dt>Running for</dt><dd id="relay-uptime">Checking…</dd></div>
+      </dl>
+      <p id="diagnostic-guidance" class="diagnostic-guidance"></p>
+    </section>
     <details>
-      <summary>Advanced details</summary>
+      <summary>Advanced details (safe summary)</summary>
       <pre id="details">Checking…</pre>
     </details>
   </main>
-  <footer>Read-only local preview · Your project files stay on this computer.</footer>
+  <footer>Read-only local dashboard · Your project files stay on this computer.</footer>
 </body>
 </html>

@@ -1,6 +1,6 @@
 # Path from local Phase 3 evidence to a public RELAY preview
 
-Status: planning guide, 2026-09-26. No public artifact is approved or published by this document.
+Status: held planning guide, 2026-09-26. The existing draft binary remains unpublished. Product construction takes priority over additional preview packages and release paperwork; `main` remains unmerged. This document does not approve publication.
 
 ## Separate the two release claims
 
@@ -37,4 +37,4 @@ Use the same versioned fixture on each candidate machine, keep raw samples, and 
 
 The current [Epic UEFN requirements](https://dev.epicgames.com/documentation/fortnite/install-and-launch-fortnite-creative-and-unreal-editor-for-fortnite) describe a 16 GiB minimum and 32 GiB recommended memory class, with a four-core 2.5 GHz CPU for both. Those published classes can help recruit testers, but a machine's actual storage, GPU, power policy, and concurrent editor load must be recorded separately. The high-end one-host Phase 3 samples in `PHASE3_RESOURCE_BUDGET_METHOD.md` are not substitutes for those runs.
 
-Once supported-tier, foreground, and recovery evidence pass, recheck `PHASE3_CLOSURE_REVIEW.md`. A public RELAY beta additionally needs the roadmap's onboarding, real integration, dashboard, distribution, legal, privacy, and support gates.
+The held preview does not replace the final integrated RELAY acceptance run. After the documented product workflows are built, that run must cover supported-tier, foreground, recovery, onboarding, real integration, dashboard, distribution, legal, privacy, and support gates. Unavailable real-tool or hardware checks remain UNTESTED.

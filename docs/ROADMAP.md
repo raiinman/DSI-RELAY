@@ -1,6 +1,6 @@
 # RELAY Roadmap
 
-The roadmap is ordered to prove cost and architecture fundamentals before building a large integration surface.
+The roadmap orders construction of the complete RELAY experience. Phases 0–2 are closed. Phases 3–11 remain open unless their documented capabilities and final acceptance evidence support closure. Build the remaining workflows on `development/relay-v0.1`, with only checks needed to keep construction working. Diagnostics is part of each workflow. Run one integrated end-to-end acceptance pass after the experience is built; record unavailable UEFN, creator-app, and hardware checks as UNTESTED. Do not publish the held preview binary or merge `main` during construction.
 
 ## Phase 0 — Documentation baseline and adversarial evidence review
 
@@ -209,7 +209,7 @@ Exit criteria:
 
 ## Phase 3 — Project discovery and indexing
 
-Status: Active — the generic two-project baseline, schema-5 bounded delta/dependency-edge foundation, provisional targeted hint-update path, schema-6 continuity recovery and idle scheduler, bounded Windows OS watcher, schema-7 project configuration, installed sandboxed parser dispatch, and live parser health are accepted on synthetic fixtures. Evidence: the ten `PHASE3_*_SLICE_EVIDENCE.md` records, `PHASE3_WATCHER_LOAD_EVIDENCE.md`, `PHASE3_PARSER_RESOURCE_EVIDENCE.md`, and the one-host repeatable scale report. `PHASE3_CLOSURE_REVIEW.md` remains NOT READY. Supported-tier budgets, prolonged creator-app interference, public parser installation, and real-adapter proof remain open. `PUBLIC_PREVIEW_PATH.md` describes a separate synthetic measurement preview path without claiming a product release.
+Status: Active — the generic two-project baseline, schema-5 bounded delta/dependency-edge foundation, provisional targeted hint-update path, schema-6 continuity recovery and idle scheduler, bounded Windows OS watcher, schema-7 project configuration, installed sandboxed parser dispatch, and live parser health have synthetic fixture evidence. The development line also includes an offline parser installer draft. `PHASE3_CLOSURE_REVIEW.md` remains NOT READY. Supported-tier budgets, prolonged creator-app interference, live parser installation and real-adapter proof remain open. The synthetic measurement preview is held and unpublished.
 
 Build:
 
@@ -261,7 +261,7 @@ Exit criteria:
 
 ## Phase 5 — Dashboard
 
-Status: Active early foundation — the production daemon serves a local read-only health/project view through the same command system as the CLI. A focused keyboard/status/error-state accessibility slice is implemented; manual assistive-technology review, remaining views, actions, and security review are open. Evidence: `PHASE5_DASHBOARD_FIRST_SLICE_EVIDENCE.md`, `PHASE5_DASHBOARD_ACCESSIBILITY_SLICE_EVIDENCE.md`.
+Status: Active early foundation — the production daemon serves a local read-only health/project view, Diagnostics/Debug summary, stored result descriptions, recent transaction activity, aggregate usage, and a static UEFN project inspection action through the same command system as the CLI. Keyboard/status/error-state accessibility improvements are present. Manual assistive-technology review, jobs/approvals/assets/test views, write actions, and integrated security review remain open.
 
 Build first usable dashboard:
 
@@ -289,6 +289,8 @@ Exit criteria:
 
 ## Phase 6 — UEFN static/editor adapter
 
+Status: Active early foundation — a read-only static inspector classifies a registered project's ready index for top-level `.uefnproject` markers, Verse source names, and Unreal asset/map counts through one shared CLI/dashboard command. `relay uefn-audit` can store that static observation by durable result ID through the shared result command. A bounded discovery-only client can probe Epic's documented localhost UEFN MCP endpoint and count advertised tools without invoking them. Editor identity, entity/device/spawn state, native audit, capture, and all live workflow acceptance remain open.
+
 Build:
 
 - project detection
@@ -309,6 +311,8 @@ Exit criteria:
 
 ## Phase 7 — Fortnite runtime bridge
 
+Status: Active early foundation — a bounded parser normalizes structured Verse log fragments and evaluates project-defined local event-count assertions through a shared command. Caller-declared UEFN log provenance is not verified; live UEFN assertion status remains UNTESTED. Runtime acquisition, session binding, probes, visual capture, and durable gameplay-test results remain open.
+
 Build:
 
 - structured Verse telemetry
@@ -328,6 +332,8 @@ Exit criteria:
 
 ## Phase 8 — Asset adapters
 
+Status: Active early foundation — a local asset manifest validator checks bounded source/export links and lineage through CLI/dashboard. Krita declared formats can be inspected through the same paths; a bounded Blender headless mesh checker exists in an isolated crate but is not yet routed through the shared host authority. Native Krita and UEFN execution, export/build automation, and integrated acceptance remain open.
+
 Build:
 
 - asset registry/manifest
@@ -345,6 +351,8 @@ Exit criteria:
 - failed validation is compactly explainable
 
 ## Phase 9 — Skills and remote clients
+
+Status: Active early foundation — a compact local `relay-core` skill, command reference generated from the shared registry, and version/capability-checking PowerShell wrapper exist. A live coding-agent workflow, remote gateway, ChatGPT-compatible client, and context-overhead comparison remain open.
 
 Build:
 
@@ -364,6 +372,8 @@ Exit criteria:
 - MCP/remote context overhead benchmarked against CLI/skill path
 
 ## Phase 10 — Automation and recovery
+
+Status: Active early foundation — `relay discover` performs a bounded read-only first-run scan for nearby project markers and candidate tool installations while labeling every live integration untested. `relay onboard <project-folder>` imports the selected folder and builds its first index through shared commands, with partial-import errors explicit. `relay support-bundle` exports bounded health/count summaries, leaving the integrated-run field empty until a real run occurs. Guided UI, reconnection, and automation remain open.
 
 Build:
 
@@ -386,6 +396,8 @@ Exit criteria:
 
 ## Phase 11 — Public hardening
 
+Status: Open — MIT license and RAiiNMAN credit are selected in the development line; the public binary remains an unpublished draft. A bounded integrated-report model exists, but no full integrated run or public acceptance has occurred.
+
 Before public beta:
 
 - installer/update path
@@ -396,7 +408,7 @@ Before public beta:
 - privacy/data-retention docs
 - remote-processor/provider policy documentation
 - local-only/private-mode verification
-- license decision
+- MIT license and RAiiNMAN creator credit selected; verify inclusion in final distribution
 - first-party companion/plugin license review
 - dependency/license notice inventory
 - Epic/UEFN/Fortnite current-terms and branding review

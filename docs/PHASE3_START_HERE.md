@@ -51,7 +51,7 @@ Project-specific names, tool rules, and fixtures do not belong in Core.
 6. changed-only index update and explicit continuity-loss recovery
 7. change/delta and dependency-edge foundations
 8. resource/latency benchmark with multiple inactive projects
-9. Phase 3 closure review against the published roadmap exit criteria
+9. Carry the remaining real-adapter and hardware gaps into the final integrated acceptance run after the documented product workflows are built; keep Phase 3 open meanwhile
 ## First slice
 
 The first slice passed the `PHASE3_FIRST_SLICE.md` acceptance contract on its synthetic fixture. Use its evidence record as the baseline for the remaining Phase 3 work.

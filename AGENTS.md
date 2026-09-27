@@ -94,6 +94,11 @@ Default section order:
 
 When the user requests a durable behavior change, record it here or in the relevant child AGENTS.md.
 
+- Build the documented RELAY experience across the remaining roadmap phases on one development line before the integrated acceptance run. Use phase order to sequence implementation; during construction run only checks needed to keep the build working. Do not produce a closure review or synthetic acceptance claim for every slice.
+- Build one Diagnostics/Debug section into the product as the workflows are implemented. At the end, one integrated run must report workflow outcomes, failures, reproducible privacy-safe logs, component versions, timing, resource use, and evidence limitations. If UEFN, another creator app, or a required hardware tier is unavailable, report its workflow UNTESTED; a synthetic substitute cannot pass that workflow.
+- Consolidate useful draft work into the active development line. Do not create more preview releases or review paperwork during construction. Keep the existing binary draft unpublished and leave `main` unmerged until the user changes that direction.
+- RELAY source uses the MIT license and credits RAiiNMAN as creator/copyright holder.
+
 - RELAY must include a dashboard as a first-class interface for project status, observability, approvals, history, diagnostics, tests, assets, and integrations.
 - The dashboard must never be the only way to perform an operation. Headless CLI execution remains canonical, and dashboard, MCP, REST, WebSocket, and AI clients must use the same underlying command system.
 - Dashboard language should be plain and readable for someone unfamiliar with MCP or game-development infrastructure, with advanced detail available progressively rather than forced into the primary view.
@@ -116,5 +121,6 @@ When the user requests a durable behavior change, record it here or in the relev
 - `.github/AGENTS.md` — owns branch-scoped review workflows, validation helpers, and public issue intake templates.
 - `crates/AGENTS.md` — owns production Rust crates promoted from Phase 1 evidence during Phase 2 and later implementation phases.
 - `docs/AGENTS.md` — owns durable product, architecture, research, roadmap, security, UX, and operating documentation under `docs/`.
+- `skills/AGENTS.md` — owns local AI skill packages, generated command references, and thin CLI wrappers under `skills/`.
 - `release/AGENTS.md` — owns local release assembly, preview bundle contents, and package verification under `release/`.
 - `spikes/AGENTS.md` — owns Phase 1 technical spikes, benchmark harnesses/results, and prototype verification under `spikes/`.

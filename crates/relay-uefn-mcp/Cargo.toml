@@ -1,0 +1,11 @@
+[package]
+name = "relay-uefn-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde_json.workspace = true
+ureq = { version = "3.1", default-features = false }

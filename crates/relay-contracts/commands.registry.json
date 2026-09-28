@@ -338,6 +338,43 @@
       "errors": ["PROJECT_NOT_FOUND", "INDEX_NOT_READY", "STORAGE_UNAVAILABLE", "INTEGRATION_UNAVAILABLE"]
     },
     {
+      "id": "codex.projects.discover",
+      "version": 1,
+      "stability": "phase6",
+      "summary": "Find existing local folders saved as Codex projects on this computer. Best-effort private cache discovery; no chats or account access.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "result_schema": {
+        "type": "object",
+        "required": ["source", "status", "candidates", "limitations"],
+        "properties": {
+          "source": { "type": "string", "const": "codex_local_state" },
+          "status": { "type": "string", "enum": ["available", "unavailable"] },
+          "candidates": {
+            "type": "array", "maxItems": 32,
+            "items": {
+              "type": "object", "required": ["name", "folder_name", "root_path"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+                "folder_name": { "type": "string", "minLength": 1, "maxLength": 120 },
+                "root_path": { "type": "string", "minLength": 1, "maxLength": 2048 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "limitations": {
+            "type": "array", "minItems": 2, "maxItems": 3,
+            "items": { "type": "string", "enum": ["codex_private_cache_best_effort", "saved_local_projects_only", "current_user_existing_directories_only"] }
+          }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["INTEGRATION_UNAVAILABLE"]
+    },
+    {
       "id": "tools.local.discover",
       "version": 1,
       "stability": "phase6",

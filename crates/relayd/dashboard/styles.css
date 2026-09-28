@@ -65,6 +65,14 @@ main:focus-visible, #project-action:focus-visible, #integrated-summary:focus-vis
 .tools-heading p:last-child { margin: 0 0 .15rem; color: #62546e; font-size: .9rem; }
 .diagnostics { margin-top: 1rem; }
 .section-intro { color: #62546e; line-height: 1.5; }
+.codex-finder { margin: 1.1rem 0; padding: 1.15rem; border: 1px solid #d6bee4; border-left: 4px solid #a978cf; border-radius: .8rem; background: #f7f0fb; }
+.codex-finder h3 { margin: 0 0 .35rem; color: #39224e; }
+.codex-finder p { margin: .35rem 0 .8rem; color: #62546e; line-height: 1.45; }
+#codex-candidates { list-style: none; margin: .7rem 0 0; padding: 0; }
+#codex-candidates li { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .65rem 0; border-top: 1px solid #e3d4ec; }
+#codex-candidates li span { min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
+#codex-candidates button { flex: none; }
+.manual-project-intro { margin: 1.15rem 0 -.65rem; font-size: .9rem; color: #62546e; }
 .diagnostic-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 1.5rem 0 0; }
 .diagnostic-grid div { border-top: 1px solid #ebe3f0; padding-top: .8rem; min-width: 0; }
 .diagnostic-grid dt { font-size: .85rem; color: #62546e; }
@@ -131,5 +139,5 @@ footer { margin-left: 13.5rem; padding: 1.5rem; text-align: center; color: #6254
 @media (max-width: 1250px) { .tool-cards { grid-template-columns: 1fr; } }
 @media (max-width: 1100px) { .primary-grid { grid-template-columns: 1fr; } .quick-steps { grid-template-columns: 1fr; gap: .2rem; } }
 @media (max-width: 860px) { .app-header { position: static; width: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: .7rem 1rem; padding: .85rem 1rem; border-right: 0; border-bottom: 3px solid #f4c95d; } .app-nav { order: 3; flex-direction: row; width: 100%; margin: 0; overflow-x: auto; } .app-header button { margin: 0 0 0 auto; } main { margin: 0 auto; } footer { margin-left: 0; } }
-@media (max-width: 650px) { .grid, .diagnostic-grid, .setup-main { grid-template-columns: 1fr; } .app-nav a { padding: .55rem; font-size: .82rem; } main { padding: 1rem 1rem 2rem; } .status { display: block; padding: 1.4rem; } #status-message { display: inline-block; max-width: 100%; margin-top: 1rem; text-align: left; } .card, details { padding: 1.2rem; } .setup-action-panel { min-height: 0; } .tools-heading { display: block; } .tools-heading p:last-child { margin-top: .4rem; } #projects li { align-items: stretch; } #projects li > strong { flex: 0 0 100%; } #projects li > button { flex: 1 1 8rem; min-height: 2.75rem; } #projects .removal-plan-actions button { flex: 1 1 100%; } #integrated-report { max-width: 100%; } #support-download { width: 100%; min-height: 2.75rem; } .test-workflow button { width: 100%; } }
+@media (max-width: 650px) { .grid, .diagnostic-grid, .setup-main { grid-template-columns: 1fr; } .app-nav a { padding: .55rem; font-size: .82rem; } main { padding: 1rem 1rem 2rem; } .status { display: block; padding: 1.4rem; } #status-message { display: inline-block; max-width: 100%; margin-top: 1rem; text-align: left; } .card, details { padding: 1.2rem; } .setup-action-panel { min-height: 0; } .tools-heading { display: block; } .tools-heading p:last-child { margin-top: .4rem; } #projects li { align-items: stretch; } #projects li > strong { flex: 0 0 100%; } #projects li > button { flex: 1 1 8rem; min-height: 2.75rem; } #projects .removal-plan-actions button { flex: 1 1 100%; } #codex-candidates li { align-items: stretch; flex-direction: column; } #codex-candidates button { width: 100%; min-height: 2.75rem; } #integrated-report { max-width: 100%; } #support-download { width: 100%; min-height: 2.75rem; } .test-workflow button { width: 100%; } }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

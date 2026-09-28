@@ -1734,14 +1734,11 @@ $("#integrated-report").addEventListener("change", async () => {
   $("#integrated-summary").focus();
 });
 $("#support-download").addEventListener("click", downloadSupportSummary);
-$("#project-add-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
+async function addProject(name, rootPath) {
   if (projectActionBusy) return;
-  const name = $("#project-name").value.trim();
-  const rootPath = $("#project-root").value.trim();
   if (!name || !rootPath) {
     $("#project-action").textContent = "Enter a project name and an existing local folder.";
-    return;
+    return false;
   }
   projectActionBusy = true;
   $("#project-add").disabled = true;
@@ -1755,12 +1752,58 @@ $("#project-add-form").addEventListener("submit", async (event) => {
     $("#project-action").textContent = updated
       ? `${name} added and selected. Build its file index when ready.`
       : `${name} was added, but the project list could not be refreshed. Try Refresh.`;
+    return true;
   } catch (problem) {
     $("#project-action").textContent = projectError(problem);
+    return false;
   } finally {
     projectActionBusy = false;
     $("#project-add").disabled = false;
   }
+}
+async function findCodexProjects() {
+  const button = $("#codex-find");
+  const status = $("#codex-find-status");
+  const list = $("#codex-candidates");
+  button.disabled = true;
+  status.textContent = "Looking for saved Codex folders on this computer…";
+  list.replaceChildren();
+  try {
+    const result = await command("codex.projects.discover");
+    const candidates = result?.status === "available" && Array.isArray(result.candidates)
+      ? result.candidates.slice(0, 32) : [];
+    for (const candidate of candidates) {
+      if (typeof candidate.name !== "string" || !candidate.name || candidate.name.length > 120 ||
+          typeof candidate.root_path !== "string" || !candidate.root_path || candidate.root_path.length > 2048) continue;
+      const item = document.createElement("li");
+      const label = document.createElement("span");
+      const folder = typeof candidate.folder_name === "string" && candidate.folder_name.length <= 120
+        ? candidate.folder_name : "";
+      label.textContent = folder && folder !== candidate.name ? `${candidate.name} · ${folder}` : candidate.name;
+      const add = document.createElement("button");
+      add.type = "button";
+      add.textContent = "Add to RELAY";
+      add.setAttribute("aria-label", `Add ${candidate.name} to RELAY`);
+      add.addEventListener("click", async () => {
+        const added = await addProject(candidate.name, candidate.root_path);
+        if (added) { add.disabled = true; add.textContent = "Added"; }
+      });
+      item.append(label, add);
+      list.append(item);
+    }
+    status.textContent = list.children.length
+      ? `${list.children.length} saved Codex folder${list.children.length === 1 ? "" : "s"} found. Choose one to add. RELAY does not open chats or account data.`
+      : "No usable Codex project folders were found here. You can still add a folder below.";
+  } catch (_problem) {
+    status.textContent = "Codex's saved folder list is unavailable. You can still add a folder below.";
+  } finally {
+    button.disabled = false;
+  }
+}
+$("#codex-find").addEventListener("click", findCodexProjects);
+$("#project-add-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await addProject($("#project-name").value.trim(), $("#project-root").value.trim());
 });
 $("#uefn-connect").addEventListener("click", async () => {
   const button = $("#uefn-connect");

@@ -761,6 +761,7 @@ impl RelayCore {
             || request.command.starts_with("assets.")
             || request.command.starts_with("runtime.")
             || request.command == "tools.local.discover"
+            || request.command == "codex.projects.discover"
         {
             extension(&request)
                 .map(|result| {
@@ -4072,6 +4073,29 @@ mod tests {
             |_| None,
         );
         assert_eq!(unavailable.error.unwrap().code, "INTEGRATION_UNAVAILABLE");
+        drop(core);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn codex_project_discovery_routes_through_host_extension() {
+        let dir = temp_dir("codex-project-discovery-extension");
+        let core = RelayCore::open(CoreConfig::new(&dir));
+        let authority = ExecutionAuthority::local_user("CLIENT-codex");
+        let result = json!({
+            "source":"codex_local_state",
+            "status":"available",
+            "candidates":[],
+            "limitations":["codex_private_cache_best_effort","saved_local_projects_only","current_user_existing_directories_only"]
+        });
+        let response = core.execute_authorized_with_extension(
+            request("REQ-codex", "codex.projects.discover", json!({})),
+            &runtime(),
+            &authority,
+            |_| Some(Ok(result.clone())),
+        );
+        assert!(response.ok, "{response:?}");
+        assert_eq!(response.result, Some(result));
         drop(core);
         fs::remove_dir_all(dir).unwrap();
     }

@@ -25,7 +25,7 @@ function element() {
 async function loadDashboard(results, hash = "#local-test-token") {
   const selectors = [
     "#details", "#refresh", "#status-message", "#health-summary", "#health-checks", "#setup-progress", "#setup-guidance", "#setup-next", "#setup-action", "#setup-handoff", "#setup-uefn", "#tool-uefn-status", "#tool-blender-status", "#tool-krita-status",
-    "#next-action", "#automation-status", "#automation-toggle", "#project-count", "#projects", "#project-add-form", "#project-name", "#project-root", "#project-add", "#project-action", "#selected-project", "#uefn-connect", "#uefn-connection",
+    "#next-action", "#automation-status", "#automation-toggle", "#project-count", "#projects", "#codex-find", "#codex-find-status", "#codex-candidates", "#project-add-form", "#project-name", "#project-root", "#project-add", "#project-action", "#selected-project", "#uefn-connect", "#uefn-connection",
     "#uefn-inspection", "#asset-selected", "#asset-manifest", "#asset-changed-path", "#asset-validate", "#krita-validate", "#asset-impact", "#asset-result", "#asset-lineage", "#asset-findings", "#blender-file-path", "#blender-check", "#blender-check-status", "#krita-source-path", "#krita-export-path", "#krita-export", "#krita-export-status", "#tests-summary", "#tests-list",
     "#tests-catalog-file", "#tests-catalog-save", "#tests-catalog-status", "#tests-catalog-list", "#tests-plan", "#tests-plan-status", "#tests-plan-list", "#tests-run", "#tests-run-status", "#tests-run-list",
     "#tests-add-file-form", "#tests-add-file-id", "#tests-add-file-path", "#tests-add-file-save", "#tests-add-file-status",
@@ -222,6 +222,39 @@ test("project import, selection, and index build use the shared command path", a
   assert.deepEqual(page.calls.slice(-2).map((call) => JSON.parse(call.body).command), ["project.index.build", "project.capabilities"]);
   assert.equal(page.nodes["#setup-progress"].textContent, "Local setup ready");
   assert.equal(page.nodes["#setup-action"].href, "#assets-title");
+});
+
+test("Codex finder lets a user add a saved folder without showing its path", async () => {
+  const rootPath = "C:\\Users\\Someone\\Projects\\Forest";
+  const projects = [];
+  let imported = false;
+  const page = await loadDashboard((name, argumentsValue) => {
+    if (name === "codex.projects.discover") return { ok: true, json: async () => ({ ok: true, result: {
+      source: "codex_local_state", status: "available", limitations: ["codex_private_cache_best_effort"],
+      candidates: [{ name: "Forest", folder_name: "Forest", root_path: rootPath }]
+    } }) };
+    if (name === "project.import") {
+      assert.equal(argumentsValue.name, "Forest");
+      assert.equal(argumentsValue.root_path, rootPath);
+      imported = true;
+      projects.push({ id: "forest-id", name: "Forest" });
+      return { ok: true, json: async () => ({ ok: true, result: { id: "forest-id" } }) };
+    }
+    if (name === "project.list") return { ok: true, json: async () => ({ ok: true, result: { projects } }) };
+    if (name === "project.capabilities") return { ok: true, json: async () => ({ ok: true, result: {
+      index_status: "missing", baseline_state: "missing", content_verification_required: false
+    } }) };
+    return success(name);
+  });
+  await page.nodes["#codex-find"].listener();
+  const candidate = page.nodes["#codex-candidates"].children[0];
+  assert.equal(candidate.children[0].textContent, "Forest");
+  assert.doesNotMatch(page.nodes["#codex-find-status"].textContent, /Someone|Projects/);
+  assert.doesNotMatch(candidate.children[0].textContent, /Someone|Projects/);
+  await candidate.children[1].listener();
+  assert.equal(imported, true);
+  assert.equal(page.nodes["#selected-project"].textContent, "Selected: Forest");
+  assert.equal(candidate.children[1].textContent, "Added");
 });
 
 test("a scan made stale by a watcher event verifies content before showing ready", async () => {

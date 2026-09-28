@@ -1,8 +1,9 @@
-//! Read-only, best-effort project discovery from Codex's private local cache.
-//! This cache is not a supported API. Never inspect chats, sessions, or auth data.
+//! Read-only, best-effort local folder discovery from Codex's private metadata.
+//! These files are not a supported API. Never read chat text, sessions, or auth data.
 
 use relay_contracts::CommandRequest;
 use relay_core::service::ExtensionError;
+use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::env;
@@ -14,6 +15,12 @@ const MAX_STATE_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_PROJECTS: usize = 128;
 const MAX_ROOTS_PER_PROJECT: usize = 8;
 const MAX_CANDIDATES: usize = 32;
+const MAX_TASK_DATABASE_BYTES: u64 = 256 * 1024 * 1024;
+const WORKSPACE_LIMITATIONS: [&str; 3] = [
+    "private_metadata_best_effort",
+    "local_folders_only",
+    "cloud_chats_not_indexed",
+];
 const LIMITATIONS: [&str; 3] = [
     "codex_private_cache_best_effort",
     "saved_local_projects_only",
@@ -21,7 +28,112 @@ const LIMITATIONS: [&str; 3] = [
 ];
 
 pub fn execute(request: &CommandRequest) -> Option<Result<Value, ExtensionError>> {
-    (request.command == "codex.projects.discover").then(|| Ok(discover()))
+    match request.command.as_str() {
+        "codex.projects.discover" => Some(Ok(discover())),
+        "codex.workspaces.discover" => Some(Ok(discover_workspaces())),
+        _ => None,
+    }
+}
+
+fn discover_workspaces() -> Value {
+    let Some(profile) = env::var_os("USERPROFILE") else {
+        return unavailable_workspaces();
+    };
+    let codex_dir = PathBuf::from(profile).join(".codex");
+    discover_workspaces_from(
+        &codex_dir.join(".codex-global-state.json"),
+        &codex_dir.join("state_5.sqlite"),
+    )
+}
+
+fn unavailable_workspaces() -> Value {
+    json!({
+        "source": "codex_local_metadata",
+        "status": "unavailable",
+        "candidates": [],
+        "limitations": WORKSPACE_LIMITATIONS,
+    })
+}
+
+fn discover_workspaces_from(state_path: &Path, database_path: &Path) -> Value {
+    let saved = discover_from(state_path);
+    let mut candidates = Vec::new();
+    let mut seen = HashSet::new();
+    if let Some(projects) = saved["candidates"].as_array() {
+        for project in projects.iter().take(MAX_CANDIDATES / 2) {
+            let Some(root) = project["root_path"].as_str() else { continue };
+            seen.insert(root.to_ascii_lowercase());
+            let mut candidate = project.clone();
+            candidate["origin"] = json!("saved_project");
+            candidates.push(candidate);
+        }
+    }
+    let recent = recent_task_folders(database_path);
+    if let Some(folders) = recent.as_ref() {
+        for raw in folders {
+            if candidates.len() == MAX_CANDIDATES { break; }
+            if !seen.insert(raw.to_ascii_lowercase()) { continue; }
+            let path = Path::new(raw);
+            let Some(folder_name) = path.file_name().and_then(|name| name.to_str()) else { continue };
+            candidates.push(json!({
+                "name": folder_name,
+                "folder_name": folder_name,
+                "root_path": raw,
+                "origin": "recent_task_folder",
+            }));
+        }
+    }
+    json!({
+        "source": "codex_local_metadata",
+        "status": if saved["status"] == "available" || recent.is_some() { "available" } else { "unavailable" },
+        "candidates": candidates,
+        "limitations": WORKSPACE_LIMITATIONS,
+    })
+}
+
+fn recent_task_folders(database_path: &Path) -> Option<Vec<String>> {
+    if !database_path.parent().is_some_and(existing_plain_directory) { return None; }
+    let metadata = fs::symlink_metadata(database_path).ok()?;
+    if !metadata.file_type().is_file() || is_reparse(&metadata) || metadata.len() > MAX_TASK_DATABASE_BYTES {
+        return None;
+    }
+    let connection = Connection::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+    connection.busy_timeout(std::time::Duration::from_millis(50)).ok()?;
+    let mut statement = connection.prepare(
+        "SELECT cwd FROM threads WHERE cwd IS NOT NULL AND cwd <> '' AND archived = 0 GROUP BY cwd ORDER BY MAX(updated_at_ms) DESC LIMIT 128"
+    ).ok()?;
+    let rows = statement.query_map([], |row| row.get::<_, String>(0)).ok()?;
+    let mut folders = Vec::new();
+    let mut seen = HashSet::new();
+    let profile = database_path.parent()
+        .filter(|parent| parent.file_name().is_some_and(|name| name.to_string_lossy().eq_ignore_ascii_case(".codex")))
+        .and_then(Path::parent);
+    for raw in rows.flatten() {
+        if folders.len() == MAX_CANDIDATES { break; }
+        let Some(raw) = normalize_task_path(&raw) else { continue };
+        if raw.len() > 2048 || raw.chars().any(char::is_control) { continue; }
+        let path = Path::new(&raw);
+        if !path.is_absolute() || is_codex_internal(path) ||
+            profile.is_some_and(|home| home.starts_with(path)) ||
+            !existing_plain_directory(path) { continue; }
+        let Some(folder) = path.file_name().and_then(|name| name.to_str()) else { continue };
+        if folder.is_empty() || folder.chars().count() > 120 || folder.chars().any(char::is_control) { continue; }
+        if seen.insert(raw.to_ascii_lowercase()) { folders.push(raw); }
+    }
+    Some(folders)
+}
+
+fn normalize_task_path(raw: &str) -> Option<String> {
+    #[cfg(windows)]
+    if let Some(disk_path) = raw.strip_prefix(r"\\?\") {
+        let bytes = disk_path.as_bytes();
+        if bytes.len() < 3 || !bytes[0].is_ascii_alphabetic() || bytes[1] != b':' ||
+            (bytes[2] != b'\\' && bytes[2] != b'/') {
+            return None;
+        }
+        return Some(disk_path.to_string());
+    }
+    Some(raw.to_string())
 }
 
 fn discover() -> Value {
@@ -132,6 +244,10 @@ fn is_codex_mirror(path: &Path) -> bool {
     false
 }
 
+fn is_codex_internal(path: &Path) -> bool {
+    path.components().any(|component| matches!(component, Component::Normal(name) if name.to_string_lossy().eq_ignore_ascii_case(".codex")))
+}
+
 fn existing_plain_directory(path: &Path) -> bool {
     let mut prefix = PathBuf::new();
     for component in path.components() {
@@ -204,6 +320,55 @@ mod tests {
         assert_eq!(discover_from(&state)["status"], "unavailable");
         fs::write(&state, vec![b'x'; MAX_STATE_BYTES as usize + 1]).unwrap();
         assert_eq!(discover_from(&state)["status"], "unavailable");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn recent_task_folders_are_discovered_without_reading_chat_text() {
+        let dir = temp_dir();
+        let saved_folder = dir.join("Saved");
+        let task_folder = dir.join("Recent task");
+        let mirror = dir.join(".codex").join(".chatgpt-projects").join("cloud");
+        fs::create_dir_all(&saved_folder).unwrap();
+        fs::create_dir_all(&task_folder).unwrap();
+        fs::create_dir_all(&mirror).unwrap();
+        let state = dir.join("state.json");
+        fs::write(&state, json!({
+            "local-projects": {"one": {"id":"one", "name":"Saved game", "rootPaths":[saved_folder]}}
+        }).to_string()).unwrap();
+        let database = dir.join(".codex").join("state_5.sqlite");
+        let connection = Connection::open(&database).unwrap();
+        connection.execute_batch("CREATE TABLE threads (cwd TEXT, archived INTEGER, updated_at_ms INTEGER, title TEXT)").unwrap();
+        let task_raw = if cfg!(windows) {
+            format!(r"\\?\{}", task_folder.display())
+        } else {
+            task_folder.to_string_lossy().into_owned()
+        };
+        for (path, when, title) in [
+            (task_raw, 3, "private task text"),
+            (saved_folder.to_string_lossy().into_owned(), 2, "duplicate"),
+            (mirror.to_string_lossy().into_owned(), 1, "cloud mirror"),
+            (dir.to_string_lossy().into_owned(), 0, "home root"),
+        ] {
+            connection.execute("INSERT INTO threads VALUES (?1, 0, ?2, ?3)",
+                rusqlite::params![path, when, title]).unwrap();
+        }
+        for when in 10..140 {
+            connection.execute("INSERT INTO threads VALUES (?1, 0, ?2, 'private duplicate')",
+                rusqlite::params![mirror.to_str().unwrap(), when]).unwrap();
+        }
+        drop(connection);
+        let result = discover_workspaces_from(&state, &database);
+        relay_contracts::registry::validate_value(
+            &relay_contracts::registry::resolve_command("codex.workspaces.discover", Some(1)).unwrap().result_schema,
+            &result,
+        ).unwrap();
+        assert_eq!(result["status"], "available");
+        assert_eq!(result["candidates"].as_array().unwrap().len(), 2);
+        assert_eq!(result["candidates"][0]["origin"], "saved_project");
+        assert_eq!(result["candidates"][1]["origin"], "recent_task_folder");
+        assert!(!result.to_string().contains("private task text"));
+        assert!(!result.to_string().contains("cloud mirror"));
         fs::remove_dir_all(dir).unwrap();
     }
 }

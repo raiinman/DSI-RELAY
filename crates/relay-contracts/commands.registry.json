@@ -375,6 +375,44 @@
       "errors": ["INTEGRATION_UNAVAILABLE"]
     },
     {
+      "id": "codex.workspaces.discover",
+      "version": 1,
+      "stability": "phase6",
+      "summary": "Find saved Codex project folders and recent local Codex task folders. Cloud chats and context-only projects have no local files to index.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard", "adapter", "ai"],
+      "arguments_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "result_schema": {
+        "type": "object",
+        "required": ["source", "status", "candidates", "limitations"],
+        "properties": {
+          "source": { "type": "string", "const": "codex_local_metadata" },
+          "status": { "type": "string", "enum": ["available", "unavailable"] },
+          "candidates": {
+            "type": "array", "maxItems": 32,
+            "items": {
+              "type": "object", "required": ["name", "folder_name", "root_path", "origin"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+                "folder_name": { "type": "string", "minLength": 1, "maxLength": 120 },
+                "root_path": { "type": "string", "minLength": 1, "maxLength": 2048 },
+                "origin": { "type": "string", "enum": ["saved_project", "recent_task_folder"] }
+              },
+              "additionalProperties": false
+            }
+          },
+          "limitations": {
+            "type": "array", "minItems": 3, "maxItems": 3,
+            "items": { "type": "string", "enum": ["private_metadata_best_effort", "local_folders_only", "cloud_chats_not_indexed"] }
+          }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["INTEGRATION_UNAVAILABLE"]
+    },
+    {
       "id": "tools.local.discover",
       "version": 1,
       "stability": "phase6",

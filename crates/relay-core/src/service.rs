@@ -762,6 +762,7 @@ impl RelayCore {
             || request.command.starts_with("runtime.")
             || request.command == "tools.local.discover"
             || request.command == "codex.projects.discover"
+            || request.command == "codex.workspaces.discover"
         {
             extension(&request)
                 .map(|result| {

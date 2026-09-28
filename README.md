@@ -6,7 +6,7 @@ Project readers can review the [privacy statement](PRIVACY.md), [support guide](
 
 DSI RELAY is a developing model-independent control and observability layer for game projects and creative toolchains.
 
-The product exists to make AI-assisted development cheaper, more reliable, and easier to use. RELAY should do deterministic work locally, keep large results out of chat, expose a clean headless CLI, provide a plain-language dashboard, and let multiple AI clients work through the same verified project state. In the installed workspace, **Find my Codex projects** offers saved local project folders without making you find or type their paths. It reads Codex's local project cache on demand; if that cache is unavailable, the usual folder add remains available.
+The product exists to make AI-assisted development cheaper, more reliable, and easier to use. RELAY should do deterministic work locally, keep large results out of chat, expose a clean headless CLI, provide a plain-language dashboard, and let multiple AI clients work through the same verified project state. In the installed workspace, **Find my Codex work** offers saved local projects and recent local task folders without making you find or type their paths. It reads Codex's private local metadata on demand. A chat or Work project with no local folder cannot be indexed; the usual folder add remains available.
 
 ## Status
 
@@ -18,7 +18,7 @@ The corrected end-of-build integrated run on 2026-09-27 recorded 14 PASS, 0 FAIL
 
 1. Download or copy the unsigned `relay-0.1.0-windows-x64-local-test-installer.zip` produced by `packaging/Build-LocalTestPackage.ps1` on the development branch.
 2. Extract the ZIP and double-click `Install-RELAY.cmd` inside the extracted folder.
-3. Open **DSI RELAY** from the Windows Start menu. In Projects, click **Find projects**, choose a saved Codex folder, and click **Add to RELAY**. You can also add any other folder manually. Build the local file index when prompted. The Diagnostics/Debug section shows status and safe support information.
+3. Open **DSI RELAY** from the Windows Start menu. In Projects, click **Find projects**, choose a saved Codex project or recent task folder, and click **Add to RELAY**. You can also add any other folder manually. Build the local file index when prompted. The Diagnostics/Debug section shows status and safe support information.
 
 The extracted folder includes `Uninstall-RELAY.cmd`. Uninstall removes the program and shortcut while preserving project files and RELAY data. This package is unsigned and intended for local testing; it is not the held public binary. [Installation details](packaging/INSTALL-UPDATE-PLAN.md) explain the per-user location and update limits.
 

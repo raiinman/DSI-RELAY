@@ -1766,10 +1766,10 @@ async function findCodexProjects() {
   const status = $("#codex-find-status");
   const list = $("#codex-candidates");
   button.disabled = true;
-  status.textContent = "Looking for saved Codex folders on this computer…";
+  status.textContent = "Looking for local Codex work folders on this computer…";
   list.replaceChildren();
   try {
-    const result = await command("codex.projects.discover");
+    const result = await command("codex.workspaces.discover");
     const candidates = result?.status === "available" && Array.isArray(result.candidates)
       ? result.candidates.slice(0, 32) : [];
     for (const candidate of candidates) {
@@ -1779,7 +1779,9 @@ async function findCodexProjects() {
       const label = document.createElement("span");
       const folder = typeof candidate.folder_name === "string" && candidate.folder_name.length <= 120
         ? candidate.folder_name : "";
-      label.textContent = folder && folder !== candidate.name ? `${candidate.name} · ${folder}` : candidate.name;
+      const origin = candidate.origin === "saved_project" ? "Saved project" :
+        candidate.origin === "recent_task_folder" ? "Recent task folder" : "Local folder";
+      label.textContent = `${folder && folder !== candidate.name ? `${candidate.name} · ${folder}` : candidate.name} · ${origin}`;
       const add = document.createElement("button");
       add.type = "button";
       add.textContent = "Add to RELAY";
@@ -1792,10 +1794,10 @@ async function findCodexProjects() {
       list.append(item);
     }
     status.textContent = list.children.length
-      ? `${list.children.length} saved Codex folder${list.children.length === 1 ? "" : "s"} found. Choose one to add. RELAY does not open chats or account data.`
-      : "No usable Codex project folders were found here. You can still add a folder below.";
+      ? `${list.children.length} local Codex folder${list.children.length === 1 ? "" : "s"} found. Choose one to add. RELAY does not open chats or account data.`
+      : "No usable local Codex folders were found here. Chats or Work projects without local files cannot be indexed; you can still add a folder below.";
   } catch (_problem) {
-    status.textContent = "Codex's saved folder list is unavailable. You can still add a folder below.";
+    status.textContent = "Codex's local folder list is unavailable. You can still add a folder below.";
   } finally {
     button.disabled = false;
   }

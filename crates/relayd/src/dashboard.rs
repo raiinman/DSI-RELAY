@@ -220,6 +220,7 @@ fn allowed_command(command: &str) -> bool {
             | "uefn.mcp.discover"
             | "tools.local.discover"
             | "codex.projects.discover"
+            | "codex.workspaces.discover"
             | "uefn.mcp.toolsets"
             | "assets.manifest.validate"
             | "assets.impact.analyze"
@@ -388,6 +389,7 @@ mod tests {
         assert!(allowed_command("system.status"));
         assert!(allowed_command("tools.local.discover"));
         assert!(allowed_command("codex.projects.discover"));
+        assert!(allowed_command("codex.workspaces.discover"));
         assert!(allowed_command("project.list"));
         assert!(allowed_command("project.import"));
         assert!(allowed_command("project.index.build"));

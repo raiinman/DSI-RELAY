@@ -229,9 +229,12 @@ test("Codex finder lets a user add a saved folder without showing its path", asy
   const projects = [];
   let imported = false;
   const page = await loadDashboard((name, argumentsValue) => {
-    if (name === "codex.projects.discover") return { ok: true, json: async () => ({ ok: true, result: {
-      source: "codex_local_state", status: "available", limitations: ["codex_private_cache_best_effort"],
-      candidates: [{ name: "Forest", folder_name: "Forest", root_path: rootPath }]
+    if (name === "codex.workspaces.discover") return { ok: true, json: async () => ({ ok: true, result: {
+      source: "codex_local_metadata", status: "available", limitations: ["private_metadata_best_effort", "local_folders_only", "cloud_chats_not_indexed"],
+      candidates: [
+        { name: "Forest", folder_name: "Forest", root_path: rootPath, origin: "saved_project" },
+        { name: "Recent work", folder_name: "Recent work", root_path: "C:\\Users\\Someone\\Tasks\\Recent work", origin: "recent_task_folder" }
+      ]
     } }) };
     if (name === "project.import") {
       assert.equal(argumentsValue.name, "Forest");
@@ -248,7 +251,8 @@ test("Codex finder lets a user add a saved folder without showing its path", asy
   });
   await page.nodes["#codex-find"].listener();
   const candidate = page.nodes["#codex-candidates"].children[0];
-  assert.equal(candidate.children[0].textContent, "Forest");
+  assert.equal(candidate.children[0].textContent, "Forest · Saved project");
+  assert.equal(page.nodes["#codex-candidates"].children[1].children[0].textContent, "Recent work · Recent task folder");
   assert.doesNotMatch(page.nodes["#codex-find-status"].textContent, /Someone|Projects/);
   assert.doesNotMatch(candidate.children[0].textContent, /Someone|Projects/);
   await candidate.children[1].listener();

@@ -44,6 +44,7 @@ Own the versioned machine contracts shared by RELAY Core and every client surfac
 - `uefn.mcp.discover` probes a user-selected localhost port for a bounded MCP tool catalog; a response is discovery evidence, not editor identity or workflow proof.
 - `tools.local.discover@1` is a read-only, project-independent installation hint for UEFN, Blender, and Krita. It checks bounded common locations, returns no paths, and always labels native workflows `untested`; `not_detected` means only that these locations had no match.
 - `codex.projects.discover@1` is a read-only best-effort lookup of existing folders from Codex's private saved local-project cache. The bounded local result exposes candidate names and paths for the signed-in user to choose; it does not use chats, sessions, auth data, or a supported Codex API. Unavailable cache returns an empty list and fixed limitations.
+- `codex.workspaces.discover@1` adds bounded recent task working folders from local Codex thread metadata and labels each candidate's origin. It never returns chat text or a cloud-only project as an indexable folder; callers retain the original saved-project command for compatibility.
 - `uefn.mcp.toolsets` queries only advertised discovery tools and returns bounded names; live editor identity and workflows remain untested.
 - `uefn.mcp.describe_toolset` summarizes only advertised input parameter names/types/required flags; it never dispatches editor actions or echoes tool descriptions.
 - No secret values, project paths, or runtime state are embedded in contract metadata.

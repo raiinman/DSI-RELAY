@@ -1,0 +1,24 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "dsi-relay-chat",
+  "version": "0.1.0",
+  "description": "Read compact local RELAY project and result information in ChatGPT desktop Chat.",
+  "author": { "name": "RAiiNMAN", "url": "https://github.com/raiinman" },
+  "repository": "https://github.com/raiinman/DSI-RELAY",
+  "license": "MIT",
+  "keywords": ["relay", "local", "mcp", "results"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "DSI RELAY",
+        "shortDescription": "Read your local RELAY workspace in ChatGPT desktop.",
+        "longDescription": "Connect a desktop Chat to the local RELAY engine. Discover supported commands and retrieve compact stored results. This connection is read only.",
+        "developerName": "RAiiNMAN",
+        "category": "Productivity",
+        "capabilities": ["Read"],
+        "brandColor": "#65308C",
+        "defaultPrompt": ["Use RELAY to show what local information I can safely read."]
+      }
+    }
+  }
+}

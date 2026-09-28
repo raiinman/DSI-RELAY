@@ -66,6 +66,11 @@ Created by RAiiNMAN. First-party RELAY code is MIT licensed.
 3. Open DSI RELAY from the Windows Start menu.
 4. The app opens its local workspace view in your browser.
 
+Optional: to connect normal ChatGPT desktop Chat, install the local plugin
+in the installed program's plugins/dsi-relay-chat folder through a local
+ChatGPT plugin marketplace. Start a new Chat after enabling it. This local
+plugin does not work in ChatGPT web or mobile.
+
 The installer keeps the program in your per-user Programs folder. RELAY data
 and projects are kept separately. To remove the program, close RELAY and
 double-click Uninstall-RELAY.cmd from this extracted folder. It asks the

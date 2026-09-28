@@ -23,7 +23,6 @@ use windows_sys::Win32::UI::Controls::Dialogs::{
 use windows_sys::Win32::UI::Shell::{
     BIF_NEWDIALOGSTYLE, BIF_RETURNONLYFSDIRS, BROWSEINFOW, SHBrowseForFolderW, SHGetPathFromIDListW,
 };
-use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
 const REPARSE_POINT: u32 = 0x400;
 
@@ -196,7 +195,10 @@ unsafe fn folder_dialog() -> Result<Option<PathBuf>, ExtensionError> {
     let mut display = [0u16; 260];
     let title: Vec<u16> = "Choose a project folder\0".encode_utf16().collect();
     let info = BROWSEINFOW {
-        hwndOwner: unsafe { GetForegroundWindow() },
+        // RELAY's browser window belongs to another process. Owning it would
+        // let the picker disable that window until this daemon's dialog closes;
+        // a daemon exit during the dialog could leave the browser stuck.
+        hwndOwner: std::ptr::null_mut(),
         pszDisplayName: display.as_mut_ptr(),
         lpszTitle: title.as_ptr(),
         ulFlags: BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE,
@@ -233,7 +235,7 @@ unsafe fn file_dialog(
     let mut file = [0u16; 32768];
     let mut options = OPENFILENAMEW {
         lStructSize: std::mem::size_of::<OPENFILENAMEW>() as u32,
-        hwndOwner: unsafe { GetForegroundWindow() },
+        hwndOwner: std::ptr::null_mut(),
         lpstrFilter: filter.as_ptr(),
         lpstrFile: file.as_mut_ptr(),
         nMaxFile: file.len() as u32,

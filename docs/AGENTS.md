@@ -25,7 +25,7 @@ Own durable planning, architecture, research, roadmap, security, UX, and operati
 - `PRODUCT_VISION.md` — user problem, product promises, scope, and public posture.
 - `SYSTEM_ARCHITECTURE.md` — component boundaries, command system, jobs, results, storage, and adapters.
 - `COST_AND_CONTEXT.md` — usage-efficiency rules, Result Store, Context Compiler, memory tiers, and benchmarks.
-- `CLI_AND_SKILLS.md` — headless CLI, structured machine execution, compact skills, and thin MCP posture.
+- `CLI_AND_SKILLS.md` — headless CLI, structured machine execution, compact skills, thin MCP posture, and client connection boundaries.
 - `AUTOMATION_AND_UX.md` — onboarding automation, dashboard, recovery, approvals, and support experience.
 - `relay-dashboard-concept.png` — image-generated desktop dashboard direction for the guided local workspace; illustrative status text does not certify live tool readiness.
 - `UEFN_V0.1.md` — first integration, runtime bridge, probes, tests, captures, and asset workflow.

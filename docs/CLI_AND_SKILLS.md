@@ -201,7 +201,7 @@ D-154 makes this concrete: the built-in Phase 1 registry is plain JSON using a b
 
 A cloud-only client cannot be assumed to run local shell commands.
 
-As of the current platform review, ChatGPT connects to remote MCP servers rather than directly to a local MCP listener, and plugin/app availability depends on the user's plan, region, and account controls. The loopback discovery gateway is therefore a local transport prototype, not proof that ordinary or free ChatGPT can use RELAY. A supported remote connection or published plugin, its eligibility, and end-to-end account testing remain Phase 9 work. Recheck [OpenAI's MCP app guidance](https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt) and [plugin availability guidance](https://help.openai.com/en/articles/20001256-plugins-in-chatgpt-and-codex) before setting a public support promise.
+ChatGPT desktop can load a Desktop-only local plugin with a stdio MCP server. RELAY packages one in `plugins/dsi-relay-chat/`; it offers the existing five read-only discovery/result tools and reads the local gateway credential inside the launched process. A user must install/enable the plugin and start a new Chat. This is separate from the CLI/skill path and does not itself prove token or credit savings. ChatGPT web/mobile cannot run a local stdio process; those surfaces require a supported remote HTTPS MCP connection, account eligibility, and an end-to-end test before any support claim. See [OpenAI's plugin packaging guide](https://developers.openai.com/plugins/build/plugins), [plugin use in Chat](https://learn.chatgpt.com/docs/plugins), and [MCP connection guidance](https://learn.chatgpt.com/docs/extend/mcp).
 
 Path:
 

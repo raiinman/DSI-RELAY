@@ -71,7 +71,14 @@ $runtimeSkillFiles = @(
     'skills/relay-core/scripts/relay-core.ps1',
     'skills/relay-core/references/commands.generated.json'
 )
-$runtimeComponents = @($runtimeBinaries + $runtimeSkillFiles)
+$runtimePluginFiles = @(
+    'plugins/dsi-relay-chat/plugin.json',
+    'plugins/dsi-relay-chat/mcp.json',
+    'plugins/dsi-relay-chat/.codex-plugin/plugin.json',
+    'plugins/dsi-relay-chat/scripts/start-relay-chat.ps1',
+    'plugins/dsi-relay-chat/README.md'
+)
+$runtimeComponents = @($runtimeBinaries + $runtimeSkillFiles + $runtimePluginFiles)
 if (@($manifest.runtime_components).Count -ne $runtimeComponents.Count -or
     (@(Compare-Object -ReferenceObject $runtimeComponents -DifferenceObject @($manifest.runtime_components) -CaseSensitive).Count -ne 0)) {
     throw 'Runtime component inventory is incomplete or unexpected'
@@ -120,8 +127,13 @@ foreach ($binaryName in $runtimeBinaries) {
 foreach ($relative in $runtimeSkillFiles) {
     Assert-NoPersonalPath (Join-Path $root ($relative.Replace('/', '\')))
 }
+foreach ($relative in $runtimePluginFiles) {
+    Assert-NoPersonalPath (Join-Path $root ($relative.Replace('/', '\')))
+}
 $actualSkillFiles = @($manifest.files | ForEach-Object { [string]$_.path } | Where-Object { $_.StartsWith('skills/', [StringComparison]::Ordinal) })
 if ($actualSkillFiles.Count -ne $runtimeSkillFiles.Count) { throw 'Unexpected runtime skill file' }
+$actualPluginFiles = @($manifest.files | ForEach-Object { [string]$_.path } | Where-Object { $_.StartsWith('plugins/', [StringComparison]::Ordinal) })
+if ($actualPluginFiles.Count -ne $runtimePluginFiles.Count) { throw 'Unexpected runtime plugin file' }
 if ((Get-Hash (Join-Path $root 'Cargo.lock')) -ne [string]$manifest.cargo_lock_sha256) {
     throw 'Cargo.lock digest mismatch'
 }

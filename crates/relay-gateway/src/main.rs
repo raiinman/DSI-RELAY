@@ -1,25 +1,25 @@
 //! Local launcher for the read-only gateway. No token is accepted through
 //! arguments or environment variables and no token is printed.
 
-use relay_gateway::{Gateway, GatewayConfig, LocalDaemonTransport};
+use relay_gateway::{Gateway, GatewayConfig, LocalDaemonTransport, run_stdio};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, TcpStream};
 use std::path::PathBuf;
 use std::ptr::{null, null_mut};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use windows_sys::Win32::Foundation::LocalFree;
 use windows_sys::Win32::Security::Cryptography::{
-    BCryptGenRandom, CryptProtectData, CryptUnprotectData, BCRYPT_USE_SYSTEM_PREFERRED_RNG,
-    CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
+    BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom, CRYPT_INTEGER_BLOB,
+    CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData, CryptUnprotectData,
 };
 use windows_sys::Win32::System::Console::{
-    SetConsoleCtrlHandler, CTRL_BREAK_EVENT, CTRL_CLOSE_EVENT, CTRL_C_EVENT,
+    CTRL_BREAK_EVENT, CTRL_C_EVENT, CTRL_CLOSE_EVENT, SetConsoleCtrlHandler,
 };
 
 const PORT: u16 = 8765;
@@ -342,12 +342,24 @@ fn main() {
     let args: Vec<_> = env::args().skip(1).collect();
     let result = match args.as_slice() {
         [] => serve(),
+        [command] if command == "stdio" => {
+            run_stdio(std::io::stdin().lock(), std::io::stdout().lock())
+                .map_err(|_| "Local MCP stdio transport failed")
+        }
         [command] if command == "probe" => probe(),
         [command, name] if command == "list" || command == "describe" => discover(command, name),
-        [command, project_id] if command == "results" => read_project_result(command, project_id, None, None),
-        [command, project_id, result_id] if command == "result" => read_project_result(command, project_id, Some(result_id), None),
-        [command, project_id, result_id, budget] if command == "context" => read_project_result(command, project_id, Some(result_id), Some(budget)),
-        _ => Err("usage: relay-gateway [probe | list PREFIX | describe COMMAND | results PROJECT | result PROJECT RESULT | context PROJECT RESULT BYTES]"),
+        [command, project_id] if command == "results" => {
+            read_project_result(command, project_id, None, None)
+        }
+        [command, project_id, result_id] if command == "result" => {
+            read_project_result(command, project_id, Some(result_id), None)
+        }
+        [command, project_id, result_id, budget] if command == "context" => {
+            read_project_result(command, project_id, Some(result_id), Some(budget))
+        }
+        _ => Err(
+            "usage: relay-gateway [stdio | probe | list PREFIX | describe COMMAND | results PROJECT | result PROJECT RESULT | context PROJECT RESULT BYTES]",
+        ),
     };
     if let Err(message) = result {
         eprintln!("{message}");

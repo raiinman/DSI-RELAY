@@ -125,6 +125,7 @@ When the user requests a durable behavior change, record it here or in the relev
 - `docs/AGENTS.md` — owns durable product, architecture, research, roadmap, security, UX, and operating documentation under `docs/`.
 - `examples/AGENTS.md` — owns installable, project-agnostic examples and templates; its child index routes the UEFN Verse telemetry example.
 - `packaging/AGENTS.md` — owns unsigned local Windows staging, side-by-side install/update planning, and the separate future signed-distribution verifier.
+- `plugins/AGENTS.md` — owns distributable local AI client plugins and their transport packaging.
 - `skills/AGENTS.md` — owns local AI skill packages, generated command references, and thin CLI wrappers under `skills/`.
 - `release/AGENTS.md` — owns local release assembly, preview bundle contents, and package verification under `release/`.
 - `spikes/AGENTS.md` — owns Phase 1 technical spikes, benchmark harnesses/results, and prototype verification under `spikes/`.

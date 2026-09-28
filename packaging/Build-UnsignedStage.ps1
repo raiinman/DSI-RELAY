@@ -33,6 +33,13 @@ $runtimeSkillFiles = @(
     'skills/relay-core/scripts/relay-core.ps1',
     'skills/relay-core/references/commands.generated.json'
 )
+$runtimePluginFiles = @(
+    'plugins/dsi-relay-chat/plugin.json',
+    'plugins/dsi-relay-chat/mcp.json',
+    'plugins/dsi-relay-chat/.codex-plugin/plugin.json',
+    'plugins/dsi-relay-chat/scripts/start-relay-chat.ps1',
+    'plugins/dsi-relay-chat/README.md'
+)
 
 function Get-Hash([string]$Path) {
     (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -141,6 +148,11 @@ foreach ($relative in $runtimeSkillFiles) {
     Assert-RegularFile $path
     Assert-NoPersonalPath $path
 }
+foreach ($relative in $runtimePluginFiles) {
+    $path = Join-Path $repoRoot ($relative.Replace('/', '\'))
+    Assert-RegularFile $path
+    Assert-NoPersonalPath $path
+}
 Assert-RegularFile (Join-Path $PSScriptRoot 'Launch-RELAY.ps1')
 Assert-NoPersonalPath (Join-Path $PSScriptRoot 'Launch-RELAY.ps1')
 foreach ($source in @('LICENSE', 'NOTICE-RELAY.txt', 'Cargo.lock')) {
@@ -208,6 +220,16 @@ foreach ($relative in $runtimeSkillFiles) {
         throw 'Runtime skill file changed during assembly'
     }
 }
+foreach ($relative in $runtimePluginFiles) {
+    $source = Join-Path $repoRoot ($relative.Replace('/', '\'))
+    $destination = Join-Path $payloadRoot ($relative.Replace('/', '\'))
+    $before = Get-Hash $source
+    $null = New-Item -ItemType Directory -Path (Split-Path $destination -Parent) -Force
+    Copy-Item -LiteralPath $source -Destination $destination
+    if ((Get-Hash $source) -ne $before -or (Get-Hash $destination) -ne $before) {
+        throw 'Runtime plugin file changed during assembly'
+    }
+}
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Verify-UnsignedStage.ps1') -Destination (Join-Path $payloadRoot 'verify-package.ps1')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Launch-RELAY.ps1') -Destination (Join-Path $payloadRoot 'Launch-RELAY.ps1')
 
@@ -250,7 +272,8 @@ run it as a published product. relay.exe, relayd.exe, and relay-gateway.exe
 are staged for local integration work. The compact local coding-agent skill is in
 skills/relay-core/; its script calls the staged relay CLI through the shared
 command system. The gateway is an optional local MCP adapter; it is not a
-public or remote endpoint.
+public or remote endpoint. A desktop ChatGPT plugin is in
+plugins/dsi-relay-chat/ and must be enabled by the user in ChatGPT desktop.
 
 When using the staged skill from this folder, pass -RelayPath .\relay.exe to
 its scripts/relay-core.ps1 wrapper (or point it to an installed RELAY CLI).
@@ -285,7 +308,7 @@ $manifest = [ordered]@{
     source_binary_provenance = 'Supplied release binaries; binary-to-source correspondence not independently attested'
     cargo_lock_sha256 = Get-Hash (Join-Path $payloadRoot 'Cargo.lock')
     third_party_crate_count = $packages.Count
-    runtime_components = @($runtimeBinaries + $runtimeSkillFiles)
+    runtime_components = @($runtimeBinaries + $runtimeSkillFiles + $runtimePluginFiles)
     unresolved_checks = @($unresolved | Sort-Object -Unique)
     files = $files
 }

@@ -1,17 +1,20 @@
 //! Authenticated loopback discovery gateway. It has no public-network listener or shell path.
 
 use relay::client;
-use relay_contracts::{registry, CommandRequest, CommandResponse, RequestContext};
+use relay_contracts::{CommandRequest, CommandResponse, RequestContext, registry};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
-use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+mod stdio;
+pub use stdio::run_stdio;
 
 pub const GATEWAY_PROTOCOL: u32 = 1;
 pub const MCP_PROTOCOL_VERSION: &str = "2026-07-28";
@@ -69,7 +72,7 @@ impl RelayTransport for LocalDaemonTransport {
 }
 
 pub struct Gateway {
-    listener: TcpListener,
+    listener: Option<TcpListener>,
     token: Vec<u8>,
     transport: Arc<dyn RelayTransport>,
     host_inflight: Arc<AtomicBool>,
@@ -83,7 +86,7 @@ impl Gateway {
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, config.port))
             .map_err(|_| ConfigError::BindFailed)?;
         Ok(Self {
-            listener,
+            listener: Some(listener),
             token: config.token,
             transport,
             host_inflight: Arc::new(AtomicBool::new(false)),
@@ -92,22 +95,32 @@ impl Gateway {
 
     pub fn local_addr(&self) -> SocketAddr {
         self.listener
+            .as_ref()
+            .expect("HTTP gateway has a listener")
             .local_addr()
             .expect("bound listener has address")
     }
 
     /// Serve one connection; the caller owns lifecycle and must not publish this port.
     pub fn serve_one(&self) -> std::io::Result<()> {
-        let (stream, peer) = self.listener.accept()?;
+        let listener = self
+            .listener
+            .as_ref()
+            .ok_or(std::io::ErrorKind::NotConnected)?;
+        let (stream, peer) = listener.accept()?;
         self.serve_stream(stream, peer)
     }
 
     /// Serve serially until the local launcher requests shutdown. Each client
     /// failure stays local to that connection; no remote shutdown route exists.
     pub fn serve_until(&self, shutdown: &AtomicBool) -> std::io::Result<()> {
-        self.listener.set_nonblocking(true)?;
+        let listener = self
+            .listener
+            .as_ref()
+            .ok_or(std::io::ErrorKind::NotConnected)?;
+        listener.set_nonblocking(true)?;
         while !shutdown.load(Ordering::Relaxed) {
-            match self.listener.accept() {
+            match listener.accept() {
                 Ok((stream, peer)) => {
                     let _ = self.serve_stream(stream, peer);
                 }
@@ -161,6 +174,68 @@ impl Gateway {
             "/mcp" => self.mcp(&request),
             _ => HttpResponse::error(404, "NOT_FOUND"),
         }
+    }
+
+    /// A local child-process adapter shares the HTTP gateway's bounded, read-only
+    /// validation and daemon forwarding without opening any network listener.
+    fn for_stdio(transport: Arc<dyn RelayTransport>) -> Self {
+        Self {
+            listener: None,
+            token: Vec::new(),
+            transport,
+            host_inflight: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    fn legacy_tool_request(&self, id: Value, method: &str, params: Value) -> Value {
+        let mut params = params.as_object().cloned().unwrap_or_default();
+        params.insert("_meta".to_string(), json!({
+            "io.modelcontextprotocol/protocolVersion": MCP_PROTOCOL_VERSION,
+            "io.modelcontextprotocol/clientInfo": {"name":"relay-stdio-bridge","version":env!("CARGO_PKG_VERSION")},
+            "io.modelcontextprotocol/clientCapabilities": {}
+        }));
+        let name = params
+            .get("name")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let mut headers = BTreeMap::new();
+        headers.insert(
+            "mcp-protocol-version".to_string(),
+            MCP_PROTOCOL_VERSION.to_string(),
+        );
+        headers.insert("mcp-method".to_string(), method.to_string());
+        headers.insert(
+            "accept".to_string(),
+            "application/json, text/event-stream".to_string(),
+        );
+        if let Some(name) = name {
+            headers.insert("mcp-name".to_string(), name);
+        }
+        let request = HttpRequest {
+            method: "POST".to_string(),
+            path: "/mcp".to_string(),
+            headers,
+            body: json!({"jsonrpc":"2.0","id":id,"method":method,"params":params})
+                .to_string()
+                .into_bytes(),
+        };
+        let mut body = self.mcp(&request).body;
+        if let Some(result) = body.get_mut("result").and_then(Value::as_object_mut) {
+            result.remove("resultType");
+            result.remove("ttlMs");
+            result.remove("cacheScope");
+            if let Some(fallback) = result
+                .get("structuredContent")
+                .and_then(|value| serde_json::to_string(value).ok())
+                .filter(|text| text.len() <= 16 * 1024)
+            {
+                result.insert(
+                    "content".to_string(),
+                    json!([{"type":"text","text":fallback}]),
+                );
+            }
+        }
+        body
     }
 
     /// Stateless MCP Streamable HTTP 2026-07-28, with a fixed metadata allowlist.

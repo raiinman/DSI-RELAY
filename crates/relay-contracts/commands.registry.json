@@ -449,6 +449,62 @@
       "errors": ["INTEGRATION_UNAVAILABLE"]
     },
     {
+      "id": "local.path.pick",
+      "version": 1,
+      "stability": "phase6",
+      "summary": "Open a Windows folder or file picker on explicit local request. Project file choices return project-relative paths.",
+      "effect_class": "observe",
+      "permission": "read",
+      "idempotency": "safe",
+      "surfaces": ["cli", "dashboard"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["kind"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["project_folder", "project_file", "project_output_png"] },
+          "project_id": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "file_type": { "type": "string", "enum": ["any", "blend", "kra", "png", "json"] }
+        },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["status", "path"],
+        "properties": {
+          "status": { "type": "string", "enum": ["selected", "cancelled"] },
+          "path": { "type": ["string", "null"], "minLength": 1, "maxLength": 2048 }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["PICKER_UNAVAILABLE", "PROJECT_NOT_FOUND", "PROJECT_ROOT_UNAVAILABLE", "PICKER_PATH_REJECTED"]
+    },
+    {
+      "id": "local.app.launch",
+      "version": 1,
+      "stability": "phase6",
+      "summary": "Open an allowlisted installed creator app or a RELAY CLI terminal on explicit local request.",
+      "effect_class": "local_app_launch",
+      "permission": "host_control",
+      "idempotency": "unsafe",
+      "surfaces": ["cli", "dashboard"],
+      "arguments_schema": {
+        "type": "object",
+        "required": ["app"],
+        "properties": { "app": { "type": "string", "enum": ["uefn", "blender", "krita", "relay_terminal"] } },
+        "additionalProperties": false
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["app", "status"],
+        "properties": {
+          "app": { "type": "string", "enum": ["uefn", "blender", "krita", "relay_terminal"] },
+          "status": { "type": "string", "enum": ["started", "unavailable"] }
+        },
+        "additionalProperties": false
+      },
+      "errors": ["APP_LAUNCH_FAILED", "INTEGRATION_UNAVAILABLE"]
+    },
+    {
       "id": "uefn.mcp.discover",
       "version": 1,
       "stability": "phase6",

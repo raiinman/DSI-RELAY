@@ -162,6 +162,7 @@ impl ExecutionAuthority {
                 "observe",
                 "analyze",
                 "relay_self_repair",
+                "local_app_launch",
                 "relay_state_write",
                 "project_write",
             ]

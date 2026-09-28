@@ -221,6 +221,8 @@ fn allowed_command(command: &str) -> bool {
             | "tools.local.discover"
             | "codex.projects.discover"
             | "codex.workspaces.discover"
+            | "local.path.pick"
+            | "local.app.launch"
             | "uefn.mcp.toolsets"
             | "assets.manifest.validate"
             | "assets.impact.analyze"
@@ -335,6 +337,7 @@ fn handle_request(
                 |request| {
                     crate::tool_discovery::execute(request)
                         .or_else(|| crate::codex_projects::execute(request))
+                        .or_else(|| crate::local_actions::execute(core, request))
                         .or_else(|| crate::uefn::execute(core, request))
                         .or_else(|| crate::assets::execute_authorized(core, request, &runtime, &authority))
                         .or_else(|| crate::verse::execute(core, request))

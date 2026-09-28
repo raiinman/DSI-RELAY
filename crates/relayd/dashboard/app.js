@@ -22,6 +22,8 @@ let checkWorkflowBusy = false;
 let checkWorkflowEpoch = 0;
 let checkDisplayedProjectId = null;
 let supportDownloadBusy = false;
+let codexCandidates = [];
+let codexAdded = new Set();
 
 async function command(name, argumentsValue = {}) {
   const body = JSON.stringify({ command: name, arguments: argumentsValue });
@@ -45,23 +47,20 @@ async function command(name, argumentsValue = {}) {
 function renderChecks(checks) {
   const list = $("#health-checks");
   list.replaceChildren();
-  const problems = (checks ?? []).filter((check) => check.status !== "pass");
-  const item = document.createElement("li");
-  item.textContent = problems.length
-    ? `${problems.length} check${problems.length === 1 ? "" : "s"} need attention.`
-    : "All checks passed.";
-  list.append(item);
   const labels = {
-    "core.process": "RELAY needs attention.",
-    "storage.integrity": "Project records need attention.",
-    "diagnostics.capture": "Diagnostics need attention.",
-    "transport.local": "The local connection needs attention.",
-    "adapter.dependencies.parse": "The dependency parser needs attention."
+    "core.process": ["Engine", "The RELAY background program responds.", "The background program needs attention."],
+    "storage.integrity": ["Saved records", "The local database passed a quick integrity check.", "The local database needs inspection."],
+    "diagnostics.capture": ["Debug recording", "RELAY can record bounded local diagnostics.", "Debug recording needs attention."],
+    "transport.local": ["Local connection", "The engine reports its private local connection as available.", "The private local connection needs attention."],
+    "adapter.dependencies.parse": ["Dependency parser", "No parser fault reported; it may be unconfigured.", "The optional dependency parser needs attention."]
   };
-  for (const check of problems) {
-    const problem = document.createElement("li");
-    problem.textContent = `${labels[check.id] ?? "Another component needs attention."} See Advanced details for the component code.`;
-    list.append(problem);
+  for (const check of (Array.isArray(checks) ? checks : []).slice(0, 12)) {
+    const [name, passExplanation, failExplanation] = labels[check.id] ??
+      ["Other local component", "No fault reported. See Diagnostics for its code.", "See Diagnostics for its component code."];
+    const item = document.createElement("li");
+    const passed = check.status === "pass";
+    item.textContent = `${name}: ${passed ? "OK" : "Needs attention"}. ${passed ? passExplanation : failExplanation}`;
+    list.append(item);
   }
 }
 
@@ -82,6 +81,9 @@ function renderProjects(projects) {
   $("#asset-impact").disabled = !selected || selected.lifecycle_state === "archived";
   $("#blender-check").disabled = !selected || selected.lifecycle_state === "archived";
   $("#krita-export").disabled = !selected || selected.lifecycle_state === "archived";
+  for (const id of ["asset-changed-browse", "blender-file-browse", "krita-source-browse", "krita-export-browse", "tests-add-file-browse"]) {
+    $("#" + id).disabled = !selected || selected.lifecycle_state === "archived" || selected.lifecycle_state === "removed";
+  }
   $("#asset-manifest").value = "";
   $("#asset-changed-path").value = "";
   $("#blender-file-path").value = "";
@@ -272,6 +274,11 @@ function renderLocalTools(discovery) {
       ? "Found here · native workflow untested"
       : localTools?.[id] === "not_detected" ? "Not found in checked locations" : "Installation not checked";
   }
+  for (const id of ["uefn", "blender", "krita"]) {
+    $("#launch-" + id).disabled = localTools?.[id] !== "detected";
+  }
+  $("#cli-open").disabled = false;
+  $("#cli-status").textContent = "RELAY's command-line tool is installed with this program. Open a terminal here or use it from a local coding agent.";
   renderUefnGuidance();
 }
 
@@ -1601,12 +1608,14 @@ async function refresh() {
       command("system.status"), command("system.doctor"), command("project.list", { include_inactive: true }), command("diagnostics.summary")
     ]);
     message.textContent = status.recovery_state === "Healthy"
-      ? "RELAY is working."
-      : "RELAY needs attention. See Health below.";
+      ? "RELAY's local engine is responding. Follow the setup steps below to check your project."
+      : "RELAY's local engine needs attention. See Health below.";
     message.dataset.state = status.recovery_state;
+    const basicChecks = Array.isArray(doctor.checks) ? doctor.checks : [];
+    const passingChecks = basicChecks.filter((check) => check.status === "pass").length;
     $("#health-summary").textContent = doctor.healthy
-      ? "All basic checks are working."
-      : "One or more checks need attention.";
+      ? `${passingChecks} basic RELAY checks reported OK. Project files, creator apps, and AI connections are checked separately.`
+      : `${basicChecks.length - passingChecks} basic RELAY check${basicChecks.length - passingChecks === 1 ? "" : "s"} need attention. Project files and apps are checked separately.`;
     renderChecks(doctor.checks);
     const nextAction = $("#next-action");
     nextAction.hidden = !doctor.next_action;
@@ -1651,6 +1660,11 @@ async function refresh() {
     $("#asset-impact").disabled = true;
     $("#blender-check").disabled = true;
     $("#krita-export").disabled = true;
+    for (const id of ["asset-changed-browse", "blender-file-browse", "krita-source-browse", "krita-export-browse", "tests-add-file-browse", "launch-uefn", "launch-blender", "launch-krita", "cli-open"]) {
+      $("#" + id).disabled = true;
+    }
+    $("#cli-status").textContent = "RELAY's local connection is unavailable. Open RELAY again before using its terminal shortcut.";
+    $("#app-launch-status").textContent = "App launch controls are unavailable until RELAY reconnects.";
     $("#asset-manifest").value = "";
     $("#asset-changed-path").value = "";
     $("#blender-file-path").value = "";
@@ -1765,36 +1779,39 @@ async function findCodexProjects() {
   const button = $("#codex-find");
   const status = $("#codex-find-status");
   const list = $("#codex-candidates");
+  const add = $("#codex-add-selected");
   button.disabled = true;
   status.textContent = "Looking for local Codex work folders on this computer…";
   list.replaceChildren();
+  list.value = "";
+  list.disabled = true;
+  add.disabled = true;
+  codexCandidates = [];
+  codexAdded = new Set();
   try {
     const result = await command("codex.workspaces.discover");
     const candidates = result?.status === "available" && Array.isArray(result.candidates)
       ? result.candidates.slice(0, 32) : [];
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Choose a local folder";
+    list.append(placeholder);
     for (const candidate of candidates) {
       if (typeof candidate.name !== "string" || !candidate.name || candidate.name.length > 120 ||
           typeof candidate.root_path !== "string" || !candidate.root_path || candidate.root_path.length > 2048) continue;
-      const item = document.createElement("li");
-      const label = document.createElement("span");
       const folder = typeof candidate.folder_name === "string" && candidate.folder_name.length <= 120
         ? candidate.folder_name : "";
       const origin = candidate.origin === "saved_project" ? "Saved project" :
         candidate.origin === "recent_task_folder" ? "Recent task folder" : "Local folder";
-      label.textContent = `${folder && folder !== candidate.name ? `${candidate.name} · ${folder}` : candidate.name} · ${origin}`;
-      const add = document.createElement("button");
-      add.type = "button";
-      add.textContent = "Add to RELAY";
-      add.setAttribute("aria-label", `Add ${candidate.name} to RELAY`);
-      add.addEventListener("click", async () => {
-        const added = await addProject(candidate.name, candidate.root_path);
-        if (added) { add.disabled = true; add.textContent = "Added"; }
-      });
-      item.append(label, add);
-      list.append(item);
+      const option = document.createElement("option");
+      option.value = String(codexCandidates.length);
+      option.textContent = `${folder && folder !== candidate.name ? `${candidate.name} · ${folder}` : candidate.name} · ${origin}`;
+      list.append(option);
+      codexCandidates.push(candidate);
     }
-    status.textContent = list.children.length
-      ? `${list.children.length} local Codex folder${list.children.length === 1 ? "" : "s"} found. Choose one to add. RELAY does not open chats or account data.`
+    list.disabled = codexCandidates.length === 0;
+    status.textContent = codexCandidates.length
+      ? `${codexCandidates.length} local Codex folder${codexCandidates.length === 1 ? "" : "s"} found. Choose one to add. RELAY does not open chats or account data.`
       : "No usable local Codex folders were found here. Chats or Work projects without local files cannot be indexed; you can still add a folder below.";
   } catch (_problem) {
     status.textContent = "Codex's local folder list is unavailable. You can still add a folder below.";
@@ -1803,6 +1820,111 @@ async function findCodexProjects() {
   }
 }
 $("#codex-find").addEventListener("click", findCodexProjects);
+$("#codex-candidates").addEventListener("change", () => {
+  const index = Number($("#codex-candidates").value);
+  const added = codexAdded.has(index);
+  $("#codex-add-selected").disabled = $("#codex-candidates").value === "" || !codexCandidates[index] || added;
+  $("#codex-add-selected").textContent = added ? "Added to RELAY" : "Add to RELAY";
+});
+$("#codex-add-selected").addEventListener("click", async () => {
+  const select = $("#codex-candidates");
+  const index = Number(select.value);
+  const candidate = select.value !== "" ? codexCandidates[index] : null;
+  if (!candidate) return;
+  const add = $("#codex-add-selected");
+  add.disabled = true;
+  const added = await addProject(candidate.name, candidate.root_path);
+  if (added) {
+    codexAdded.add(index);
+    add.textContent = "Added to RELAY";
+    select.children[index + 1].textContent += " · Added";
+  } else {
+    add.disabled = false;
+  }
+});
+async function pickLocalPath(kind, fileType, inputId, statusId, maxLength) {
+  const status = $("#" + statusId);
+  const input = $("#" + inputId);
+  if (kind !== "project_folder" && !selectedActiveProject(selectedProjectId)) {
+    status.textContent = "Select an active project first, then choose a file inside it.";
+    return;
+  }
+  const argumentsValue = { kind };
+  if (kind !== "project_folder") argumentsValue.project_id = selectedProjectId;
+  if (fileType) argumentsValue.file_type = fileType;
+  status.textContent = kind === "project_folder" ? "Opening the folder chooser…" : "Opening the file chooser…";
+  try {
+    const picked = await command("local.path.pick", argumentsValue);
+    if (picked?.status === "cancelled") {
+      status.textContent = "Nothing selected. Your current entry was kept.";
+    } else if (picked?.status === "selected" && typeof picked.path === "string" &&
+               picked.path.length > 0 && picked.path.length <= maxLength) {
+      input.value = picked.path;
+      status.textContent = kind === "project_folder" ? "Folder selected. Add a project name, then choose Add this project." :
+        kind === "project_output_png" ? "New PNG location selected. Choose Create new PNG when ready." :
+        "File selected inside this project. Continue with its check.";
+      input.focus();
+    } else {
+      status.textContent = "The selected path could not be used here. Choose a shorter path inside the project.";
+    }
+  } catch (_problem) {
+    status.textContent = "The file chooser is unavailable. You can still type or paste the path.";
+  }
+}
+for (const [inputId, buttonId, kind, fileType, statusId, maxLength] of [
+  ["project-root", "project-browse", "project_folder", null, "path-picker-status", 2048],
+  ["asset-changed-path", "asset-changed-browse", "project_file", "any", "asset-result", 512],
+  ["blender-file-path", "blender-file-browse", "project_file", "blend", "blender-check-status", 512],
+  ["krita-source-path", "krita-source-browse", "project_file", "kra", "krita-export-status", 512],
+  ["krita-export-path", "krita-export-browse", "project_output_png", null, "krita-export-status", 512],
+  ["tests-add-file-path", "tests-add-file-browse", "project_file", "any", "tests-add-file-status", 4096]
+]) {
+  const pick = () => pickLocalPath(kind, fileType, inputId, statusId, maxLength);
+  $("#" + buttonId).addEventListener("click", pick);
+  $("#" + inputId).addEventListener("click", pick);
+}
+async function launchLocalApp(app, buttonId, label, statusId = "app-launch-status") {
+  const launchButton = $("#" + buttonId);
+  const status = $("#" + statusId);
+  launchButton.disabled = true;
+  status.textContent = `Opening ${label}…`;
+  try {
+    const result = await command("local.app.launch", { app });
+    status.textContent = result?.status === "started"
+      ? `${label} was asked to open. Check its window; RELAY has not verified its workflow.`
+      : `${label} was not found in supported local installation locations.`;
+  } catch (_problem) {
+    status.textContent = `${label} could not be opened here. Check RELAY health, then try again.`;
+  } finally {
+    launchButton.disabled = app === "relay_terminal" ? false : localTools?.[app] !== "detected";
+  }
+}
+for (const [app, buttonId, label] of [
+  ["uefn", "launch-uefn", "UEFN"],
+  ["blender", "launch-blender", "Blender"],
+  ["krita", "launch-krita", "Krita"]
+]) {
+  $("#" + buttonId).addEventListener("click", () => launchLocalApp(app, buttonId, label));
+}
+$("#cli-open").addEventListener("click", () => launchLocalApp("relay_terminal", "cli-open", "RELAY terminal", "cli-status"));
+function revealHashTarget(id = location.hash.slice(1)) {
+  if (!id) return;
+  const target = document.getElementById(id);
+  if (!target) return;
+  if (target.nextElementSibling?.tagName === "DETAILS" &&
+      target.nextElementSibling.classList.contains("panel-disclosure")) {
+    target.nextElementSibling.open = true;
+  }
+  for (let parent = target.parentElement; parent; parent = parent.parentElement) {
+    if (parent.tagName === "DETAILS") parent.open = true;
+  }
+}
+window.addEventListener("hashchange", () => revealHashTarget());
+document.addEventListener("click", (event) => {
+  const anchor = event.target.closest?.('a[href^="#"]');
+  if (anchor) revealHashTarget(anchor.getAttribute("href").slice(1));
+});
+revealHashTarget();
 $("#project-add-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   await addProject($("#project-name").value.trim(), $("#project-root").value.trim());

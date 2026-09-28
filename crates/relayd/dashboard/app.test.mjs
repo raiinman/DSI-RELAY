@@ -25,12 +25,12 @@ function element() {
 async function loadDashboard(results, hash = "#local-test-token") {
   const selectors = [
     "#details", "#refresh", "#status-message", "#health-summary", "#health-checks", "#setup-progress", "#setup-guidance", "#setup-next", "#setup-action", "#setup-handoff", "#setup-uefn", "#tool-uefn-status", "#tool-blender-status", "#tool-krita-status",
-    "#next-action", "#automation-status", "#automation-toggle", "#project-count", "#projects", "#codex-find", "#codex-find-status", "#codex-candidates", "#project-add-form", "#project-name", "#project-root", "#project-add", "#project-action", "#selected-project", "#uefn-connect", "#uefn-connection",
+    "#next-action", "#automation-status", "#automation-toggle", "#project-count", "#projects", "#codex-find", "#codex-find-status", "#codex-candidates", "#codex-add-selected", "#project-add-form", "#project-name", "#project-root", "#project-browse", "#path-picker-status", "#project-add", "#project-action", "#selected-project", "#uefn-connect", "#uefn-connection",
     "#uefn-inspection", "#asset-selected", "#asset-manifest", "#asset-changed-path", "#asset-validate", "#krita-validate", "#asset-impact", "#asset-result", "#asset-lineage", "#asset-findings", "#blender-file-path", "#blender-check", "#blender-check-status", "#krita-source-path", "#krita-export-path", "#krita-export", "#krita-export-status", "#tests-summary", "#tests-list",
     "#tests-catalog-file", "#tests-catalog-save", "#tests-catalog-status", "#tests-catalog-list", "#tests-plan", "#tests-plan-status", "#tests-plan-list", "#tests-run", "#tests-run-status", "#tests-run-list",
     "#tests-add-file-form", "#tests-add-file-id", "#tests-add-file-path", "#tests-add-file-save", "#tests-add-file-status",
     "#activity-summary", "#activity-list", "#results-summary", "#results-list", "#jobs-summary", "#jobs-list", "#usage-summary", "#usage-detail", "#diagnostic-capture",
-    "#diagnostic-detail", "#diagnostic-storage", "#diagnostic-dropped",
+    "#diagnostic-detail", "#diagnostic-storage", "#diagnostic-dropped", "#cli-open", "#cli-status", "#launch-uefn", "#launch-blender", "#launch-krita", "#app-launch-status", "#asset-changed-browse", "#blender-file-browse", "#krita-source-browse", "#krita-export-browse", "#tests-add-file-browse",
     "#diagnostic-events", "#diagnostic-incomplete", "#relay-version",
     "#relay-uptime", "#diagnostic-guidance", "#diagnostic-recent-summary", "#diagnostic-recent-list", "#integrated-report", "#integrated-summary", "#integrated-workflows", "#support-download", "#support-download-status"
   ];
@@ -42,6 +42,8 @@ async function loadDashboard(results, hash = "#local-test-token") {
   const history = { replaceState(_state, _title, path) { location.hash = ""; location.pathname = path; } };
   const document = {
     querySelector(selector) { return nodes[selector]; },
+    getElementById(id) { return nodes["#" + id]; },
+    addEventListener() {},
     createElement() { const node = element(); downloads.push(node); return node; }
   };
   const fetch = async (_url, options) => {
@@ -51,7 +53,7 @@ async function loadDashboard(results, hash = "#local-test-token") {
   };
   const URL = { createObjectURL(blob) { downloads.push(blob); return "blob:local-test"; }, revokeObjectURL() {} };
   vm.runInNewContext(script, { document, fetch, history, location, TextEncoder, Blob, URL,
-    setTimeout(callback) { callback(); }, window: { confirm: () => true } });
+    setTimeout(callback) { callback(); }, window: { confirm: () => true, location, addEventListener() {} } });
   await new Promise(setImmediate);
   return {
     nodes, calls, location, downloads,
@@ -113,9 +115,11 @@ test("refresh uses read-only commands and renders named failures as text", async
     "usage.summary", "transaction.list", "result.list", "job.list", "tools.local.discover"
   ]);
   assert.ok(page.calls.every((call) => call.headers["X-Relay-Dashboard-Token"] === "local-test-token"));
-  assert.equal(page.nodes["#status-message"].textContent, "RELAY needs attention. See Health below.");
+  assert.equal(page.nodes["#status-message"].textContent, "RELAY's local engine needs attention. See Health below.");
+  assert.equal(page.nodes["#health-checks"].children[0].textContent,
+    "Saved records: Needs attention. The local database needs inspection.");
   assert.equal(page.nodes["#health-checks"].children[1].textContent,
-    "Project records need attention. See Advanced details for the component code.");
+    "Local connection: OK. The engine reports its private local connection as available.");
   assert.equal(page.nodes["#projects"].children[0].children[0].textContent, "<script>unsafe</script>");
   assert.equal(page.nodes["#selected-project"].textContent, "No project selected.");
   assert.equal(page.nodes["#setup-progress"].textContent, "Step 2 of 3 · Select a project");
@@ -250,15 +254,53 @@ test("Codex finder lets a user add a saved folder without showing its path", asy
     return success(name);
   });
   await page.nodes["#codex-find"].listener();
-  const candidate = page.nodes["#codex-candidates"].children[0];
-  assert.equal(candidate.children[0].textContent, "Forest · Saved project");
-  assert.equal(page.nodes["#codex-candidates"].children[1].children[0].textContent, "Recent work · Recent task folder");
+  const candidate = page.nodes["#codex-candidates"].children[1];
+  assert.equal(candidate.textContent, "Forest · Saved project");
+  assert.equal(page.nodes["#codex-candidates"].children[2].textContent, "Recent work · Recent task folder");
   assert.doesNotMatch(page.nodes["#codex-find-status"].textContent, /Someone|Projects/);
-  assert.doesNotMatch(candidate.children[0].textContent, /Someone|Projects/);
-  await candidate.children[1].listener();
+  assert.doesNotMatch(candidate.textContent, /Someone|Projects/);
+  page.nodes["#codex-candidates"].value = "0";
+  page.nodes["#codex-candidates"].listener();
+  await page.nodes["#codex-add-selected"].listener();
   assert.equal(imported, true);
   assert.equal(page.nodes["#selected-project"].textContent, "Selected: Forest");
-  assert.equal(candidate.children[1].textContent, "Added");
+  assert.equal(page.nodes["#codex-add-selected"].textContent, "Added to RELAY");
+});
+
+test("folder browsing uses the shared local chooser and keeps a cancelled entry", async () => {
+  const chosen = "C:\\Users\\Someone\\Projects\\Forest";
+  let picks = 0;
+  const page = await loadDashboard((name, args) => {
+    if (name === "local.path.pick") {
+      assert.equal(args.kind, "project_folder");
+      picks++;
+      return { ok: true, json: async () => ({ ok: true, result: picks === 1
+        ? { status: "selected", path: chosen }
+        : { status: "cancelled", path: null } }) };
+    }
+    return success(name);
+  });
+  await page.nodes["#project-root"].listener();
+  assert.equal(page.nodes["#project-root"].value, chosen);
+  assert.doesNotMatch(page.nodes["#path-picker-status"].textContent, /Someone/);
+  await page.nodes["#project-browse"].listener();
+  assert.equal(page.nodes["#project-root"].value, chosen);
+  assert.equal(picks, 2);
+});
+
+test("supported app launcher uses its fixed shared command", async () => {
+  const page = await loadDashboard((name, args) => {
+    if (name === "local.app.launch") {
+      assert.equal(args.app, "blender");
+      return { ok: true, json: async () => ({ ok: true, result: { app: "blender", status: "started" } }) };
+    }
+    return success(name);
+  });
+  assert.equal(page.nodes["#launch-blender"].disabled, false);
+  assert.equal(page.nodes["#launch-krita"].disabled, true);
+  await page.nodes["#launch-blender"].listener();
+  assert.match(page.nodes["#app-launch-status"].textContent, /asked to open/);
+  assert.match(page.nodes["#app-launch-status"].textContent, /not verified/);
 });
 
 test("a scan made stale by a watcher event verifies content before showing ready", async () => {

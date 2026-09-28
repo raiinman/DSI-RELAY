@@ -27,6 +27,7 @@ Own production RELAY Core deterministic local business logic and durable state.
 - Trusted host extensions execute only after shared command validation and Core authority checks; Core validates extension result schemas. The generic ready-index snapshot returns project-relative names only and requires ready continuity. Core contains no UEFN-specific parser.
 - The project-independent `tools.local.discover` command also routes through the trusted host extension after read authority checks; Core contains no installation scanning logic.
 - The project-independent `codex.projects.discover` command uses the same authorized host-extension boundary. Core contains no Codex cache parsing or project-path selection logic.
+- Local picker and allowlisted app-launch commands pass through that authorized host-extension boundary. Core grants launch effect only to the signed-in local-user authority and keeps native dialog and executable discovery out of deterministic business logic.
 - Local-user authority grants the distinct `project_write` effect/permission for explicit project-file actions such as Krita export; these actions use the existing transaction record path and remain project scoped.
 - Trusted project-root lookup serves authorized local adapters only; public results and diagnostics do not include that path.
 - Generic registered-project checks let host adapters bind caller-supplied capture analysis to an authorized project without adding Verse logic to Core.

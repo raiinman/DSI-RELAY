@@ -1,5 +1,6 @@
 mod assets;
 mod codex_projects;
+mod local_actions;
 mod dashboard;
 mod parser;
 mod pipe;
@@ -457,6 +458,7 @@ fn run() -> Result<(), String> {
             core.execute_authorized_with_extension(request, &runtime, &authority, |request| {
                 tool_discovery::execute(request)
                     .or_else(|| codex_projects::execute(request))
+                    .or_else(|| local_actions::execute(&core, request))
                     .or_else(|| uefn::execute(&core, request))
                     .or_else(|| assets::execute_authorized(&core, request, &runtime, &authority))
                     .or_else(|| verse::execute(&core, request))

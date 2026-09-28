@@ -25,15 +25,27 @@
       <p id="setup-handoff" hidden>Local setup is ready. Continue with <a href="#assets-title">Assets</a>, <a href="#tests-title">Checks</a>, or <a href="#diagnostics-title">Diagnostics</a>.</p>
       <p id="setup-uefn" class="quiet-note">UEFN connection has not been checked. Live editor and play-session workflows remain UNTESTED.</p>
     </section>
-    <ol class="quick-steps" aria-label="How to get started">
-      <li><span>1</span><div><strong>Choose a folder</strong><p>Use an existing project on this computer.</p></div></li>
-      <li><span>2</span><div><strong>Scan its files</strong><p>RELAY builds a local index to understand the project.</p></div></li>
-      <li><span>3</span><div><strong>Review what is ready</strong><p>See results and the next action.</p></div></li>
-    </ol>
+    <section class="card how-relay-works" aria-labelledby="how-title">
+      <p class="eyebrow">WHAT RELAY DOES</p>
+      <h2 id="how-title">How RELAY helps</h2>
+      <p>RELAY starts a local engine on this computer. It reads a folder you choose, remembers what changed, and gives you short results. Your project files stay in their folder.</p>
+      <div class="workflow-flow" aria-label="How to use RELAY">
+        <div><strong>Choose a folder</strong><span>Add a local project below.</span></div>
+        <div><strong>Scan its files</strong><span>RELAY builds a file list without moving anything.</span></div>
+        <div><strong>Run a check</strong><span>Use Assets or File checks to inspect what you need.</span></div>
+        <div><strong>Read the result</strong><span>See a short answer here, in the CLI, or through supported AI tools.</span></div>
+      </div>
+      <details class="how-explanation"><summary>See how scanning, AI connections, and health work</summary>
+        <p>RELAY leaves project files where they are. After a local scan, it can focus later checks on changed files instead of repeating every step.</p>
+        <p>Use these buttons yourself, or let a local AI tool use the RELAY CLI. It asks the same engine to do the work and returns short results first, with more detail available when needed. The optional MCP gateway exposes a limited read-only set of commands. This may save context and paid model calls; actual savings depend on the task and client.</p>
+        <p>Select a project, scan its files, then use Assets or File checks. Health shows whether RELAY's basic parts can respond; it does not prove a creator app or live game session works.</p>
+      </details>
+    </section>
     <div class="grid primary-grid">
       <section class="card project-card" aria-labelledby="projects-title">
         <p class="eyebrow">01 · YOUR WORK</p>
         <h2 id="projects-title">Projects</h2>
+        <details class="panel-disclosure" open><summary>Show or hide projects</summary>
         <p id="project-count">Checking…</p>
         <p class="section-intro">Choose a local folder you use with Codex. RELAY leaves its files where they are.</p>
         <div class="codex-finder" aria-labelledby="codex-finder-title">
@@ -41,17 +53,22 @@
           <p>RELAY checks saved projects and recent task folders on this computer. Chats or Work projects without a local folder cannot be indexed yet.</p>
           <button id="codex-find" type="button" class="primary-button">Find projects</button>
           <p id="codex-find-status" role="status" aria-live="polite">Ready to check this computer. No Codex sign-in is needed.</p>
-          <ul id="codex-candidates" aria-label="Codex local folders"></ul>
+          <div class="codex-picker">
+            <label for="codex-candidates">Choose a Codex folder</label>
+            <select id="codex-candidates" aria-describedby="codex-find-status" disabled><option value="">Find projects to see your folders</option></select>
+            <button id="codex-add-selected" type="button" disabled>Add selected folder</button>
+          </div>
         </div>
         <p class="manual-project-intro">Have a different folder? Add it below.</p>
         <form id="project-add-form">
           <label for="project-name">Project name</label>
           <input id="project-name" name="name" type="text" maxlength="120" required autocomplete="off" placeholder="My project">
           <label for="project-root">Local project folder</label>
-          <input id="project-root" name="root" type="text" maxlength="2048" required autocomplete="off" aria-describedby="project-path-help" placeholder="C:\Projects\MyProject">
-          <p id="project-path-help">Paste the folder's full path from File Explorer.</p>
+          <div class="path-picker"><input id="project-root" name="root" type="text" maxlength="2048" required autocomplete="off" aria-describedby="project-path-help" placeholder="C:\Projects\MyProject"><button id="project-browse" type="button">Browse folders</button></div>
+          <p id="project-path-help">Select a folder with Browse folders, or paste its full path.</p>
           <button id="project-add" class="primary-button" type="submit">Add this project</button>
         </form>
+        <p id="path-picker-status" role="status" aria-live="polite">Use Browse beside a path field to select a folder or file.</p>
         <p id="project-action" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">Add a project, then select it to work with its indexed files.</p>
         <p id="selected-project">No project selected.</p>
         <ul id="projects"></ul>
@@ -59,35 +76,64 @@
         <button id="uefn-connect" type="button">Check UEFN connection</button>
         <p id="uefn-connection" role="status" aria-live="polite">UEFN editor connection has not been checked.</p>
         <p id="uefn-inspection" role="status" aria-live="polite">Choose a project to inspect its indexed UEFN files. Editor and runtime checks are not available yet.</p>
+        </details>
       </section>
       <section class="card health-card" aria-labelledby="health-title">
         <p class="eyebrow">02 · AT A GLANCE</p>
         <h2 id="health-title">Health</h2>
+        <details class="panel-disclosure" open><summary>Show or hide health details</summary>
+        <p id="health-explainer" class="section-intro">Health checks whether RELAY's local engine, storage, diagnostic log, and command transport respond. It does not test every project, creator app, AI connection, or live workflow. The list below names each basic check and its result.</p>
         <p id="health-summary">Checking…</p>
         <ul id="health-checks"></ul>
         <p id="next-action" hidden></p>
         <h3>Background file checks</h3>
         <p id="automation-status" role="status" aria-live="polite">Checking…</p>
         <button id="automation-toggle" type="button" disabled>Pause background checks</button>
+        </details>
       </section>
     </div>
-    <section class="tool-overview" aria-labelledby="tool-overview-title">
-      <div class="tools-heading"><div><p class="eyebrow">CONNECTED TO YOUR WORK</p><h2 id="tool-overview-title">Creator tools</h2></div><p>RELAY will only say a tool is ready after a real check.</p></div>
-      <div class="tool-cards">
-        <article class="tool-card"><span class="tool-icon" aria-hidden="true">U</span><div><h3>UEFN</h3><p id="tool-uefn-status" class="tool-status">Connection not checked</p><p>Editor and play session: untested.</p></div><a href="#uefn-connect">Check connection</a></article>
-        <article class="tool-card"><span class="tool-icon" aria-hidden="true">B</span><div><h3>Blender</h3><p id="tool-blender-status" class="tool-status">Native app not checked</p><p>Local asset checks are available below.</p></div><a href="#assets-title">Open assets</a></article>
-        <article class="tool-card"><span class="tool-icon" aria-hidden="true">K</span><div><h3>Krita</h3><p id="tool-krita-status" class="tool-status">Native app not checked</p><p>Local manifest inspection is available below.</p></div><a href="#assets-title">Open assets</a></article>
+    <section class="card ai-connections" aria-labelledby="connections-title">
+      <p class="eyebrow">USE RELAY YOUR WAY</p>
+      <h2 id="connections-title">Connect an AI or use a terminal</h2>
+      <details class="panel-disclosure" open><summary>Show or hide connection choices</summary>
+      <div class="connection-options">
+        <div id="cli-connection" class="connection-option">
+          <h3>CLI: commands in a terminal</h3>
+          <p>The RELAY CLI is part of this installation. It talks to the same local engine as this screen. A Codex task or script can call it and receive a compact result, so it need not paste a whole project or long logs into chat.</p>
+          <p>Open the terminal, then try <code>relay doctor</code> to check RELAY or <code>relay commands</code> to see what it can do.</p>
+          <button id="cli-open" type="button" disabled>Open RELAY terminal</button>
+          <p id="cli-status" role="status" aria-live="polite">Checking whether a RELAY terminal can be opened here.</p>
+        </div>
+        <div class="connection-option">
+          <h3>MCP: a tool connection</h3>
+          <p>The optional local MCP gateway exposes a limited read-only set of RELAY commands. An MCP-capable client must be set up to connect to it. RELAY does not set up that client for you.</p>
+          <a href="#diagnostics-title">See connection diagnostics</a>
+        </div>
       </div>
+      <p class="connection-note">A regular ChatGPT chat cannot use this local installation just because it is running. A separate supported plugin or connector would be needed. Local Codex or another CLI-capable assistant can use RELAY when given its CLI instructions; actual token or credit savings have not yet been measured.</p>
+      </details>
+    </section>
+    <section class="tool-overview" aria-labelledby="tool-overview-title">
+      <div class="tools-heading"><div><p class="eyebrow">CONNECTED TO YOUR WORK</p><h2 id="tool-overview-title">Supported creator apps</h2></div><p>RELAY will only say an app is ready after a real check.</p></div>
+      <details class="panel-disclosure" open><summary>Show or hide creator tools</summary>
+      <div class="tool-cards">
+        <article class="tool-card"><span class="tool-icon" aria-hidden="true">U</span><div><h3>UEFN</h3><p id="tool-uefn-status" class="tool-status">Connection not checked</p><p>Editor and play session: untested.</p><button id="launch-uefn" type="button" disabled>Open UEFN</button><a href="#uefn-connect">Check connection</a></div></article>
+        <article class="tool-card"><span class="tool-icon" aria-hidden="true">B</span><div><h3>Blender</h3><p id="tool-blender-status" class="tool-status">Native app not checked</p><p>Local asset checks are available below.</p><button id="launch-blender" type="button" disabled>Open Blender</button><a href="#assets-title">Open assets</a></div></article>
+        <article class="tool-card"><span class="tool-icon" aria-hidden="true">K</span><div><h3>Krita</h3><p id="tool-krita-status" class="tool-status">Native app not checked</p><p>Local manifest inspection is available below.</p><button id="launch-krita" type="button" disabled>Open Krita</button><a href="#assets-title">Open assets</a></div></article>
+      </div>
+      <p id="app-launch-status" role="status" aria-live="polite">Choose a supported app above to open it from RELAY.</p>
+      </details>
     </section>
     <div class="tools-heading"><div><p class="eyebrow">EXPLORE YOUR WORKSPACE</p><h2>Tools and activity</h2></div><p>Use these after your project's file index is ready.</p></div>
     <div class="grid secondary">
       <section class="card" aria-labelledby="assets-title">
         <h2 id="assets-title">Assets</h2>
+        <details class="panel-disclosure"><summary>Show or hide assets</summary>
         <p id="asset-selected">Select an active project to check its asset manifest.</p>
         <label for="asset-manifest">Local asset manifest (JSON)</label>
         <input id="asset-manifest" type="file" accept=".json,application/json">
         <label for="asset-changed-path">Changed project-relative file</label>
-        <input id="asset-changed-path" type="text" maxlength="512" autocomplete="off" placeholder="Assets/example.png">
+        <div class="path-picker"><input id="asset-changed-path" type="text" maxlength="512" autocomplete="off" placeholder="Assets/example.png"><button id="asset-changed-browse" type="button" disabled>Browse file</button></div>
         <div class="asset-actions">
           <button id="asset-validate" type="button" disabled>Validate source and export links</button>
           <button id="krita-validate" type="button" disabled>Inspect Krita formats</button>
@@ -100,7 +146,7 @@
           <h3>Check a Blender file</h3>
           <p>Enter a .blend file inside this project. RELAY checks a small set of mesh problems if Blender is installed.</p>
           <label for="blender-file-path">Blender file in this project</label>
-          <input id="blender-file-path" type="text" maxlength="512" autocomplete="off" spellcheck="false" placeholder="Models/example.blend">
+          <div class="path-picker"><input id="blender-file-path" type="text" maxlength="512" autocomplete="off" spellcheck="false" placeholder="Models/example.blend"><button id="blender-file-browse" type="button" disabled>Choose .blend</button></div>
           <button id="blender-check" type="button" disabled>Check Blender meshes</button>
           <p id="blender-check-status" role="status" aria-live="polite">Select an active project to check a Blender file.</p>
         </div>
@@ -108,16 +154,18 @@
           <summary>Create a PNG with Krita</summary>
           <p>RELAY can ask Krita to export a .kra source to a new .png in the same project. It will not replace an existing file.</p>
           <label for="krita-source-path">Krita source in this project</label>
-          <input id="krita-source-path" type="text" maxlength="512" autocomplete="off" spellcheck="false" placeholder="Art/source.kra">
+          <div class="path-picker"><input id="krita-source-path" type="text" maxlength="512" autocomplete="off" spellcheck="false" placeholder="Art/source.kra"><button id="krita-source-browse" type="button" disabled>Choose .kra</button></div>
           <label for="krita-export-path">New PNG in this project</label>
-          <input id="krita-export-path" type="text" maxlength="512" autocomplete="off" spellcheck="false" placeholder="Art/export.png">
+          <div class="path-picker"><input id="krita-export-path" type="text" maxlength="512" autocomplete="off" spellcheck="false" placeholder="Art/export.png"><button id="krita-export-browse" type="button" disabled>Choose PNG destination</button></div>
           <button id="krita-export" type="button" disabled>Create new PNG</button>
           <p id="krita-export-status" role="status" aria-live="polite">Select an active project to use Krita export.</p>
         </details>
         <p id="asset-native-status">Native Blender, Krita, and UEFN asset workflows: UNTESTED until run on this computer.</p>
+        </details>
       </section>
       <section class="card" aria-labelledby="tests-title">
         <h2 id="tests-title">File checks</h2>
+        <details class="panel-disclosure"><summary>Show or hide file checks</summary>
         <p class="section-intro">Choose a file to check. RELAY can confirm whether it appears in the local project scan. You can review the plan before running it.</p>
         <div class="test-workflow" role="group" aria-labelledby="tests-catalog-title">
           <h3 id="tests-catalog-title">Declared checks</h3>
@@ -126,7 +174,7 @@
             <label for="tests-add-file-id">Check name or ID</label>
             <input id="tests-add-file-id" type="text" maxlength="64" autocomplete="off" spellcheck="false" required aria-describedby="tests-add-file-help">
             <label for="tests-add-file-path">File path within this project</label>
-            <input id="tests-add-file-path" type="text" maxlength="4096" autocomplete="off" spellcheck="false" required placeholder="Maps/Main.umap" aria-describedby="tests-add-file-help">
+            <div class="path-picker"><input id="tests-add-file-path" type="text" maxlength="4096" autocomplete="off" spellcheck="false" required placeholder="Maps/Main.umap" aria-describedby="tests-add-file-help"><button id="tests-add-file-browse" type="button" disabled>Browse file</button></div>
             <p id="tests-add-file-help">Use a short ID with letters, numbers, dots, underscores, or dashes. Enter a relative path with forward slashes. The path stays hidden in saved check summaries.</p>
             <button id="tests-add-file-save" type="submit" disabled>Add file check</button>
           </form>
@@ -153,31 +201,41 @@
         <p id="tests-summary">Select a project to see imported Verse capture analyses.</p>
         <ul id="tests-list"></ul>
         <p id="tests-live-status">Live UEFN gameplay tests: UNTESTED.</p>
+        </details>
       </section>
       <section class="card" aria-labelledby="jobs-title">
         <h2 id="jobs-title">Jobs</h2>
+        <details class="panel-disclosure"><summary>Show or hide jobs</summary>
         <p id="jobs-summary">Checking…</p>
         <ul id="jobs-list"></ul>
+        </details>
       </section>
       <section class="card" aria-labelledby="results-title">
         <h2 id="results-title">Stored results</h2>
+        <details class="panel-disclosure"><summary>Show or hide stored results</summary>
         <p id="results-summary">Checking…</p>
         <ul id="results-list"></ul>
+        </details>
       </section>
       <section class="card" aria-labelledby="activity-title">
         <h2 id="activity-title">Recent activity</h2>
+        <details class="panel-disclosure"><summary>Show or hide recent activity</summary>
         <p id="activity-summary">Checking…</p>
         <ul id="activity-list"></ul>
+        </details>
       </section>
       <section class="card" aria-labelledby="usage-title">
         <h2 id="usage-title">Usage</h2>
+        <details class="panel-disclosure"><summary>Show or hide usage</summary>
         <p id="usage-summary">Checking…</p>
         <p id="usage-detail"></p>
+        </details>
       </section>
     </div>
     <section class="card diagnostics" aria-labelledby="diagnostics-title">
       <p class="eyebrow">DIAGNOSTICS &amp; DEBUG</p>
       <h2 id="diagnostics-title">What can RELAY tell us?</h2>
+      <details class="panel-disclosure"><summary>Show or hide diagnostics</summary>
       <p class="section-intro">Live component health and bounded diagnostic capture. This does not replace an end-to-end workflow test.</p>
       <dl class="diagnostic-grid">
         <div><dt>Diagnostic capture</dt><dd id="diagnostic-capture">Checking…</dd></div>
@@ -204,6 +262,7 @@
       <p>Download a small JSON summary of current health, safe event codes, and the selected integrated report's checked totals. The selected file stays in this browser tab. Native creator-app and live UEFN workflows remain UNTESTED unless measured in a real run.</p>
       <button id="support-download" type="button">Download support summary</button>
       <p id="support-download-status" role="status" aria-live="polite" tabindex="-1">No support summary saved yet.</p>
+      </details>
     </section>
     <details>
       <summary>Advanced details (safe summary)</summary>

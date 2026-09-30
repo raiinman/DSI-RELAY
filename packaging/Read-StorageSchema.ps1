@@ -6,8 +6,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-if ($PSVersionTable.PSVersion.Major -lt 7) {
-    throw 'Storage schema probing requires PowerShell 7 or newer'
+if ($PSVersionTable.PSVersion.Major -lt 5) {
+    throw 'Storage schema probing requires Windows PowerShell 5.1 or newer'
 }
 
 function Assert-NoReparseAncestors([string]$Path) {
@@ -43,23 +43,29 @@ $start.UseShellExecute = $false
 $start.CreateNoWindow = $true
 $start.RedirectStandardOutput = $true
 $start.RedirectStandardError = $true
-$start.ArgumentList.Add('--probe-storage-schema')
-$start.ArgumentList.Add('--state-dir')
-$start.ArgumentList.Add($data)
+if ($data.Contains([char]34)) { throw 'Storage probe data root contains an invalid quote' }
+# Install-RELAY.cmd intentionally runs in inbox Windows PowerShell. Use the
+# ProcessStartInfo.Arguments string available there instead of the PowerShell
+# 7-only ArgumentList collection. Data roots cannot contain quotes on Windows;
+# trim only trailing separators so the quoted argument is not escape-ambiguous.
+$dataArgument = $data.TrimEnd([char[]]@([char]92, [char]47))
+$start.Arguments = '--probe-storage-schema --state-dir "' + $dataArgument + '"'
 $process = [Diagnostics.Process]::new()
 $process.StartInfo = $start
 $started = $false
 try {
     if (-not $process.Start()) { throw 'Storage schema probe could not start' }
     $started = $true
-    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-    $stderrTask = $process.StandardError.ReadToEndAsync()
+    # The probe contract emits only a tiny JSON object. Wait for the bounded
+    # child first, then read the already-closed pipes synchronously. This avoids
+    # PowerShell 5.1/.NET Framework async stream waits that can stall the
+    # double-click installer even after the probe process has exited.
     if (-not $process.WaitForExit(30000)) {
-        $process.Kill($true)
+        $process.Kill()
         throw 'Storage schema probe timed out'
     }
-    $stdout = $stdoutTask.GetAwaiter().GetResult()
-    $stderr = $stderrTask.GetAwaiter().GetResult()
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
     if ($stdout.Length -gt 256 -or $stderr.Length -ne 0 -or $process.ExitCode -ne 0) {
         throw 'Storage schema probe failed or returned an invalid response'
     }
@@ -75,6 +81,6 @@ try {
     return [int]$response.schema_version
 }
 finally {
-    if ($started -and -not $process.HasExited) { $process.Kill($true) }
+    if ($started -and -not $process.HasExited) { $process.Kill() }
     $process.Dispose()
 }

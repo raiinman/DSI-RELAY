@@ -53,6 +53,7 @@ function Assert-NoReparseAncestors([string]$Path) {
     }
 }
 Assert-NoReparseAncestors $root
+Write-Verbose 'RELAY install: install-root ancestry verified'
 $archive = [IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ArchivePath))
 $archiveItem = Get-Item -LiteralPath $archive -Force -ErrorAction Stop
 if ($archiveItem.PSIsContainer -or ($archiveItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
@@ -67,6 +68,7 @@ $actualHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowe
 if ($actualHash -ne $ExpectedArchiveSha256.ToLowerInvariant()) {
     throw 'Archive digest does not match the expected SHA-256'
 }
+Write-Verbose 'RELAY install: archive digest verified'
 
 function Assert-Directory([string]$Path) {
     $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
@@ -264,6 +266,7 @@ if ($receipt.PSObject.Properties.Name -contains 'manifest_sha256' -and
     [string]$receipt.manifest_sha256 -ne (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()) {
     throw 'Installed manifest digest does not match its receipt'
 }
+Write-Verbose 'RELAY install: target package and receipt verified'
 
 if ($Activate) {
     Assert-DaemonStopped
@@ -302,7 +305,9 @@ if ($Activate) {
                 (Get-FileHash -LiteralPath (Join-Path $previousPath 'bundle-manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()) {
             throw 'Current version manifest digest does not match its receipt'
         }
+        Write-Verbose 'RELAY install: current active package and pointer verified'
     }
+    Write-Verbose 'RELAY install: probing storage schema'
     $observedStorageSchema = & (Join-Path $PSScriptRoot 'Read-StorageSchema.ps1') `
         -RelaydPath (Join-Path $versionPath 'relayd.exe') -DataRoot $DataRoot
     if ($PSBoundParameters.ContainsKey('ObservedStorageSchema') -and
@@ -316,6 +321,24 @@ if ($Activate) {
         ($observedStorageSchema -lt [int]$receipt.storage_schema_min -or
             $observedStorageSchema -gt [int]$receipt.storage_schema_max)) {
         throw 'UPDATE_STORAGE_SCHEMA_INCOMPATIBLE'
+    }
+    Write-Verbose "RELAY install: storage schema $observedStorageSchema accepted"
+    if ($previousVersion -eq $version) {
+        # Re-running the same verified installer is a repair/no-op, not a
+        # side-by-side update. Keep rollback history from pointing at itself.
+        if ($previous.PSObject.Properties.Name -contains 'observed_storage_schema') {
+            $previous.observed_storage_schema = $observedStorageSchema
+        }
+        else {
+            $previous | Add-Member -NotePropertyName observed_storage_schema -NotePropertyValue $observedStorageSchema
+        }
+        if ($previous.PSObject.Properties.Name -contains 'previous_version' -and
+            [string]$previous.previous_version -eq $version) {
+            $previous.previous_version = $null
+        }
+        Write-JsonAtomic $currentPath $previous
+        Write-Output "Already active local development version: $version"
+        return
     }
     if ($FixtureMode -and $previousVersion -and
         [int]$receipt.storage_schema_max -gt [int]$previousReceipt.storage_schema_max) {

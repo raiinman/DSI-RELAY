@@ -10,8 +10,11 @@ daemon health check against an explicit disposable data root and stops it.
 
 For a Windows user test, `Build-LocalTestPackage.ps1` wraps a fresh unsigned
 stage in one ZIP. Extract it, double-click `Install-RELAY.cmd`, and launch
-`DSI RELAY` from Start. The shortcut starts `relay launch` with a hidden
-PowerShell window; failures appear in a Windows dialog. The program opens its
+`DSI RELAY` from Start. The double-click install/uninstall entry points begin
+in inbox Windows PowerShell 5.1, so all local install, update, rollback,
+storage-probe, activation-health, and uninstall helpers must remain compatible
+with that runtime. The shortcut starts `relay launch` with a hidden PowerShell
+window; failures appear in a Windows dialog. The program opens its
 local workspace view in a browser window. The extracted folder also has
 `Uninstall-RELAY.cmd`; it verifies the installed program, asks its matching
 running daemon to shut down gracefully, and removes the program and shortcut
@@ -97,7 +100,10 @@ Uncheckpointed WAL/journal sidecars also block activation; the operator must
 recover and cleanly close the database before retrying.
 Schema 0 is accepted only for a first activation with no active version.
 Replacement activation requires a positive actual schema within the target
-package's declared range. `-ObservedStorageSchema` remains optional and must
+package's declared range. Re-running the exact already-active version is an
+idempotent repair/no-op after verification and probing; it refreshes the
+observed schema if needed and never records the active version as its own
+`previous_version`. `-ObservedStorageSchema` remains optional and must
 equal the probed value when supplied. Fixture activations require an explicit
 fixture data root. A custom data root is unavailable outside fixture mode;
 activation refuses an ambient `RELAY_STATE_DIR` override. After switching the

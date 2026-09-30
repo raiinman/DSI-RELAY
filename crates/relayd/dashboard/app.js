@@ -243,6 +243,18 @@ function showSetup(progress, guidance, next, actionLabel, target, ready = false)
   $("#setup-handoff").hidden = !ready;
 }
 
+function uefnConnectionFailure(reason) {
+  const explanation = {
+    UEFN_MCP_UNAVAILABLE: "RELAY could not reach its configured local editor endpoint. Check that the editor is running and that RELAY and your chat use the same MCP address.",
+    UEFN_MCP_PROTOCOL_UNSUPPORTED: "The editor replied with an MCP version this RELAY build does not support.",
+    UEFN_MCP_TOOLS_UNAVAILABLE: "The editor replied, but did not advertise the discovery tools RELAY needs.",
+    UEFN_MCP_TOOL_LIMIT: "The editor's discovery response exceeded RELAY's size limit.",
+    UEFN_MCP_DISCOVERY_FAILED: "RELAY could not read the editor's discovery response. This can be a RELAY compatibility problem, even when MCP works in your chat."
+  };
+  return (Object.hasOwn(explanation, reason) ? explanation[reason] : "RELAY could not complete its editor connection check.")
+    + " This checks RELAY's connection only; your chat can connect independently. Editor and play-session workflows remain untested.";
+}
+
 function renderUefnGuidance() {
   const uefnInstallation = localTools?.uefn;
   $("#tool-uefn-status").textContent = uefnAvailability === "discovered"
@@ -253,7 +265,7 @@ function renderUefnGuidance() {
   $("#setup-uefn").textContent = uefnAvailability === "discovered"
     ? "Last check: a local MCP endpoint responded. UEFN editor identity and live play-session workflows remain UNTESTED."
     : uefnAvailability === "unavailable"
-      ? "Last check: UEFN connection was unavailable. Open UEFN, enable its MCP connection, then retry Check UEFN connection. Live workflows remain UNTESTED."
+      ? "Last check: RELAY could not complete its UEFN connection check. See the connection result in Projects. Your chat's MCP connection can work independently. Live workflows remain UNTESTED."
       : "UEFN connection has not been checked. For UEFN work, open the editor and use Check UEFN connection. Live workflows remain UNTESTED.";
 }
 
@@ -1939,7 +1951,7 @@ $("#uefn-connect").addEventListener("click", async () => {
     uefnAvailability = discovery.state === "discovered" ? "discovered" : "unavailable";
     result.textContent = discovery.state === "discovered"
       ? `A local MCP endpoint advertised ${count(discovery.toolset_count)} toolsets. UEFN editor identity and live workflows remain untested.`
-      : "No supported local UEFN MCP connection is available. Check that UEFN is open with MCP enabled.";
+      : uefnConnectionFailure(discovery.reason_code);
   } catch (_problem) {
     uefnAvailability = "unavailable";
     result.textContent = "UEFN connection check is unavailable. Check that RELAY is running, then try again.";

@@ -738,7 +738,23 @@ test("guided setup gives one next action and safe recovery for unavailable depen
   assert.equal(unavailable.nodes["#setup-action"].href, "#refresh");
   assert.doesNotMatch(unavailable.nodes["#setup-guidance"].textContent, /private-id|<script>/);
   await unavailable.nodes["#uefn-connect"].listener();
-  assert.match(unavailable.nodes["#setup-uefn"].textContent, /Open UEFN, enable its MCP connection.*UNTESTED/);
+  assert.match(unavailable.nodes["#setup-uefn"].textContent, /RELAY could not complete.*independently.*UNTESTED/);
+});
+
+test("UEFN discovery failures explain RELAY compatibility without denying a chat connection", async () => {
+  for (const [reason, expected] of [
+    ["UEFN_MCP_UNAVAILABLE", /same MCP address/],
+    ["UEFN_MCP_PROTOCOL_UNSUPPORTED", /version this RELAY build does not support/],
+    ["UEFN_MCP_DISCOVERY_FAILED", /RELAY compatibility problem/],
+    ["PRIVATE-RAW-ERROR", /could not complete/]
+  ]) {
+    const page = await loadDashboard((command) => command === "uefn.mcp.toolsets"
+      ? commandReply({ state: "unavailable", reason_code: reason }) : success(command));
+    await page.nodes["#uefn-connect"].listener();
+    assert.match(page.nodes["#uefn-connection"].textContent, expected);
+    assert.match(page.nodes["#uefn-connection"].textContent, /chat can connect independently/);
+    assert.doesNotMatch(page.nodes["#uefn-connection"].textContent, /PRIVATE-RAW-ERROR/);
+  }
 });
 
 function commandReply(result) {

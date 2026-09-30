@@ -37,7 +37,7 @@ Own the static, local RELAY dashboard presentation.
 - The Tests view also uses project-scoped `result.list` metadata for imported Verse capture analyses. It does not fetch payloads or describe imported analysis as a live UEFN pass.
 - Stored result summaries use `result.list` metadata only; never fetch payloads or provenance for the overview.
 - Saved job summaries use `job.list` metadata only; never fetch checkpoints or provenance for the overview.
-- UEFN connection checks are user-initiated discovery probes; the UI does not present an MCP response as verified editor or play-session behavior.
+- UEFN connection checks are user-initiated discovery probes; the UI does not present an MCP response as verified editor or play-session behavior. Explain failures using allowlisted reason codes, distinguish RELAY compatibility from endpoint reachability, and clarify that a chat's MCP connection is independent. Never imply a failed RELAY probe means the user's other MCP client is disconnected.
 - No external assets, network services, telemetry, or browser storage.
 
 # Verification

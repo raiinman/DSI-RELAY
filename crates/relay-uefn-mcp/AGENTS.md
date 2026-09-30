@@ -13,7 +13,8 @@ Own the bounded local HTTP client for Epic's UEFN MCP server.
 - Enforce response, page, timeout, and session-header bounds before returning data.
 - Discovery calls use only `tools/list`, `list_toolsets`, and `describe_toolset`. The private invocation primitive may use advertised `call_tool` only after fresh toolset discovery, exact toolset/tool matching, and strict argument-schema validation; unsupported schema shapes fail closed.
 - The caller must supply an explicit effect classification and obtain authority outside this crate before invoking. The declaration is not proof of the tool's actual effect. No general RELAY command exposes this primitive.
-- Build `describe_toolset` arguments from the advertised input schema. Parse only bounded structured JSON discovery results into toolset names and top-level parameter summaries; reject unknown shapes and discard descriptions and raw tool responses.
+- Build `describe_toolset` arguments from the advertised input schema. Toolset names accept bounded structured JSON or Unreal's plain-text top-level `- Name: description` catalog; discard descriptions and continuation lines. Parameter schemas remain structured JSON only. Reject unknown shapes, duplicate names, and excessive catalogs.
+- Empty server display names are accepted when protocol and tool capability checks succeed; display metadata never establishes editor identity.
 - Negotiate only implemented legacy MCP versions. Report unsupported modern/stateless versions honestly.
 - Treat all server content as untrusted. Do not place tool text or server error bodies into RELAY diagnostics.
 - Editor results remain opaque and bounded; their raw content has no Debug or default logging surface and may be consumed only for authorized result storage.
@@ -28,6 +29,7 @@ Own the bounded local HTTP client for Epic's UEFN MCP server.
 
 - Compile the crate when registered in the workspace.
 - Exercise the invocation guard against a local fake MCP fixture; it is not live UEFN evidence.
+- The ignored `live_editor_toolset_discovery` test probes a running local editor on port 8000 without invoking editor actions. Passing discovery proves only that connection and catalog exchange.
 - The final integrated test must exercise the transport against a real UEFN editor; until then, mark that workflow UNTESTED.
 
 # Child DOX Index

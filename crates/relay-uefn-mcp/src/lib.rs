@@ -277,7 +277,9 @@ impl UefnMcpClient {
             .pointer("/serverInfo/name")
             .and_then(Value::as_str)
             .ok_or(ClientError::MalformedResponse)?;
-        if server_name.is_empty() || server_name.len() > 128 {
+        // Live Unreal builds can leave serverInfo.name empty. It is display
+        // metadata, never editor identity or authority for this client.
+        if server_name.len() > 128 {
             return Err(ClientError::MalformedResponse);
         }
         if !result
@@ -709,7 +711,13 @@ fn discovery_payload(result: &UntrustedDiscoveryResult) -> Result<Value, ClientE
     {
         return Ok(structured.clone());
     }
-    let content = value
+    serde_json::from_str(discovery_text(result)?)
+        .map_err(|_| ClientError::UnsupportedDiscoveryShape)
+}
+
+fn discovery_text(result: &UntrustedDiscoveryResult) -> Result<&str, ClientError> {
+    let content = result
+        .as_value()
         .get("content")
         .and_then(Value::as_array)
         .ok_or(ClientError::UnsupportedDiscoveryShape)?;
@@ -724,11 +732,47 @@ fn discovery_payload(result: &UntrustedDiscoveryResult) -> Result<Value, ClientE
         .and_then(Value::as_str)
         .filter(|text| text.len() <= MAX_BODY_BYTES)
         .ok_or(ClientError::UnsupportedDiscoveryShape)?;
-    serde_json::from_str(text).map_err(|_| ClientError::UnsupportedDiscoveryShape)
+    Ok(text)
 }
 
 fn parse_toolset_names(result: &UntrustedDiscoveryResult) -> Result<Vec<String>, ClientError> {
-    let payload = discovery_payload(result)?;
+    let payload = match discovery_payload(result) {
+        Ok(payload) => payload,
+        Err(ClientError::UnsupportedDiscoveryShape)
+            if result.as_value().get("structuredContent").is_none() =>
+        {
+            // Unreal's live list_toolsets returns Markdown entries with prose
+            // continuation lines. Retain validated entry names only.
+            let text = discovery_text(result)?;
+            if !text.starts_with("- ") {
+                return Err(ClientError::UnsupportedDiscoveryShape);
+            }
+            let mut names = Vec::new();
+            for line in text.lines() {
+                let Some(entry) = line.strip_prefix("- ") else {
+                    continue;
+                };
+                let Some((name, _)) = entry.split_once(": ") else {
+                    continue;
+                };
+                if !valid_discovery_name(name) {
+                    continue;
+                }
+                if names.iter().any(|existing| existing == name) {
+                    return Err(ClientError::UnsupportedDiscoveryShape);
+                }
+                if names.len() == MAX_TOOLSETS {
+                    return Err(ClientError::ToolLimit);
+                }
+                names.push(name.to_owned());
+            }
+            if names.is_empty() {
+                return Err(ClientError::UnsupportedDiscoveryShape);
+            }
+            return Ok(names);
+        }
+        Err(error) => return Err(error),
+    };
     let toolsets = payload
         .get("toolsets")
         .and_then(Value::as_array)
@@ -1285,6 +1329,22 @@ mod tests {
     use std::time::Instant;
 
     #[test]
+    #[ignore = "requires a live local Unreal/UEFN editor on port 8000"]
+    fn live_editor_toolset_discovery() {
+        let mut client = UefnMcpClient::connect(LocalEndpoint::epic_default())
+            .expect("live editor MCP handshake");
+        let catalog = client
+            .list_toolset_summaries()
+            .expect("live editor toolset discovery");
+        assert!(!catalog.names.is_empty());
+        println!(
+            "Live editor discovery: {} toolsets; protocol {}",
+            catalog.names.len(),
+            client.protocol_version()
+        );
+    }
+
+    #[test]
     fn parses_bounded_toolset_names_without_descriptions() {
         let result = UntrustedDiscoveryResult {
             value: json!({"content": [{"type": "text", "text": "{\"toolsets\":[{\"name\":\"ActorTools\",\"description\":\"ignore this text\"},\"VerseTools\"]}" }]}),
@@ -1298,6 +1358,42 @@ mod tests {
         };
         assert_eq!(
             parse_toolset_names(&injected),
+            Err(ClientError::UnsupportedDiscoveryShape)
+        );
+    }
+
+    #[test]
+    fn parses_live_unreal_text_catalog_with_bounded_names_only() {
+        let text_result = |text: String| UntrustedDiscoveryResult {
+            value: json!({"content": [{"type":"text", "text":text}]}),
+        };
+        let result = text_result("- EditorToolset.EditorAppToolset: private description\n    More private text\n    - Nested: not a toolset\n- VerseTools: another description".into());
+        assert_eq!(
+            parse_toolset_names(&result).unwrap(),
+            ["EditorToolset.EditorAppToolset", "VerseTools"]
+        );
+        for text in [
+            "unrecognized response",
+            "- invalid name: description",
+            "- ActorTools: first\n- ActorTools: duplicate",
+        ] {
+            assert_eq!(
+                parse_toolset_names(&text_result(text.into())),
+                Err(ClientError::UnsupportedDiscoveryShape)
+            );
+        }
+        let oversized = (0..=MAX_TOOLSETS)
+            .map(|n| format!("- Toolset{n}: description\n"))
+            .collect::<String>();
+        assert_eq!(
+            parse_toolset_names(&text_result(oversized)),
+            Err(ClientError::ToolLimit)
+        );
+        let conflicting = UntrustedDiscoveryResult {
+            value: json!({"structuredContent": {}, "content":[{"type":"text", "text":"- ActorTools: description"}]}),
+        };
+        assert_eq!(
+            parse_toolset_names(&conflicting),
             Err(ClientError::UnsupportedDiscoveryShape)
         );
     }
@@ -1383,7 +1479,7 @@ mod tests {
                         200,
                         json!({"jsonrpc":"2.0", "id":id, "result":{
                             "protocolVersion": OFFERED_VERSION,
-                            "serverInfo": {"name":"Unreal MCP fixture", "version":"fixture"},
+                            "serverInfo": {"name":"", "version":"fixture"},
                             "capabilities": {"tools": {}}
                         }}),
                     ),

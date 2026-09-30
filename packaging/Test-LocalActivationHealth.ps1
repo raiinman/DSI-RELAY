@@ -10,8 +10,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-if ($PSVersionTable.PSVersion.Major -lt 7) {
-    throw 'Fixture activation health requires PowerShell 7 or newer'
+if ($PSVersionTable.PSVersion.Major -lt 5) {
+    throw 'Fixture activation health requires Windows PowerShell 5.1 or newer'
 }
 
 function Assert-NoReparseAncestors([string]$Path) {
@@ -35,9 +35,9 @@ function Invoke-HealthCommand([string]$Executable, [string]$Command, [string]$St
     $start.CreateNoWindow = $true
     $start.RedirectStandardOutput = $true
     $start.RedirectStandardError = $true
-    $start.Environment['RELAY_STATE_DIR'] = $StateRoot
-    $start.ArgumentList.Add($Command)
-    $start.ArgumentList.Add('--json')
+    $start.EnvironmentVariables['RELAY_STATE_DIR'] = $StateRoot
+    if ($Command.Contains([char]34)) { throw 'Fixture health command contains an invalid quote' }
+    $start.Arguments = $Command + ' --json'
     $process = [Diagnostics.Process]::new()
     $process.StartInfo = $start
     $started = $false
@@ -47,7 +47,7 @@ function Invoke-HealthCommand([string]$Executable, [string]$Command, [string]$St
         $stdoutTask = $process.StandardOutput.ReadToEndAsync()
         $stderrTask = $process.StandardError.ReadToEndAsync()
         if (-not $process.WaitForExit(8000)) {
-            $process.Kill($true)
+            $process.Kill()
             throw 'Fixture health command timed out'
         }
         $stdout = $stdoutTask.GetAwaiter().GetResult()
@@ -62,7 +62,7 @@ function Invoke-HealthCommand([string]$Executable, [string]$Command, [string]$St
         return $response.result
     }
     finally {
-        if ($started -and -not $process.HasExited) { $process.Kill($true) }
+        if ($started -and -not $process.HasExited) { $process.Kill() }
         $process.Dispose()
     }
 }
@@ -92,9 +92,9 @@ $start.UseShellExecute = $false
 $start.CreateNoWindow = $true
 $start.RedirectStandardOutput = $true
 $start.RedirectStandardError = $true
-$start.Environment['RELAY_STATE_DIR'] = $data
-$start.Environment['RELAY_INSTANCE'] = 'fixture-' + [Guid]::NewGuid().ToString('N').Substring(0, 16)
-$null = $start.Environment.Remove('RELAY_TEST_DISABLE_WATCHER')
+$start.EnvironmentVariables['RELAY_STATE_DIR'] = $data
+$start.EnvironmentVariables['RELAY_INSTANCE'] = 'fixture-' + [Guid]::NewGuid().ToString('N').Substring(0, 16)
+$null = $start.EnvironmentVariables.Remove('RELAY_TEST_DISABLE_WATCHER')
 $daemon = [Diagnostics.Process]::new()
 $daemon.StartInfo = $start
 $started = $false
@@ -144,7 +144,7 @@ try {
 }
 finally {
     if ($started -and -not $daemon.HasExited) {
-        $daemon.Kill($true)
+        $daemon.Kill()
         if (-not $daemon.WaitForExit(5000)) {
             throw 'Fixture daemon could not be stopped; activation pointer requires manual recovery'
         }

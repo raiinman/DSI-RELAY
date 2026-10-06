@@ -1,10 +1,18 @@
 # DSI RELAY
 
+<!-- project-header:start -->
+![DSI-RELAY — original violet and cyan signal-console artwork](dsi-header.png)
+<!-- project-header:end -->
+
 <!-- project-badges:start -->
 [![DSI: RELAY](https://img.shields.io/static/v1?label=DSI&message=RELAY&color=7C3AED&labelColor=18181B&style=for-the-badge)](https://github.com/raiinman/DSI-RELAY)
 [![design: CLI + dashboard](https://img.shields.io/static/v1?label=design&message=CLI%20%2B%20dashboard&color=0891B2&labelColor=18181B&style=for-the-badge)](https://github.com/raiinman/DSI-RELAY)
 [![focus: local computation](https://img.shields.io/static/v1?label=focus&message=local%20computation&color=475569&labelColor=18181B&style=for-the-badge)](https://github.com/raiinman/DSI-RELAY)
 <!-- project-badges:end -->
+
+<!-- project-live-badges:start -->
+[![last commit](https://img.shields.io/github/last-commit/raiinman/DSI-RELAY/main?style=flat&labelColor=18181B&color=7C3AED&logo=github&logoColor=white&label=updated)](https://github.com/raiinman/DSI-RELAY/commits/main) [![open issues](https://img.shields.io/github/issues/raiinman/DSI-RELAY?style=flat&labelColor=18181B&color=7C3AED&logo=github&logoColor=white&label=issues)](https://github.com/raiinman/DSI-RELAY/issues) [![stars](https://img.shields.io/github/stars/raiinman/DSI-RELAY?style=flat&labelColor=18181B&color=7C3AED&logo=github&logoColor=white&label=stars)](https://github.com/raiinman/DSI-RELAY/stargazers)
+<!-- project-live-badges:end -->
 
 DSI RELAY is a planned model-independent development control and observability layer for game projects and creative toolchains.
 

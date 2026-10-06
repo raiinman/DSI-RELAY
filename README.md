@@ -1,17 +1,17 @@
 # DSI RELAY
 
 <!-- project-header:start -->
-![DSI-RELAY — original violet and cyan signal-console artwork](dsi-header.png)
+![DSI-RELAY — original generated project artwork](readme-banner.png)
 <!-- project-header:end -->
 
 <!-- project-badges:start -->
-[![DSI: RELAY](https://img.shields.io/static/v1?label=DSI&message=RELAY&color=7C3AED&labelColor=18181B&style=for-the-badge)](https://github.com/raiinman/DSI-RELAY)
-[![design: CLI + dashboard](https://img.shields.io/static/v1?label=design&message=CLI%20%2B%20dashboard&color=0891B2&labelColor=18181B&style=for-the-badge)](https://github.com/raiinman/DSI-RELAY)
-[![focus: local computation](https://img.shields.io/static/v1?label=focus&message=local%20computation&color=475569&labelColor=18181B&style=for-the-badge)](https://github.com/raiinman/DSI-RELAY)
+[![DSI: RELAY](https://img.shields.io/badge/DSI-RELAY-7C3AED?labelColor=333333&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI%2BPHBhdGggZD0iTTEgM2g1djVIMXpNMTAgMWg1djVoLTV6TTEwIDEwaDV2NWgtNXpNNiA1aDR2Mkg2em0xIDFoMnY2aDJ2Mkg3VjZ6IiBmaWxsPSJ3aGl0ZSIvPjwvc3ZnPg%3D%3D&logoColor=white)](https://github.com/raiinman/DSI-RELAY)
+[![design: CLI + dashboard](https://img.shields.io/badge/design-CLI_%2B_dashboard-0891B2?labelColor=333333)](https://github.com/raiinman/DSI-RELAY)
+[![focus: local computation](https://img.shields.io/badge/focus-local_computation-475569?labelColor=333333)](https://github.com/raiinman/DSI-RELAY)
 <!-- project-badges:end -->
 
 <!-- project-live-badges:start -->
-[![last commit](https://img.shields.io/github/last-commit/raiinman/DSI-RELAY/main?style=flat&labelColor=18181B&color=7C3AED&logo=github&logoColor=white&label=updated)](https://github.com/raiinman/DSI-RELAY/commits/main) [![open issues](https://img.shields.io/github/issues/raiinman/DSI-RELAY?style=flat&labelColor=18181B&color=7C3AED&logo=github&logoColor=white&label=issues)](https://github.com/raiinman/DSI-RELAY/issues) [![stars](https://img.shields.io/github/stars/raiinman/DSI-RELAY?style=flat&labelColor=18181B&color=7C3AED&logo=github&logoColor=white&label=stars)](https://github.com/raiinman/DSI-RELAY/stargazers)
+[![last commit](https://img.shields.io/github/last-commit/raiinman/DSI-RELAY/main?labelColor=333333&color=7C3AED&logo=github&logoColor=white&label=updated)](https://github.com/raiinman/DSI-RELAY/commits/main) [![open issues](https://img.shields.io/github/issues/raiinman/DSI-RELAY?labelColor=333333&color=7C3AED&logo=github&logoColor=white&label=issues)](https://github.com/raiinman/DSI-RELAY/issues) [![stars](https://badgen.net/github/stars/raiinman/DSI-RELAY?icon=github&color=7C3AED&labelColor=333333&label=stars)](https://github.com/raiinman/DSI-RELAY/stargazers)
 <!-- project-live-badges:end -->
 
 DSI RELAY is a planned model-independent development control and observability layer for game projects and creative toolchains.

@@ -1,5 +1,11 @@
 # DSI RELAY
 
+<!-- project-badges:start -->
+[![DSI: RELAY](https://img.shields.io/static/v1?label=DSI&message=RELAY&color=7C3AED&labelColor=18181B&style=for-the-badge)](https://github.com/raiinman/DSI-RELAY)
+[![design: CLI + dashboard](https://img.shields.io/static/v1?label=design&message=CLI%20%2B%20dashboard&color=0891B2&labelColor=18181B&style=for-the-badge)](https://github.com/raiinman/DSI-RELAY)
+[![focus: local computation](https://img.shields.io/static/v1?label=focus&message=local%20computation&color=475569&labelColor=18181B&style=for-the-badge)](https://github.com/raiinman/DSI-RELAY)
+<!-- project-badges:end -->
+
 DSI RELAY is a planned model-independent development control and observability layer for game projects and creative toolchains.
 
 The product exists to make AI-assisted development cheaper, more reliable, and easier to use. RELAY should do deterministic work locally, keep large results out of chat, expose a clean headless CLI, provide a plain-language dashboard, and let multiple AI clients work through the same verified project state.

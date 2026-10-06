@@ -117,4 +117,4 @@ When the user requests a durable behavior change, record it here or in the relev
 
 ## README presentation
 
-The root owns `README.md`, its generated decorative `readme-banner.png`, and the generation brief in `readme-banner-prompt.txt`. Preserve the project prose and attribution. Use compact logo badges with Shields.io `label-message-color` URLs; live public GitHub metrics may use Shields.io or Badgen. Artwork is illustrative, and badges do not establish implementation, gate, device, or release acceptance.
+The root owns `README.md`, its generated decorative `readme-banner.png`, and the generation brief in `readme-banner-prompt.txt`. Preserve the project prose and attribution. Center the README presentation, including titles, artwork, badges, section content, and documentation tables. Keep a linked section index and verified project-file shortcuts near the top; center code/diagram containers while preserving their internal spacing. Use compact logo badges with Shields.io `label-message-color` URLs; live public GitHub metrics may use Shields.io or Badgen. Artwork is illustrative, and badges do not establish implementation, gate, device, or release acceptance.
